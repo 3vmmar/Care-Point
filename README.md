@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Dr. Ashraf Metwally — Future Clinic Demo
 
 A premium bilingual patient experience and connected clinic operations demo.
@@ -29,3 +30,6 @@ node --test tests/rendered-html.test.mjs
 This is a presentation-ready demo. Before a public launch, replace demo phone
 links, connect clinic messaging and calendar providers, add authentication to
 the command center, and complete clinical/legal content approval.
+=======
+# Care-Point
+>>>>>>> 798a8f69d33fe2c7f0556c319eedbc6e6fd86f84
