@@ -20,7 +20,16 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import {
+  FormEvent,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 type Language = "en" | "ar";
 type AvailabilityDay = {
@@ -222,6 +231,148 @@ export default function CarePointExperience() {
   const t = copy[language];
   const rtl = language === "ar";
 
+  useLayoutEffect(() => {
+    gsap.registerPlugin(ScrollTrigger);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const context = gsap.context(() => {
+      gsap.to(".scroll-progress span", {
+        scaleX: 1,
+        ease: "none",
+        scrollTrigger: {
+          start: 0,
+          end: "max",
+          scrub: 0.25,
+        },
+      });
+
+      gsap.to(".portrait-frame img", {
+        yPercent: 8,
+        scale: 1.08,
+        ease: "none",
+        scrollTrigger: {
+          trigger: ".hero",
+          start: "top top",
+          end: "bottom top",
+          scrub: 1,
+        },
+      });
+
+      gsap.to(".hero-copy", {
+        yPercent: 16,
+        opacity: 0.3,
+        ease: "none",
+        scrollTrigger: {
+          trigger: ".hero",
+          start: "45% center",
+          end: "bottom top",
+          scrub: 1,
+        },
+      });
+
+      gsap.utils
+        .toArray<HTMLElement>(
+          ".proof-intro, .proof-stats article, .section-heading, .area-row, .carelens-panel, .journey-grid article, .final-cta > div, .final-cta > button",
+        )
+        .forEach((element, index) => {
+          gsap.fromTo(
+            element,
+            { autoAlpha: 0, y: 54 },
+            {
+              autoAlpha: 1,
+              y: 0,
+              duration: 0.9,
+              delay: (index % 4) * 0.04,
+              ease: "power3.out",
+              scrollTrigger: {
+                trigger: element,
+                start: "top 88%",
+                once: true,
+              },
+            },
+          );
+        });
+
+      gsap.to(".anatomy-shape", {
+        yPercent: -8,
+        rotate: 8,
+        ease: "none",
+        scrollTrigger: {
+          trigger: ".carelens-stage",
+          start: "top bottom",
+          end: "bottom top",
+          scrub: 1,
+        },
+      });
+
+      const scenes = gsap.utils.toArray<HTMLElement>(".portal-scene");
+      gsap.set(scenes, { autoAlpha: 0, y: 60 });
+      gsap.set(scenes[0], { autoAlpha: 1, y: 0 });
+
+      const portalTimeline = gsap.timeline({
+        scrollTrigger: {
+          trigger: ".experience-portal",
+          start: "top top",
+          end: "bottom bottom",
+          scrub: 0.75,
+        },
+      });
+
+      portalTimeline
+        .to(scenes[0], { autoAlpha: 0, y: -55, duration: 0.7 }, 0.55)
+        .fromTo(
+          scenes[1],
+          { autoAlpha: 0, y: 65 },
+          { autoAlpha: 1, y: 0, duration: 0.8 },
+          0.75,
+        )
+        .to(scenes[1], { autoAlpha: 0, y: -55, duration: 0.7 }, 1.7)
+        .fromTo(
+          scenes[2],
+          { autoAlpha: 0, y: 65 },
+          { autoAlpha: 1, y: 0, duration: 0.8 },
+          1.9,
+        );
+
+      gsap.to(".portal-orb-core", {
+        rotate: 290,
+        scale: 1.55,
+        ease: "none",
+        scrollTrigger: {
+          trigger: ".experience-portal",
+          start: "top top",
+          end: "bottom bottom",
+          scrub: 0.8,
+        },
+      });
+
+      gsap.to(".portal-track span", {
+        scaleY: 1,
+        ease: "none",
+        scrollTrigger: {
+          trigger: ".experience-portal",
+          start: "top top",
+          end: "bottom bottom",
+          scrub: 0.2,
+        },
+      });
+
+      gsap.to(".noor-atmosphere .noor-orb", {
+        rotate: 210,
+        scale: 1.12,
+        ease: "none",
+        scrollTrigger: {
+          trigger: ".noor-feature",
+          start: "top bottom",
+          end: "bottom top",
+          scrub: 1,
+        },
+      });
+    });
+
+    return () => context.revert();
+  }, [language]);
+
   function openBooking() {
     setBookingOpen(true);
     setMobileOpen(false);
@@ -230,9 +381,17 @@ export default function CarePointExperience() {
   return (
     <main className="site-shell" dir={rtl ? "rtl" : "ltr"}>
       <div className="grain" aria-hidden />
+      <div className="scroll-progress" aria-hidden><span /></div>
       <header className="site-header">
         <Link className="brand" href="#top" aria-label="Dr. Ashraf Metwally home">
-          <Image src="/logo.png" alt="" width={52} height={52} priority />
+          <Image
+            src="/logo.png"
+            alt=""
+            width={52}
+            height={52}
+            priority
+            unoptimized
+          />
           <span>
             <strong>{rtl ? "د. أشرف متولي" : "ASHRAF METWALLY"}</strong>
             <small>{rtl ? "جراحات التجميل" : "PLASTIC SURGERY"}</small>
@@ -315,6 +474,7 @@ export default function CarePointExperience() {
               fill
               sizes="(max-width: 900px) 92vw, 48vw"
               priority
+              unoptimized
             />
             <div className="portrait-wash" />
           </div>
@@ -337,6 +497,77 @@ export default function CarePointExperience() {
         <div className="hero-rail" aria-hidden>
           <span>SCROLL TO DISCOVER</span>
           <i />
+        </div>
+      </section>
+
+      <section className="experience-portal" aria-label="Explore the experience">
+        <div className="portal-sticky">
+          <div className="portal-word" aria-hidden>BEYOND</div>
+          <div className="portal-heading">
+            <span>{rtl ? "مرّر لاكتشاف التجربة" : "SCROLL INTO THE EXPERIENCE"}</span>
+            <strong>{rtl ? "الرعاية، بشكل مختلف." : "Care, reimagined."}</strong>
+          </div>
+          <div className="portal-track" aria-hidden><span /></div>
+          <div className="portal-orb" aria-hidden>
+            <div className="portal-orb-core"><span /><span /><span /></div>
+          </div>
+
+          <article className="portal-scene portal-scene--one">
+            <span className="portal-index">01 / 03 · CARELENS</span>
+            <h2>
+              {rtl ? "لا تبدأ باسم الإجراء." : "Don’t start with a procedure."}
+              <em>{rtl ? "ابدأ بما تريد أن تشعر به." : "Start with how you want to feel."}</em>
+            </h2>
+            <p>
+              {rtl
+                ? "تجربة بصرية تحوّل إحساسك وأهدافك إلى حوار طبي أوضح."
+                : "A visual discovery tool that turns feelings and goals into a clearer clinical conversation."}
+            </p>
+            <a className="portal-action" href="#carelens">
+              {rtl ? "جرّب كير لِنز" : "Try CareLens"}
+              <ArrowRight size={17} />
+            </a>
+          </article>
+
+          <article className="portal-scene portal-scene--two">
+            <span className="portal-index">02 / 03 · NOOR</span>
+            <h2>
+              {rtl ? "اسأل السؤال الذي يشغلك." : "Ask the question you keep thinking about."}
+              <em>{rtl ? "بخصوصية. وبدون أحكام." : "Privately. Without judgement."}</em>
+            </h2>
+            <p>
+              {rtl
+                ? "نور تشرح الخيارات والاستعداد والتعافي بالعربية أو الإنجليزية."
+                : "NOOR explains options, preparation, and recovery in Arabic or English."}
+            </p>
+            <button className="portal-action" onClick={() => setNoorOpen(true)}>
+              <NoorOrb small />
+              {rtl ? "تحدث مع نور" : "Talk to NOOR"}
+            </button>
+          </article>
+
+          <article className="portal-scene portal-scene--three">
+            <span className="portal-index">03 / 03 · LIVE ACCESS</span>
+            <h2>
+              {rtl ? "شاهد المواعيد الحقيقية." : "See real availability."}
+              <em>{rtl ? "واحجز خلال ثوانٍ." : "Reserve in seconds."}</em>
+            </h2>
+            <p>
+              {rtl
+                ? "اختر الفرع والموعد، وسيحتفظ النظام بالوقت أثناء إكمال بياناتك."
+                : "Choose a clinic and time; the system protects your slot while you complete the details."}
+            </p>
+            <button className="portal-action portal-action--solid" onClick={openBooking}>
+              <CalendarDays size={17} />
+              {rtl ? "اعرض المواعيد الآن" : "View live times"}
+              <ArrowRight size={17} />
+            </button>
+          </article>
+
+          <div className="portal-footnote">
+            <span>{rtl ? "تجربة رقمية متصلة" : "ONE CONNECTED EXPERIENCE"}</span>
+            <span>CARE LENS · NOOR · BOOKING · CLINIC OS</span>
+          </div>
         </div>
       </section>
 
@@ -472,7 +703,7 @@ export default function CarePointExperience() {
 
       <footer>
         <div className="footer-brand">
-          <Image src="/logo.png" alt="" width={42} height={42} />
+          <Image src="/logo.png" alt="" width={42} height={42} unoptimized />
           <span>
             <strong>{rtl ? "د. أشرف متولي" : "ASHRAF METWALLY"}</strong>
             <small>{rtl ? "جراحات التجميل" : "PLASTIC SURGERY"}</small>
