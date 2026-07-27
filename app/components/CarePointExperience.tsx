@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import Lenis from "lenis";
 import {
   FormEvent,
   useEffect,
@@ -184,14 +185,83 @@ export default function CarePointExperience() {
   const [bookingOpen, setBookingOpen] = useState(false);
   const [introOpen, setIntroOpen] = useState(true);
   const [journeyDesignerOpen, setJourneyDesignerOpen] = useState(false);
+  const [heroPassed, setHeroPassed] = useState(false);
   const t = copy[language];
   const rtl = language === "ar";
 
-  useLayoutEffect(() => {
-    gsap.registerPlugin(ScrollTrigger);
+  useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
+    gsap.registerPlugin(ScrollTrigger);
+    const lenis = new Lenis({
+      duration: 1.05,
+      smoothWheel: true,
+      syncTouch: false,
+      wheelMultiplier: 0.9,
+    });
+    const syncScroll = () => ScrollTrigger.update();
+    let animationFrame = 0;
+    const animate = (time: number) => {
+      lenis.raf(time);
+      animationFrame = requestAnimationFrame(animate);
+    };
+
+    lenis.on("scroll", syncScroll);
+    animationFrame = requestAnimationFrame(animate);
+
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      lenis.off("scroll", syncScroll);
+      lenis.destroy();
+    };
+  }, []);
+
+  useEffect(() => {
+    const hero = document.querySelector(".hero");
+    if (!hero) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setHeroPassed(!entry.isIntersecting),
+      { threshold: 0.08 },
+    );
+    observer.observe(hero);
+    return () => observer.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    gsap.registerPlugin(ScrollTrigger);
+    if (
+      introOpen ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+
     const context = gsap.context(() => {
+      gsap.fromTo(
+        ".portrait-frame",
+        { clipPath: "inset(0 0 100% 0)" },
+        {
+          clipPath: "inset(0 0 0% 0)",
+          duration: 1.35,
+          delay: 0.08,
+          ease: "power4.inOut",
+        },
+      );
+
+      gsap.fromTo(
+        ".portrait-chrome, .portrait-footer",
+        { autoAlpha: 0, y: 18 },
+        {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.75,
+          delay: 0.82,
+          stagger: 0.12,
+          ease: "power3.out",
+        },
+      );
+
       gsap.to(".scroll-progress span", {
         scaleX: 1,
         ease: "none",
@@ -315,7 +385,7 @@ export default function CarePointExperience() {
     });
 
     return () => context.revert();
-  }, [language]);
+  }, [introOpen, language]);
 
   function openBooking() {
     setBookingOpen(true);
@@ -400,7 +470,7 @@ export default function CarePointExperience() {
             {t.eyebrow}
           </div>
           <h1 className="reveal-item reveal-delay-1">
-            {t.titleA}
+            <span>{t.titleA}</span>
             <em>{t.titleB}</em>
           </h1>
           <p className="hero-intro reveal-item reveal-delay-2">{t.intro}</p>
@@ -409,18 +479,21 @@ export default function CarePointExperience() {
               <CalendarDays size={18} />
               {t.book}
             </button>
-            <button className="text-button" onClick={() => setNoorOpen(true)}>
-              <NoorOrb small />
-              {t.ask}
-              <ArrowRight size={16} />
-            </button>
-            <button
-              className="text-button journey-launch"
-              onClick={() => setJourneyDesignerOpen(true)}
-            >
-              <Sparkles size={15} />
-              {rtl ? "صمّم رحلتك" : "Design my journey"}
-            </button>
+            <div className="hero-secondary-actions">
+              <button className="text-button" onClick={() => setNoorOpen(true)}>
+                <NoorOrb small />
+                <span>{t.ask}</span>
+                <ArrowRight size={16} />
+              </button>
+              <button
+                className="text-button journey-launch"
+                onClick={() => setJourneyDesignerOpen(true)}
+              >
+                <Sparkles size={15} />
+                <span>{rtl ? "صمّم رحلتك" : "Design my journey"}</span>
+                <ArrowRight size={16} />
+              </button>
+            </div>
           </div>
           <div className="credential reveal-item reveal-delay-3">
             <ShieldCheck size={19} />
@@ -439,20 +512,30 @@ export default function CarePointExperience() {
               unoptimized
             />
             <div className="portrait-wash" />
-          </div>
-          <div className="availability-card">
-            <span className="live-dot" />
-            <div>
-              <small>{t.heroDate}</small>
-              <strong>{rtl ? "غداً · المعادي" : "Tomorrow · Maadi"}</strong>
+            <div className="portrait-chrome" aria-hidden>
+              <span>CARE POINT / CAIRO</span>
+              <span>01 — CONSULTATION</span>
             </div>
-            <button onClick={openBooking} aria-label="View availability">
-              <ChevronRight size={19} />
-            </button>
-          </div>
-          <div className="doctor-mark">
-            <span>{t.signature}</span>
-            <small>{t.signatureRole}</small>
+            <div className="portrait-footer">
+              <div className="doctor-mark">
+                <span>{t.signature}</span>
+                <small>{t.signatureRole}</small>
+              </div>
+              <button
+                className="availability-card"
+                onClick={openBooking}
+                aria-label="View live appointment availability"
+              >
+                <span className="live-dot" />
+                <span className="availability-copy">
+                  <small>{t.heroDate}</small>
+                  <strong>{rtl ? "غداً · المعادي" : "Tomorrow · Maadi"}</strong>
+                </span>
+                <span className="availability-arrow" aria-hidden>
+                  <ChevronRight size={18} />
+                </span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -671,13 +754,19 @@ export default function CarePointExperience() {
         </div>
       </footer>
 
-      <button className="floating-noor" onClick={() => setNoorOpen(true)}>
-        <NoorOrb small />
-        <span>
-          <small>{rtl ? "مساعدة ذكية" : "AI CONCIERGE"}</small>
-          <strong>{rtl ? "اسأل نور" : "Ask NOOR"}</strong>
-        </span>
-      </button>
+      {heroPassed && (
+        <button
+          className="floating-noor"
+          onClick={() => setNoorOpen(true)}
+          aria-label={rtl ? "اسأل نور" : "Ask NOOR, the AI concierge"}
+        >
+          <NoorOrb small />
+          <span className="floating-noor-copy">
+            <small>{rtl ? "مساعدة ذكية" : "AI CONCIERGE"}</small>
+            <strong>{rtl ? "اسأل نور" : "Ask NOOR"}</strong>
+          </span>
+        </button>
+      )}
 
       {noorOpen && (
         <NoorPanel

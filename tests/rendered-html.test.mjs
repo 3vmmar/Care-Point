@@ -17,6 +17,9 @@ test("ships the premium patient experience and production assets", async () => {
 
   assert.match(experience, /Aesthetic care/);
   assert.match(experience, /Ask NOOR/);
+  assert.match(experience, /Lenis/);
+  assert.match(experience, /portrait-footer/);
+  assert.match(experience, /heroPassed/);
   assert.match(experience, /\/api\/availability/);
   assert.match(experience, /\/api\/bookings/);
   assert.match(intro, /Enter the experience/);

@@ -14,6 +14,8 @@
   --sage: #77857a;
   --white: #ffffff;
   --shadow: 0 22px 70px rgba(35, 28, 24, 0.13);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 * {
@@ -30,6 +32,7 @@ body {
   color: var(--ink);
   font-family: var(--font-sans), Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -47,9 +50,27 @@ button {
   color: inherit;
 }
 
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--burgundy);
+  outline-offset: 4px;
+}
+
 a {
   color: inherit;
   text-decoration: none;
+}
+
+section[id] {
+  scroll-margin-top: 104px;
+}
+
+.site-shell button svg,
+.site-shell a svg {
+  flex: 0 0 auto;
+  stroke-width: 1.65;
 }
 
 ::selection {
@@ -347,15 +368,18 @@ a {
 }
 
 .site-header {
-  height: 92px;
-  max-width: 1480px;
-  padding: 0 5vw;
-  margin: 0 auto;
+  width: 100%;
+  height: 104px;
+  padding: 0 clamp(24px, 5vw, 92px);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  position: relative;
-  z-index: 30;
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  background: rgba(242, 238, 230, 0.88);
+  border-bottom: 1px solid rgba(39, 36, 32, 0.08);
+  backdrop-filter: blur(22px) saturate(130%);
 }
 
 .brand,
@@ -429,20 +453,31 @@ a {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .experience-replay {
-  border: 0;
+  min-height: 38px;
+  border: 1px solid transparent;
   background: transparent;
   color: #817b74;
-  padding: 9px 6px;
+  padding: 0 10px;
   display: flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
   font-size: 7px;
   letter-spacing: 0.12em;
+  transition:
+    color 0.35s var(--ease-out),
+    border-color 0.35s var(--ease-out),
+    background 0.35s var(--ease-out);
+}
+
+.experience-replay:hover {
+  color: var(--charcoal);
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.45);
 }
 
 .experience-replay svg {
@@ -462,7 +497,17 @@ a {
   gap: 6px;
   font-size: 11px;
   letter-spacing: 0.05em;
-  padding: 10px 6px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  transition:
+    border-color 0.35s var(--ease-out),
+    background 0.35s var(--ease-out);
+}
+
+.language-button:hover {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.45);
 }
 
 .button {
@@ -477,14 +522,17 @@ a {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.07em;
+  overflow: hidden;
+  position: relative;
   transition:
-    transform 0.25s ease,
-    box-shadow 0.25s ease,
-    background 0.25s ease;
+    transform 0.45s var(--ease-out),
+    box-shadow 0.45s var(--ease-out),
+    background 0.45s var(--ease-out),
+    color 0.45s var(--ease-out);
 }
 
 .button:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
 }
 
 .button:disabled {
@@ -530,13 +578,13 @@ a {
 }
 
 .hero {
-  min-height: calc(100vh - 92px);
-  max-width: 1480px;
+  min-height: calc(100svh - 104px);
+  width: min(100%, 1600px);
   margin: 0 auto;
-  padding: 4vh 5vw 7vh;
+  padding: clamp(42px, 5vh, 72px) clamp(24px, 5vw, 92px) clamp(64px, 8vh, 110px);
   display: grid;
-  grid-template-columns: minmax(0, 1.04fr) minmax(420px, 0.96fr);
-  gap: 7vw;
+  grid-template-columns: minmax(0, 0.9fr) minmax(500px, 1.1fr);
+  gap: clamp(48px, 5vw, 90px);
   align-items: center;
   position: relative;
 }
@@ -544,7 +592,8 @@ a {
 .hero-copy {
   position: relative;
   z-index: 2;
-  padding-bottom: 3vh;
+  min-width: 0;
+  padding-bottom: 1vh;
 }
 
 .eyebrow,
@@ -566,14 +615,19 @@ a {
 }
 
 .hero h1 {
-  margin: 28px 0 27px;
+  margin: clamp(24px, 3vh, 38px) 0 clamp(22px, 3vh, 34px);
   color: var(--charcoal);
   font-family: var(--font-display), Georgia, serif;
-  font-size: clamp(58px, 7.2vw, 112px);
+  font-size: clamp(68px, 6vw, 106px);
   font-weight: 400;
-  line-height: 0.83;
+  line-height: 0.84;
   letter-spacing: -0.048em;
-  max-width: 800px;
+  max-width: 100%;
+}
+
+.hero h1 > span {
+  display: block;
+  max-width: 8ch;
 }
 
 .site-shell[dir="rtl"] .hero h1,
@@ -587,8 +641,12 @@ a {
   display: block;
   color: var(--burgundy);
   font-weight: 400;
-  padding-left: 7vw;
-  white-space: nowrap;
+  width: min(11.5ch, 100%);
+  margin-top: 0.08em;
+  padding-left: clamp(24px, 3.6vw, 68px);
+  font-size: 0.72em;
+  line-height: 0.96;
+  white-space: normal;
 }
 
 .site-shell[dir="rtl"] .hero h1 {
@@ -604,15 +662,34 @@ a {
 .hero-intro {
   color: #625e58;
   line-height: 1.85;
-  font-size: 14px;
-  max-width: 515px;
-  margin: 0 0 30px;
+  font-size: clamp(13px, 0.84vw, 15px);
+  max-width: 540px;
+  margin: 0 0 clamp(24px, 3vh, 36px);
 }
 
 .hero-actions {
-  display: flex;
-  align-items: center;
-  gap: 28px;
+  width: min(100%, 690px);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 14px;
+}
+
+.hero-actions > .button {
+  min-height: 62px;
+  padding-inline: 24px;
+}
+
+.hero-secondary-actions {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 0.82fr 1.18fr;
+  background: rgba(251, 249, 244, 0.54);
+  border: 1px solid var(--line);
+}
+
+.hero-secondary-actions .text-button + .text-button {
+  border-left: 1px solid var(--line);
 }
 
 .journey-launch {
@@ -622,21 +699,37 @@ a {
 .text-button {
   border: 0;
   background: transparent;
-  padding: 8px 0;
+  min-width: 0;
+  min-height: 60px;
+  padding: 8px 14px;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
+  transition:
+    color 0.4s var(--ease-out),
+    background 0.4s var(--ease-out);
+}
+
+.text-button:hover {
+  color: var(--burgundy);
+  background: rgba(123, 38, 60, 0.055);
+}
+
+.text-button > span:not(.noor-orb) {
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .credential {
-  margin-top: 34px;
-  padding-top: 20px;
+  margin-top: clamp(24px, 3.5vh, 38px);
+  padding-top: 18px;
   border-top: 1px solid var(--line);
-  max-width: 480px;
+  max-width: 540px;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -651,31 +744,34 @@ a {
 }
 
 .hero-visual {
-  height: min(75vh, 790px);
-  min-height: 570px;
+  height: min(74vh, 820px);
+  min-height: 620px;
   position: relative;
 }
 
 .portrait-frame {
   position: absolute;
-  inset: 0 0 0 7%;
+  inset: 0;
   overflow: hidden;
   background: #d8d1c7;
-  box-shadow: 0 30px 85px rgba(61, 49, 42, 0.13);
+  box-shadow: 0 36px 100px rgba(61, 49, 42, 0.17);
+  isolation: isolate;
+  will-change: clip-path;
 }
 
 .portrait-frame::after {
   content: "";
   position: absolute;
-  inset: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.34);
+  inset: 18px;
+  z-index: 3;
+  border: 1px solid rgba(255, 255, 255, 0.28);
   pointer-events: none;
 }
 
 .portrait-frame img {
   object-fit: cover;
-  object-position: center;
-  transition: transform 1.2s ease;
+  object-position: center 42%;
+  transition: transform 1.4s var(--ease-out);
 }
 
 .portrait-frame:hover img {
@@ -685,23 +781,69 @@ a {
 .portrait-wash {
   position: absolute;
   inset: 0;
-  background: rgba(74, 50, 41, 0.025);
+  z-index: 1;
+  background:
+    linear-gradient(180deg, rgba(20, 17, 15, 0.2) 0%, transparent 25%),
+    linear-gradient(0deg, rgba(20, 17, 15, 0.68) 0%, transparent 42%),
+    rgba(74, 50, 41, 0.02);
+}
+
+.portrait-chrome {
+  position: absolute;
+  z-index: 4;
+  left: 38px;
+  right: 38px;
+  top: 35px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.portrait-chrome span:last-child {
+  color: var(--champagne);
+}
+
+.portrait-footer {
+  position: absolute;
+  z-index: 4;
+  left: 38px;
+  right: 38px;
+  bottom: 38px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 0.82fr);
+  align-items: end;
+  gap: 22px;
 }
 
 .availability-card {
-  position: absolute;
-  left: 0;
-  bottom: 10%;
-  z-index: 2;
-  min-width: 280px;
-  background: rgba(251, 249, 244, 0.95);
-  backdrop-filter: blur(16px);
-  padding: 19px 18px;
-  box-shadow: var(--shadow);
+  min-width: 0;
+  min-height: 74px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  color: var(--charcoal);
+  background: rgba(251, 249, 244, 0.9);
+  backdrop-filter: blur(24px) saturate(130%);
+  padding: 13px 13px 13px 16px;
+  box-shadow: 0 16px 44px rgba(25, 21, 18, 0.18);
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    transform 0.45s var(--ease-out),
+    background 0.45s var(--ease-out),
+    box-shadow 0.45s var(--ease-out);
+}
+
+.availability-card:hover {
+  transform: translateY(-4px);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 24px 58px rgba(25, 21, 18, 0.24);
 }
 
 .live-dot {
@@ -712,7 +854,7 @@ a {
   box-shadow: 0 0 0 5px rgba(78, 143, 105, 0.12);
 }
 
-.availability-card div {
+.availability-copy {
   display: grid;
   gap: 4px;
 }
@@ -729,31 +871,37 @@ a {
   font-weight: 600;
 }
 
-.availability-card button {
-  width: 34px;
-  height: 34px;
+.availability-arrow {
+  width: 38px;
+  height: 38px;
   border: 1px solid var(--line);
-  background: transparent;
   display: grid;
   place-items: center;
-  cursor: pointer;
+  transition:
+    color 0.4s var(--ease-out),
+    background 0.4s var(--ease-out),
+    transform 0.4s var(--ease-out);
+}
+
+.availability-card:hover .availability-arrow {
+  color: white;
+  background: var(--burgundy);
+  transform: translateX(2px);
 }
 
 .doctor-mark {
-  position: absolute;
-  z-index: 2;
-  right: 24px;
-  bottom: 25px;
   color: white;
   display: grid;
-  text-align: right;
+  gap: 4px;
+  text-align: left;
   text-shadow: 0 2px 20px rgba(0, 0, 0, 0.38);
 }
 
 .doctor-mark span {
   font-family: var(--font-display), Georgia, serif;
-  font-size: 25px;
+  font-size: clamp(24px, 1.8vw, 32px);
   font-style: italic;
+  line-height: 1;
 }
 
 .doctor-mark small {
@@ -1150,6 +1298,14 @@ a {
   flex-direction: column;
   justify-content: flex-end;
   gap: 12px;
+  transition:
+    background 0.5s var(--ease-out),
+    transform 0.5s var(--ease-out);
+}
+
+.proof-stats article:hover {
+  background: rgba(255, 255, 255, 0.045);
+  transform: translateY(-7px);
 }
 
 .proof-stats strong {
@@ -2116,7 +2272,25 @@ a {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  transition: background 0.3s ease, transform 0.3s ease;
+  overflow: hidden;
+  isolation: isolate;
+  transition:
+    color 0.55s var(--ease-out),
+    background 0.55s var(--ease-out),
+    transform 0.55s var(--ease-out),
+    box-shadow 0.55s var(--ease-out);
+}
+
+.journey-grid article::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 85% 12%, rgba(180, 105, 120, 0.34), transparent 28%),
+    var(--charcoal);
+  transform: translateY(102%);
+  transition: transform 0.65s var(--ease-smooth);
 }
 
 .site-shell[dir="rtl"] .journey-grid article {
@@ -2129,9 +2303,26 @@ a {
 }
 
 .journey-grid article:hover {
-  background: var(--paper);
-  transform: translateY(-7px);
-  box-shadow: var(--shadow);
+  color: white;
+  transform: translateY(-10px);
+  box-shadow: 0 28px 70px rgba(34, 28, 24, 0.18);
+}
+
+.journey-grid article:hover::before {
+  transform: translateY(0);
+}
+
+.journey-grid article:hover .journey-number {
+  color: var(--champagne);
+}
+
+.journey-grid article:hover p {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.journey-grid article:hover svg {
+  color: var(--champagne);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .journey-number {
@@ -2145,7 +2336,14 @@ a {
 
 .journey-grid svg {
   color: var(--burgundy);
-  margin-bottom: 24px;
+  width: 42px;
+  height: 42px;
+  margin-bottom: 22px;
+  padding: 10px;
+  border: 1px solid rgba(123, 38, 60, 0.22);
+  transition:
+    color 0.45s var(--ease-out),
+    border-color 0.45s var(--ease-out);
 }
 
 .journey-grid h3 {
@@ -2160,10 +2358,16 @@ a {
   font-size: 10px;
   line-height: 1.8;
   margin: 0;
+  transition: color 0.45s var(--ease-out);
 }
 
 .final-cta {
-  background: var(--paper);
+  overflow: hidden;
+  isolation: isolate;
+  position: relative;
+  background:
+    linear-gradient(115deg, rgba(251, 249, 244, 0.98), rgba(242, 238, 230, 0.9)),
+    var(--paper);
   min-height: 420px;
   padding: 90px max(5vw, calc((100vw - 1180px) / 2));
   display: flex;
@@ -2173,9 +2377,53 @@ a {
 }
 
 .final-actions {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.final-cta::before,
+.final-cta::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.final-cta::before {
+  width: min(42vw, 560px);
+  height: min(42vw, 560px);
+  right: -5vw;
+  top: 50%;
+  border: 1px solid rgba(123, 38, 60, 0.12);
+  box-shadow:
+    0 0 0 70px rgba(123, 38, 60, 0.025),
+    0 0 0 150px rgba(123, 38, 60, 0.018);
+  transform: translateY(-50%);
+}
+
+.final-cta::after {
+  width: 210px;
+  height: 210px;
+  right: 11vw;
+  top: 50%;
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgba(255, 255, 255, 0.7),
+    rgba(180, 105, 120, 0.32) 38%,
+    rgba(123, 38, 60, 0.14) 70%,
+    transparent 72%
+  );
+  filter: blur(2px);
+  opacity: 0.72;
+  transform: translateY(-50%);
+}
+
+.final-actions .button {
+  min-width: 205px;
 }
 
 .journey-designer {
@@ -2442,19 +2690,23 @@ footer p {
 
 .floating-noor {
   position: fixed;
-  right: 24px;
-  bottom: 24px;
+  right: clamp(18px, 2.2vw, 34px);
+  bottom: clamp(18px, 2.2vw, 34px);
   z-index: 45;
   background: var(--charcoal);
   color: white;
-  box-shadow: 0 16px 46px rgba(24, 21, 19, 0.25);
+  box-shadow: 0 18px 54px rgba(24, 21, 19, 0.28);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  padding: 11px 17px 11px 11px;
+  min-height: 58px;
+  padding: 10px 18px 10px 11px;
   display: flex;
   align-items: center;
   gap: 10px;
   cursor: pointer;
-  transition: transform 0.25s ease;
+  animation: floatingNoorIn 0.7s var(--ease-out) both;
+  transition:
+    transform 0.45s var(--ease-out),
+    box-shadow 0.45s var(--ease-out);
 }
 
 .site-shell[dir="rtl"] .floating-noor {
@@ -2463,10 +2715,11 @@ footer p {
 }
 
 .floating-noor:hover {
-  transform: translateY(-4px);
+  transform: translateY(-5px);
+  box-shadow: 0 26px 66px rgba(24, 21, 19, 0.34);
 }
 
-.floating-noor span:last-child {
+.floating-noor-copy {
   display: grid;
   text-align: left;
   gap: 2px;
@@ -2481,6 +2734,17 @@ footer p {
 .floating-noor strong {
   font-size: 10px;
   letter-spacing: 0.04em;
+}
+
+@keyframes floatingNoorIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .modal-layer {
@@ -3048,11 +3312,29 @@ footer p {
   }
 
   .hero {
-    gap: 4vw;
+    grid-template-columns: minmax(0, 0.82fr) minmax(450px, 1.18fr);
+    gap: clamp(34px, 4vw, 52px);
   }
 
   .hero h1 {
-    font-size: clamp(54px, 7.6vw, 82px);
+    font-size: clamp(58px, 7.1vw, 80px);
+  }
+
+  .hero-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-actions > .button {
+    width: 100%;
+  }
+
+  .portrait-footer {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .doctor-mark {
+    max-width: 320px;
   }
 
   .carelens-stage {
@@ -3095,6 +3377,62 @@ footer p {
 
   .journey-grid article {
     padding: 22px;
+  }
+}
+
+@media (min-width: 861px) and (max-height: 820px) {
+  .hero {
+    padding-top: 26px;
+    padding-bottom: 26px;
+  }
+
+  .hero h1 {
+    margin-top: 20px;
+    margin-bottom: 20px;
+    font-size: clamp(60px, 5.35vw, 86px);
+  }
+
+  .hero-intro {
+    margin-bottom: 20px;
+  }
+
+  .hero-visual {
+    height: calc(100svh - 156px);
+    min-height: 520px;
+  }
+
+  .credential {
+    margin-top: 20px;
+    padding-top: 14px;
+  }
+}
+
+@media (min-width: 861px) and (max-width: 980px) {
+  .hero {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    padding-top: 70px;
+  }
+
+  .hero-copy {
+    max-width: 760px;
+  }
+
+  .hero h1 {
+    font-size: clamp(68px, 9.2vw, 90px);
+  }
+
+  .hero-actions {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .hero-visual {
+    height: min(82vh, 800px);
+    min-height: 680px;
+  }
+
+  .hero-rail {
+    display: none;
   }
 }
 
@@ -3174,7 +3512,7 @@ footer p {
   .hero {
     min-height: auto;
     grid-template-columns: 1fr;
-    padding-top: 7vh;
+    padding-top: clamp(50px, 8vh, 90px);
   }
 
   .portal-sticky {
@@ -3208,12 +3546,12 @@ footer p {
   }
 
   .hero-visual {
-    min-height: 620px;
-    height: 78vh;
+    min-height: 680px;
+    height: min(84vh, 820px);
   }
 
   .portrait-frame {
-    inset: 0 0 0 12%;
+    inset: 0;
   }
 
   .hero-rail {
@@ -3275,7 +3613,7 @@ footer p {
   }
 
   .hero {
-    padding: 50px 18px 60px;
+    padding: 48px 18px 72px;
   }
 
   .experience-portal {
@@ -3341,19 +3679,31 @@ footer p {
 
   .hero h1 {
     margin-top: 22px;
-    font-size: clamp(49px, 16vw, 70px);
-    line-height: 0.89;
+    font-size: clamp(52px, 16vw, 70px);
+    line-height: 0.86;
   }
 
   .hero h1 em {
     padding-left: 0;
     white-space: normal;
+    width: 100%;
+    margin-top: 0.14em;
+    font-size: 0.7em;
   }
 
   .hero-actions {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 14px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .hero-secondary-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-secondary-actions .text-button + .text-button {
+    border-left: 0;
+    border-top: 1px solid var(--line);
   }
 
   .intro-grid {
@@ -3423,24 +3773,40 @@ footer p {
   }
 
   .hero-visual {
-    height: 68vh;
-    min-height: 520px;
+    height: 720px;
+    min-height: 720px;
     margin-top: 20px;
   }
 
   .portrait-frame {
-    inset: 0 0 0 8%;
+    inset: 0;
   }
 
   .availability-card {
-    min-width: 265px;
-    left: 0;
-    bottom: 8%;
+    width: 100%;
+    min-width: 0;
   }
 
   .doctor-mark {
-    right: 14px;
-    bottom: 14px;
+    max-width: none;
+  }
+
+  .portrait-chrome {
+    left: 24px;
+    right: 24px;
+    top: 26px;
+  }
+
+  .portrait-chrome span:last-child {
+    display: none;
+  }
+
+  .portrait-footer {
+    left: 24px;
+    right: 24px;
+    bottom: 24px;
+    grid-template-columns: 1fr;
+    gap: 18px;
   }
 
   .proof-strip,
@@ -3645,6 +4011,12 @@ footer p {
   .floating-noor {
     right: 12px;
     bottom: 12px;
+    min-height: 54px;
+    padding: 8px 10px;
+  }
+
+  .floating-noor-copy {
+    display: none;
   }
 
   .booking-modal {
