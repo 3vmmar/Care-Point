@@ -5,9 +5,12 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 
 test("ships the premium patient experience and production assets", async () => {
-  const [experience, layout] = await Promise.all([
+  const [experience, layout, intro, universe, journeyDesigner] = await Promise.all([
     readFile(new URL("app/components/CarePointExperience.tsx", root), "utf8"),
     readFile(new URL("app/layout.tsx", root), "utf8"),
+    readFile(new URL("app/components/ExperienceIntro.tsx", root), "utf8"),
+    readFile(new URL("app/components/TreatmentUniverse.tsx", root), "utf8"),
+    readFile(new URL("app/components/JourneyDesigner.tsx", root), "utf8"),
     access(new URL("public/doctor-hero.png", root)),
     access(new URL("public/og.png", root)),
   ]);
@@ -16,6 +19,10 @@ test("ships the premium patient experience and production assets", async () => {
   assert.match(experience, /Ask NOOR/);
   assert.match(experience, /\/api\/availability/);
   assert.match(experience, /\/api\/bookings/);
+  assert.match(intro, /Enter the experience/);
+  assert.match(universe, /Canvas/);
+  assert.match(universe, /Open consultation map/);
+  assert.match(journeyDesigner, /YOUR RECOMMENDED STARTING POINT/);
   assert.match(layout, /The Future of Aesthetic Care/);
   assert.doesNotMatch(experience, /codex-preview|Building your site/);
 });

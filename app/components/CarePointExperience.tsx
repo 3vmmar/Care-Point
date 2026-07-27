@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
-  Bot,
   CalendarDays,
   Check,
   ChevronRight,
@@ -30,6 +29,9 @@ import {
   useRef,
   useState,
 } from "react";
+import ExperienceIntro from "./ExperienceIntro";
+import JourneyDesigner from "./JourneyDesigner";
+import TreatmentUniverse from "./TreatmentUniverse";
 
 type Language = "en" | "ar";
 type AvailabilityDay = {
@@ -116,53 +118,6 @@ const services = [
 
 const branches = ["Maadi", "Mohandessin", "Fifth Settlement"];
 
-const careAreas = [
-  {
-    id: "face",
-    number: "01",
-    title: "Face & neck",
-    ar: "الوجه والرقبة",
-    prompt: "I want to look fresher, without looking different.",
-    arPrompt: "أريد مظهراً أكثر حيوية بدون تغيير ملامحي.",
-    options: ["Facelift", "Eyelid surgery", "Fat grafting"],
-    detail:
-      "We assess skin, volume, muscle support, and facial balance before discussing any procedure.",
-  },
-  {
-    id: "nose",
-    number: "02",
-    title: "Nose & profile",
-    ar: "الأنف وتناسق الوجه",
-    prompt: "I want better balance from every angle.",
-    arPrompt: "أريد تناسقاً أفضل من كل زاوية.",
-    options: ["Rhinoplasty", "Septorhinoplasty", "Profile balancing"],
-    detail:
-      "Form and breathing are considered together, with a plan grounded in your individual anatomy.",
-  },
-  {
-    id: "body",
-    number: "03",
-    title: "Body",
-    ar: "القوام",
-    prompt: "My shape no longer reflects how I feel.",
-    arPrompt: "قوامي لم يعد يعكس إحساسي بنفسي.",
-    options: ["Tummy tuck", "Liposculpture", "Post-weight-loss surgery"],
-    detail:
-      "Your skin quality, muscle support, proportions, and lifestyle shape the right conversation.",
-  },
-  {
-    id: "breast",
-    number: "04",
-    title: "Breast",
-    ar: "الثدي",
-    prompt: "I want proportion, comfort, and confidence.",
-    arPrompt: "أبحث عن التناسق والراحة والثقة.",
-    options: ["Lift", "Reduction", "Augmentation"],
-    detail:
-      "We explore size, position, symmetry, scarring, and long-term goals with complete discretion.",
-  },
-];
-
 const journey = [
   {
     icon: MessageCircle,
@@ -227,7 +182,8 @@ export default function CarePointExperience() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [noorOpen, setNoorOpen] = useState(false);
   const [bookingOpen, setBookingOpen] = useState(false);
-  const [activeArea, setActiveArea] = useState("face");
+  const [introOpen, setIntroOpen] = useState(true);
+  const [journeyDesignerOpen, setJourneyDesignerOpen] = useState(false);
   const t = copy[language];
   const rtl = language === "ar";
 
@@ -272,7 +228,7 @@ export default function CarePointExperience() {
 
       gsap.utils
         .toArray<HTMLElement>(
-          ".proof-intro, .proof-stats article, .section-heading, .area-row, .carelens-panel, .journey-grid article, .final-cta > div, .final-cta > button",
+          ".proof-intro, .proof-stats article, .section-heading, .treatment-universe, .journey-grid article, .final-cta > div, .final-cta > button",
         )
         .forEach((element, index) => {
           gsap.fromTo(
@@ -292,18 +248,6 @@ export default function CarePointExperience() {
             },
           );
         });
-
-      gsap.to(".anatomy-shape", {
-        yPercent: -8,
-        rotate: 8,
-        ease: "none",
-        scrollTrigger: {
-          trigger: ".carelens-stage",
-          start: "top bottom",
-          end: "bottom top",
-          scrub: 1,
-        },
-      });
 
       const scenes = gsap.utils.toArray<HTMLElement>(".portal-scene");
       gsap.set(scenes, { autoAlpha: 0, y: 60 });
@@ -380,6 +324,9 @@ export default function CarePointExperience() {
 
   return (
     <main className="site-shell" dir={rtl ? "rtl" : "ltr"}>
+      {introOpen && (
+        <ExperienceIntro language={language} onEnter={() => setIntroOpen(false)} />
+      )}
       <div className="grain" aria-hidden />
       <div className="scroll-progress" aria-hidden><span /></div>
       <header className="site-header">
@@ -416,6 +363,14 @@ export default function CarePointExperience() {
           </button>
         </nav>
         <div className="header-actions">
+          <button
+            className="experience-replay"
+            onClick={() => setIntroOpen(true)}
+            aria-label={rtl ? "أعد تشغيل المقدمة" : "Replay introduction"}
+          >
+            <Sparkles size={14} />
+            <span>{rtl ? "المقدمة" : "REPLAY"}</span>
+          </button>
           <button
             className="language-button"
             onClick={() => setLanguage(rtl ? "en" : "ar")}
@@ -458,6 +413,13 @@ export default function CarePointExperience() {
               <NoorOrb small />
               {t.ask}
               <ArrowRight size={16} />
+            </button>
+            <button
+              className="text-button journey-launch"
+              onClick={() => setJourneyDesignerOpen(true)}
+            >
+              <Sparkles size={15} />
+              {rtl ? "صمّم رحلتك" : "Design my journey"}
             </button>
           </div>
           <div className="credential reveal-item reveal-delay-3">
@@ -602,28 +564,11 @@ export default function CarePointExperience() {
           <p>{t.careLensBody}</p>
         </div>
 
-        <div className="carelens-stage">
-          <div className="area-list">
-            {careAreas.map((area) => (
-              <button
-                key={area.id}
-                className={activeArea === area.id ? "area-row active" : "area-row"}
-                onClick={() => setActiveArea(area.id)}
-              >
-                <span>{area.number}</span>
-                <strong>{rtl ? area.ar : area.title}</strong>
-                <p>{rtl ? area.arPrompt : area.prompt}</p>
-                <ChevronRight size={20} />
-              </button>
-            ))}
-          </div>
-          <CareLensPanel
-            area={careAreas.find((area) => area.id === activeArea) ?? careAreas[0]}
-            language={language}
-            onBook={openBooking}
-            onAsk={() => setNoorOpen(true)}
-          />
-        </div>
+        <TreatmentUniverse
+          language={language}
+          onBook={openBooking}
+          onAsk={() => setNoorOpen(true)}
+        />
       </section>
 
       <section className="noor-feature section-pad">
@@ -694,11 +639,20 @@ export default function CarePointExperience() {
           <h2>{t.finalTitle}</h2>
           <p>{t.finalBody}</p>
         </div>
-        <button className="button button--burgundy button--large" onClick={openBooking}>
-          <CalendarDays size={19} />
-          {t.book}
-          <ArrowRight size={18} />
-        </button>
+        <div className="final-actions">
+          <button
+            className="button button--dark button--large"
+            onClick={() => setJourneyDesignerOpen(true)}
+          >
+            <Sparkles size={18} />
+            {rtl ? "صمّم رحلتك" : "Design your journey"}
+          </button>
+          <button className="button button--burgundy button--large" onClick={openBooking}>
+            <CalendarDays size={19} />
+            {t.book}
+            <ArrowRight size={18} />
+          </button>
+        </div>
       </section>
 
       <footer>
@@ -738,54 +692,14 @@ export default function CarePointExperience() {
       {bookingOpen && (
         <BookingModal language={language} onClose={() => setBookingOpen(false)} />
       )}
+      {journeyDesignerOpen && (
+        <JourneyDesigner
+          language={language}
+          onClose={() => setJourneyDesignerOpen(false)}
+          onBook={openBooking}
+        />
+      )}
     </main>
-  );
-}
-
-function CareLensPanel({
-  area,
-  language,
-  onBook,
-  onAsk,
-}: {
-  area: (typeof careAreas)[number];
-  language: Language;
-  onBook: () => void;
-  onAsk: () => void;
-}) {
-  const rtl = language === "ar";
-  return (
-    <div className="carelens-panel" key={area.id}>
-      <div className={`anatomy-shape anatomy-shape--${area.id}`}>
-        <span />
-        <span />
-        <span />
-      </div>
-      <div className="carelens-panel-content">
-        <small>{rtl ? "نقطة بداية للنقاش" : "A starting point for your conversation"}</small>
-        <h3>“{rtl ? area.arPrompt : area.prompt}”</h3>
-        <p>
-          {rtl
-            ? "خلال الاستشارة نقيّم التكوين والتناسق والأهداف قبل مناقشة أي إجراء."
-            : area.detail}
-        </p>
-        <div className="option-tags">
-          {area.options.map((option) => (
-            <span key={option}>{option}</span>
-          ))}
-        </div>
-        <div className="panel-actions">
-          <button onClick={onAsk}>
-            <Bot size={16} />
-            {rtl ? "اسأل نور" : "Ask NOOR"}
-          </button>
-          <button onClick={onBook}>
-            {rtl ? "احجز استشارة" : "Book a consultation"}
-            <ArrowRight size={15} />
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 
