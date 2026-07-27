@@ -20,6 +20,9 @@ const arabic = IBM_Plex_Sans_Arabic({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    "https://dr-ashraf-future-clinic.nimble-pig-6675.chatgpt.site",
+  ),
   title: {
     default: "Dr. Ashraf Metwally | The Future of Aesthetic Care",
     template: "%s | Dr. Ashraf Metwally",
