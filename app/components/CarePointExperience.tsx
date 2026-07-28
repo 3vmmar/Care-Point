@@ -22,8 +22,10 @@ import {
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
+import dynamic from "next/dynamic";
 import {
   FormEvent,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -32,7 +34,73 @@ import {
 } from "react";
 import ExperienceIntro from "./ExperienceIntro";
 import JourneyDesigner from "./JourneyDesigner";
-import TreatmentUniverse from "./TreatmentUniverse";
+import Modal from "./Modal";
+import { BRANCHES, CONTACT, SERVICES, WHATSAPP_URL } from "@/lib/clinic";
+
+// The CareLens scene pulls in Three.js — roughly 890KB that the hero does not
+// need, and that cannot render on the server anyway.
+const TreatmentUniverse = dynamic(() => import("./TreatmentUniverse"), {
+  ssr: false,
+  loading: () => <div className="treatment-universe treatment-universe--loading" aria-hidden />,
+});
+
+/**
+ * Holds the CareLens chunk back until the section nears the viewport. Without
+ * this gate the dynamic import still fires immediately after hydration, which
+ * puts the download back in competition with the hero on a slow connection.
+ */
+function LazyCareLens(props: {
+  language: Language;
+  onBook: () => void;
+  onAsk: () => void;
+}) {
+  const anchor = useRef<HTMLDivElement>(null);
+  // Without IntersectionObserver there is nothing to wait for, so render the
+  // scene straight away. `dynamic(ssr:false)` renders the same placeholder on
+  // the server either way, so the hydrated markup still matches.
+  const [inView, setInView] = useState(
+    () => typeof IntersectionObserver === "undefined",
+  );
+
+  useEffect(() => {
+    const node = anchor.current;
+    if (!node || inView) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        setInView(true);
+        observer.disconnect();
+      },
+      // Start fetching a screen early so the scene is ready on arrival.
+      { rootMargin: "700px 0px" },
+    );
+    observer.observe(node);
+
+    // Backstop: the hero has long since painted by now, so mounting the scene
+    // costs nothing on the critical path — and CareLens is too important to
+    // depend solely on an observer callback arriving.
+    const fallback = window.setTimeout(() => {
+      setInView(true);
+      observer.disconnect();
+    }, 4000);
+
+    return () => {
+      window.clearTimeout(fallback);
+      observer.disconnect();
+    };
+  }, [inView]);
+
+  return (
+    <div ref={anchor}>
+      {inView ? (
+        <TreatmentUniverse {...props} />
+      ) : (
+        <div className="treatment-universe treatment-universe--loading" aria-hidden />
+      )}
+    </div>
+  );
+}
 
 type Language = "en" | "ar";
 type AvailabilityDay = {
@@ -42,6 +110,19 @@ type AvailabilityDay = {
   slots: string[];
 };
 type ChatMessage = { role: "assistant" | "user"; text: string };
+
+type SpeechResult = { results: { 0: { 0: { transcript: string } } } };
+type SpeechRecognitionLike = {
+  lang: string;
+  start: () => void;
+  abort?: () => void;
+  onresult: (event: SpeechResult) => void;
+  onerror: () => void;
+  onend?: () => void;
+};
+
+const LANGUAGE_STORAGE_KEY = "carepoint:language";
+const INTRO_STORAGE_KEY = "carepoint:intro-seen";
 
 const copy = {
   en: {
@@ -108,17 +189,6 @@ const copy = {
   },
 };
 
-const services = [
-  "Aesthetic consultation",
-  "Face & neck consultation",
-  "Rhinoplasty consultation",
-  "Body contouring consultation",
-  "Breast surgery consultation",
-  "Non-surgical aesthetics",
-];
-
-const branches = ["Maadi", "Mohandessin", "Fifth Settlement"];
-
 const journey = [
   {
     icon: MessageCircle,
@@ -154,20 +224,6 @@ const journey = [
   },
 ];
 
-const fallbackDays: AvailabilityDay[] = Array.from({ length: 5 }, (_, index) => {
-  const date = new Date();
-  date.setDate(date.getDate() + index + 1);
-  return {
-    date: date.toISOString().slice(0, 10),
-    weekday: new Intl.DateTimeFormat("en", { weekday: "short" }).format(date),
-    day: new Intl.DateTimeFormat("en", {
-      day: "2-digit",
-      month: "short",
-    }).format(date),
-    slots: ["11:00", "14:00", "17:30"],
-  };
-});
-
 function NoorOrb({ small = false }: { small?: boolean }) {
   return (
     <span className={`noor-orb ${small ? "noor-orb--small" : ""}`} aria-hidden>
@@ -188,6 +244,52 @@ export default function CarePointExperience() {
   const [heroPassed, setHeroPassed] = useState(false);
   const t = copy[language];
   const rtl = language === "ar";
+
+  // Restored before paint so a returning visitor does not see the intro replay
+  // or a flash of English. Initial state still matches the server render, so
+  // hydration stays clean — which is exactly why this cannot move into a
+  // `useState` initialiser, where `localStorage` is unavailable on the server.
+  useLayoutEffect(() => {
+    try {
+      const storedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+      /* eslint-disable react-hooks/set-state-in-effect */
+      if (storedLanguage === "ar" || storedLanguage === "en") {
+        setLanguage(storedLanguage);
+      }
+      if (window.localStorage.getItem(INTRO_STORAGE_KEY) === "1") {
+        setIntroOpen(false);
+      }
+      /* eslint-enable react-hooks/set-state-in-effect */
+    } catch {
+      // Private browsing can deny storage access; defaults are fine.
+    }
+  }, []);
+
+  const chooseLanguage = useCallback((next: Language) => {
+    setLanguage(next);
+    try {
+      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
+    } catch {
+      // Persistence is best-effort.
+    }
+  }, []);
+
+  const dismissIntro = useCallback(() => {
+    setIntroOpen(false);
+    try {
+      window.localStorage.setItem(INTRO_STORAGE_KEY, "1");
+    } catch {
+      // Persistence is best-effort.
+    }
+  }, []);
+
+  // Screen readers and search engines read the document element, not `main`,
+  // so the language switch has to reach it.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.lang = language;
+    root.dir = rtl ? "rtl" : "ltr";
+  }, [language, rtl]);
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -394,9 +496,7 @@ export default function CarePointExperience() {
 
   return (
     <main className="site-shell" dir={rtl ? "rtl" : "ltr"}>
-      {introOpen && (
-        <ExperienceIntro language={language} onEnter={() => setIntroOpen(false)} />
-      )}
+      {introOpen && <ExperienceIntro language={language} onEnter={dismissIntro} />}
       <div className="grain" aria-hidden />
       <div className="scroll-progress" aria-hidden><span /></div>
       <header className="site-header">
@@ -422,7 +522,7 @@ export default function CarePointExperience() {
           ))}
           <button
             className="language-button mobile-language"
-            onClick={() => setLanguage(rtl ? "en" : "ar")}
+            onClick={() => chooseLanguage(rtl ? "en" : "ar")}
           >
             <Globe2 size={15} />
             {rtl ? "EN" : "عربي"}
@@ -443,8 +543,8 @@ export default function CarePointExperience() {
           </button>
           <button
             className="language-button"
-            onClick={() => setLanguage(rtl ? "en" : "ar")}
-            aria-label="Change language"
+            onClick={() => chooseLanguage(rtl ? "en" : "ar")}
+            aria-label={rtl ? "التبديل إلى الإنجليزية" : "Switch to Arabic"}
           >
             <Globe2 size={15} />
             {rtl ? "EN" : "عربي"}
@@ -504,7 +604,7 @@ export default function CarePointExperience() {
         <div className="hero-visual reveal-item reveal-delay-2">
           <div className="portrait-frame">
             <Image
-              src="/doctor-hero.png"
+              src="/doctor-hero.webp"
               alt="Dr. Ashraf Metwally in a modern clinic"
               fill
               sizes="(max-width: 900px) 92vw, 48vw"
@@ -647,7 +747,7 @@ export default function CarePointExperience() {
           <p>{t.careLensBody}</p>
         </div>
 
-        <TreatmentUniverse
+        <LazyCareLens
           language={language}
           onBook={openBooking}
           onAsk={() => setNoorOpen(true)}
@@ -748,8 +848,10 @@ export default function CarePointExperience() {
         </div>
         <p>Maadi · Mohandessin · Fifth Settlement</p>
         <div className="footer-links">
-          <a href="tel:+201000000000">Call clinic</a>
-          <a href="https://wa.me/201000000000">WhatsApp</a>
+          <a href={`tel:${CONTACT.phone}`}>{rtl ? "اتصل بالعيادة" : "Call clinic"}</a>
+          <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer">
+            WhatsApp
+          </a>
           <Link href="/command-center">Clinic OS</Link>
         </div>
       </footer>
@@ -811,10 +913,24 @@ function NoorPanel({
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const chatEnd = useRef<HTMLDivElement>(null);
+  const replyTimer = useRef(0);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, thinking]);
+
+  // Speech and timers outlive the component unless they are torn down: a reply
+  // timer would set state after unmount, and speech synthesis would keep talking
+  // over a closed panel.
+  useEffect(() => {
+    return () => {
+      window.clearTimeout(replyTimer.current);
+      recognitionRef.current?.abort?.();
+      recognitionRef.current = null;
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    };
+  }, []);
 
   function answerFor(question: string) {
     const normalized = question.toLowerCase();
@@ -854,7 +970,7 @@ function NoorPanel({
     setMessages((current) => [...current, { role: "user", text: clean }]);
     setInput("");
     setThinking(true);
-    window.setTimeout(() => {
+    replyTimer.current = window.setTimeout(() => {
       setMessages((current) => [
         ...current,
         { role: "assistant", text: answerFor(clean) },
@@ -864,13 +980,6 @@ function NoorPanel({
   }
 
   function startVoice() {
-    type SpeechResult = { results: { 0: { 0: { transcript: string } } } };
-    type SpeechRecognitionLike = {
-      lang: string;
-      start: () => void;
-      onresult: (event: SpeechResult) => void;
-      onerror: () => void;
-    };
     const speechWindow = window as typeof window & {
       webkitSpeechRecognition?: new () => SpeechRecognitionLike;
       SpeechRecognition?: new () => SpeechRecognitionLike;
@@ -889,10 +998,17 @@ function NoorPanel({
       ]);
       return;
     }
+    recognitionRef.current?.abort?.();
     const recognition = new Recognition();
+    recognitionRef.current = recognition;
     recognition.lang = rtl ? "ar-EG" : "en-US";
     recognition.onresult = (event) => submit(event.results[0][0].transcript);
-    recognition.onerror = () => undefined;
+    recognition.onerror = () => {
+      recognitionRef.current = null;
+    };
+    recognition.onend = () => {
+      recognitionRef.current = null;
+    };
     recognition.start();
   }
 
@@ -907,8 +1023,7 @@ function NoorPanel({
   }
 
   return (
-    <div className="modal-layer" role="dialog" aria-modal="true">
-      <button className="modal-scrim" onClick={onClose} aria-label="Close" />
+    <Modal onClose={onClose} label={rtl ? "نور، المساعدة الذكية" : "NOOR, the AI concierge"}>
       <aside className="noor-panel" dir={rtl ? "rtl" : "ltr"}>
         <div className="noor-panel-header">
           <div>
@@ -980,7 +1095,7 @@ function NoorPanel({
             : "Educational guidance only. Urgent concerns require direct medical care."}
         </p>
       </aside>
-    </div>
+    </Modal>
   );
 }
 
@@ -993,48 +1108,94 @@ function BookingModal({
 }) {
   const rtl = language === "ar";
   const [step, setStep] = useState<"slots" | "details" | "success">("slots");
-  const [service, setService] = useState(services[0]);
-  const [branch, setBranch] = useState(branches[0]);
-  const [days, setDays] = useState<AvailabilityDay[]>(fallbackDays);
-  const [selectedDate, setSelectedDate] = useState(fallbackDays[0].date);
+  const [service, setService] = useState(SERVICES[0].id);
+  const [branch, setBranch] = useState(BRANCHES[0].id);
+  const [days, setDays] = useState<AvailabilityDay[]>([]);
+  const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
   const [holdToken, setHoldToken] = useState("");
+  const [holdExpiresAt, setHoldExpiresAt] = useState(0);
+  const [secondsLeft, setSecondsLeft] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [bookingId, setBookingId] = useState("");
   const selectedDay = useMemo(
-    () => days.find((day) => day.date === selectedDate) ?? days[0],
+    () => days.find((day) => day.date === selectedDate),
     [days, selectedDate],
   );
+  const branchLabel = BRANCHES.find((item) => item.id === branch);
+  const serviceLabel = SERVICES.find((item) => item.id === service);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
+    // Entering the loading state is the point of re-running this effect when the
+    // branch, service or retry key changes.
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setLoading(true);
+    setLoadFailed(false);
+    /* eslint-enable react-hooks/set-state-in-effect */
+
     fetch(
-      `/api/availability?branch=${encodeURIComponent(branch)}&service=${encodeURIComponent(service)}`,
+      `/api/availability?branch=${encodeURIComponent(branch)}&service=${encodeURIComponent(
+        service,
+      )}&locale=${language}`,
+      { signal: controller.signal },
     )
-      .then((response) => {
+      .then(async (response) => {
         if (!response.ok) throw new Error("unavailable");
-        return response.json() as Promise<{ dates: AvailabilityDay[] }>;
+        return (await response.json()) as { dates: AvailabilityDay[] };
       })
       .then((data) => {
-        if (cancelled || !data.dates?.length) return;
-        setDays(data.dates);
-        setSelectedDate(data.dates[0].date);
+        setDays(data.dates ?? []);
+        // Land on the first day that actually has a free slot.
+        setSelectedDate(
+          (data.dates ?? []).find((day) => day.slots.length > 0)?.date ??
+            data.dates?.[0]?.date ??
+            "",
+        );
+        setLoading(false);
       })
-      .catch(() => {
-        if (!cancelled) setDays(fallbackDays);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+      .catch((caught: unknown) => {
+        if (caught instanceof DOMException && caught.name === "AbortError") return;
+        // Showing invented times here would let patients pick slots that do not
+        // exist, so the failure is surfaced instead.
+        setDays([]);
+        setLoadFailed(true);
+        setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [branch, service]);
+
+    return () => controller.abort();
+  }, [branch, service, language, reloadKey]);
+
+  // The server releases a hold after five minutes. Counting down in the UI means
+  // the patient is told before the confirmation fails, rather than after. The
+  // opening value is set when the hold is taken, so this effect only ticks.
+  useEffect(() => {
+    if (!holdExpiresAt) return;
+    const interval = window.setInterval(() => {
+      const remaining = Math.max(0, Math.round((holdExpiresAt - Date.now()) / 1000));
+      setSecondsLeft(remaining);
+      if (remaining === 0) {
+        setHoldToken("");
+        setHoldExpiresAt(0);
+        setStep("slots");
+        setSelectedTime("");
+        setReloadKey((key) => key + 1);
+        setError(
+          rtl
+            ? "انتهت مدة حجز الموعد المؤقت. اختر وقتاً جديداً."
+            : "Your held time expired. Please choose a new time.",
+        );
+      }
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [holdExpiresAt, rtl]);
 
   async function holdSlot() {
-    if (!selectedTime) return;
+    if (!selectedTime || !selectedDate) return;
     setSubmitting(true);
     setError("");
     try {
@@ -1048,14 +1209,26 @@ function BookingModal({
           slotTime: selectedTime,
         }),
       });
-      const data = (await response.json()) as { holdToken?: string; message?: string };
+      const data = (await response.json()) as {
+        holdToken?: string;
+        expiresAt?: string;
+        message?: string;
+      };
       if (!response.ok || !data.holdToken) {
         throw new Error(data.message || "Unable to hold this time.");
       }
+      const expiresAt = data.expiresAt ? Date.parse(data.expiresAt) : 0;
       setHoldToken(data.holdToken);
+      setHoldExpiresAt(expiresAt);
+      setSecondsLeft(
+        expiresAt ? Math.max(0, Math.round((expiresAt - Date.now()) / 1000)) : 0,
+      );
       setStep("details");
+      // Another visitor may have taken a slot while this one was choosing.
+      if (response.status === 409) setReloadKey((key) => key + 1);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Please choose another time.");
+      setReloadKey((key) => key + 1);
     } finally {
       setSubmitting(false);
     }
@@ -1075,6 +1248,7 @@ function BookingModal({
           patientName: form.get("name"),
           patientPhone: form.get("phone"),
           patientEmail: form.get("email"),
+          consent: form.get("consent") === "on",
           language,
         }),
       });
@@ -1083,7 +1257,8 @@ function BookingModal({
         message?: string;
       };
       if (!response.ok) throw new Error(data.message || "Unable to confirm.");
-      setBookingId(data.booking?.id?.slice(0, 8).toUpperCase() || "CARE-01");
+      setBookingId(data.booking?.id?.slice(0, 8).toUpperCase() || "");
+      setHoldExpiresAt(0);
       setStep("success");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to confirm.");
@@ -1092,16 +1267,17 @@ function BookingModal({
     }
   }
 
+  const countdown = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`;
+
   return (
-    <div className="modal-layer" role="dialog" aria-modal="true">
-      <button className="modal-scrim" onClick={onClose} aria-label="Close" />
+    <Modal onClose={onClose} labelledBy="booking-modal-title">
       <section className="booking-modal" dir={rtl ? "rtl" : "ltr"}>
         <div className="booking-top">
           <div>
             <span className="section-index">
               {step === "slots" ? "01" : step === "details" ? "02" : "03"} — LIVE BOOKING
             </span>
-            <h2>
+            <h2 id="booking-modal-title">
               {step === "success"
                 ? rtl
                   ? "تم حجز زيارتك."
@@ -1111,7 +1287,7 @@ function BookingModal({
                   : "Choose a time that fits."}
             </h2>
           </div>
-          <button onClick={onClose} aria-label="Close booking">
+          <button onClick={onClose} aria-label={rtl ? "إغلاق الحجز" : "Close booking"}>
             <X />
           </button>
         </div>
@@ -1124,12 +1300,15 @@ function BookingModal({
                 <select
                   value={service}
                   onChange={(event) => {
-                    setLoading(true);
                     setSelectedTime("");
                     setService(event.target.value);
                   }}
                 >
-                  {services.map((item) => <option key={item}>{item}</option>)}
+                  {SERVICES.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {rtl ? item.ar : item.en}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label>
@@ -1137,52 +1316,95 @@ function BookingModal({
                 <select
                   value={branch}
                   onChange={(event) => {
-                    setLoading(true);
                     setSelectedTime("");
-                    setBranch(event.target.value);
+                    setBranch(event.target.value as typeof branch);
                   }}
                 >
-                  {branches.map((item) => <option key={item}>{item}</option>)}
+                  {BRANCHES.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {rtl ? item.ar : item.en}
+                    </option>
+                  ))}
                 </select>
               </label>
             </div>
-            <div className="date-tabs">
-              {days.map((day) => (
-                <button
-                  key={day.date}
-                  className={selectedDate === day.date ? "active" : ""}
-                  onClick={() => {
-                    setSelectedDate(day.date);
-                    setSelectedTime("");
-                  }}
-                >
-                  <small>{day.weekday}</small>
-                  <strong>{day.day}</strong>
-                </button>
-              ))}
-            </div>
-            <div className="slot-heading">
-              <span>
-                <Clock3 size={16} />
-                {rtl ? "المواعيد المتاحة" : "Available times"}
-              </span>
-              <small>
-                <i />
-                {loading ? (rtl ? "جاري التحديث" : "Refreshing") : rtl ? "مباشر" : "Live"}
-              </small>
-            </div>
-            <div className="slots">
-              {(selectedDay?.slots ?? []).map((time) => (
-                <button
-                  className={selectedTime === time ? "active" : ""}
-                  key={time}
-                  onClick={() => setSelectedTime(time)}
-                >
-                  {time}
-                </button>
-              ))}
-            </div>
-            {error && <p className="form-error">{error}</p>}
+
+            {loadFailed ? (
+              <div className="booking-unavailable">
+                <p>
+                  {rtl
+                    ? "تعذر تحميل المواعيد المتاحة الآن."
+                    : "We could not load live availability right now."}
+                </p>
+                <div className="booking-unavailable-actions">
+                  <button
+                    className="button button--dark"
+                    onClick={() => setReloadKey((key) => key + 1)}
+                  >
+                    {rtl ? "إعادة المحاولة" : "Try again"}
+                  </button>
+                  <a href={`tel:${CONTACT.phone}`}>
+                    {rtl ? "اتصل بالعيادة" : "Call the clinic"}
+                  </a>
+                  <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer">
+                    WhatsApp
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="date-tabs">
+                  {days.map((day) => (
+                    <button
+                      key={day.date}
+                      className={selectedDate === day.date ? "active" : ""}
+                      disabled={day.slots.length === 0}
+                      onClick={() => {
+                        setSelectedDate(day.date);
+                        setSelectedTime("");
+                      }}
+                    >
+                      <small>{day.weekday}</small>
+                      <strong>{day.day}</strong>
+                    </button>
+                  ))}
+                </div>
+                <div className="slot-heading">
+                  <span>
+                    <Clock3 size={16} />
+                    {rtl ? "المواعيد المتاحة" : "Available times"}
+                  </span>
+                  <small>
+                    <i />
+                    {loading ? (rtl ? "جاري التحديث" : "Refreshing") : rtl ? "مباشر" : "Live"}
+                  </small>
+                </div>
+                <div className="slots" aria-busy={loading}>
+                  {(selectedDay?.slots ?? []).map((time) => (
+                    <button
+                      className={selectedTime === time ? "active" : ""}
+                      key={time}
+                      onClick={() => setSelectedTime(time)}
+                    >
+                      {time}
+                    </button>
+                  ))}
+                </div>
+                {!loading && (selectedDay?.slots.length ?? 0) === 0 && (
+                  <p className="slots-empty">
+                    {rtl
+                      ? "لا توجد مواعيد متاحة في هذا اليوم. جرّب يوماً أو فرعاً آخر."
+                      : "No times left on this day. Try another day or clinic."}
+                  </p>
+                )}
+              </>
+            )}
+
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
             <div className="booking-footer">
               <p>
                 <ShieldCheck size={15} />
@@ -1193,7 +1415,7 @@ function BookingModal({
               <button
                 className="button button--burgundy"
                 onClick={holdSlot}
-                disabled={!selectedTime || submitting}
+                disabled={!selectedTime || submitting || loading}
               >
                 {submitting ? (rtl ? "لحظة..." : "Holding...") : rtl ? "متابعة" : "Continue"}
                 <ArrowRight size={16} />
@@ -1208,35 +1430,69 @@ function BookingModal({
               <div>
                 <CalendarDays size={20} />
                 <span>
-                  <small>{service}</small>
+                  <small>{rtl ? serviceLabel?.ar : serviceLabel?.en}</small>
                   <strong>{selectedDay?.day} · {selectedTime}</strong>
                 </span>
               </div>
-              <span><MapPin size={14} />{branch}</span>
+              <span>
+                <MapPin size={14} />
+                {rtl ? branchLabel?.ar : branchLabel?.en}
+              </span>
             </div>
+            {secondsLeft > 0 && (
+              <p className="hold-countdown" role="status">
+                <Clock3 size={14} />
+                {rtl
+                  ? `هذا الموعد محجوز لك لمدة ${countdown}`
+                  : `This time is held for you for ${countdown}`}
+              </p>
+            )}
             <div className="form-grid">
               <label>
                 <span>{rtl ? "الاسم بالكامل" : "Full name"}</span>
-                <input name="name" required placeholder={rtl ? "اكتب اسمك" : "Your name"} />
+                <input
+                  name="name"
+                  required
+                  maxLength={120}
+                  autoComplete="name"
+                  placeholder={rtl ? "اكتب اسمك" : "Your name"}
+                />
               </label>
               <label>
                 <span>{rtl ? "رقم الهاتف" : "Mobile number"}</span>
-                <input name="phone" type="tel" required placeholder="+20" />
+                <input
+                  name="phone"
+                  type="tel"
+                  required
+                  autoComplete="tel"
+                  pattern="[+()\d\s-]{7,20}"
+                  placeholder="+20"
+                />
               </label>
               <label className="full">
                 <span>{rtl ? "البريد الإلكتروني (اختياري)" : "Email (optional)"}</span>
-                <input name="email" type="email" placeholder="name@example.com" />
+                <input
+                  name="email"
+                  type="email"
+                  maxLength={200}
+                  autoComplete="email"
+                  placeholder="name@example.com"
+                />
               </label>
             </div>
             <label className="consent">
-              <input type="checkbox" required />
+              <input type="checkbox" name="consent" required />
               <span>
                 {rtl
                   ? "أوافق على تواصل العيادة لتأكيد الموعد."
                   : "I agree to be contacted by the clinic to confirm my appointment."}
               </span>
             </label>
-            {error && <p className="form-error">{error}</p>}
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
             <div className="booking-footer">
               <button type="button" className="back-button" onClick={() => setStep("slots")}>
                 {rtl ? "العودة" : "Back"}
@@ -1254,18 +1510,20 @@ function BookingModal({
         {step === "success" && (
           <div className="booking-success">
             <div className="success-mark"><Check size={32} /></div>
-            <span className="confirmation-id">REF · {bookingId}</span>
-            <h3>{selectedDay?.day} at {selectedTime}</h3>
+            {bookingId && <span className="confirmation-id">REF · {bookingId}</span>}
+            <h3>
+              {selectedDay?.day} {rtl ? "الساعة" : "at"} {selectedTime}
+            </h3>
             <p>
               {rtl
-                ? `تم حجز الموعد في فرع ${branch}. سيتواصل معك فريق العيادة لتأكيد التفاصيل.`
-                : `Your ${branch} visit is in the calendar. The clinic team will contact you to confirm the details.`}
+                ? `تم حجز الموعد في فرع ${branchLabel?.ar}. سيتواصل معك فريق العيادة لتأكيد التفاصيل.`
+                : `Your ${branchLabel?.en} visit is in the calendar. The clinic team will contact you to confirm the details.`}
             </p>
             <div className="success-actions">
               <button className="button button--dark" onClick={onClose}>
                 {rtl ? "تم" : "Done"}
               </button>
-              <a href="https://wa.me/201000000000">
+              <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer">
                 <MessageCircle size={16} />
                 WhatsApp
               </a>
@@ -1273,6 +1531,6 @@ function BookingModal({
           </div>
         )}
       </section>
-    </div>
+    </Modal>
   );
 }

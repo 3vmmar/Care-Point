@@ -18,7 +18,7 @@ The platform is designed around the philosophy that aesthetic care starts with u
 * **Bilingual & Motion-First Interface**: Complete English and Arabic localization with native Right-to-Left (RTL) layout switching, custom Google Fonts (*Manrope*, *Cormorant Garamond*, *IBM Plex Sans Arabic*), Lenis smooth scrolling, and GSAP ScrollTrigger animations.
 * **Experience Intro**: Immersive video/motion intro modal welcoming patients into the clinic experience with instant replay capabilities.
 * **CareLens 3D Treatment Universe**: Interactive Three.js / `@react-three/fiber` visual discovery system for exploring treatments by anatomical region (Face, Rhinoplasty, Body, Breast, Skin) and aesthetic intent.
-* **NOOR AI Concierge**: AI-powered patient assistant capable of explaining procedures, preparation guidelines, and recovery timelines in Arabic or English, featuring **Web Speech API** voice input and speech synthesis output.
+* **NOOR Concierge**: A guided patient assistant that explains procedures, preparation guidelines, and recovery timelines in Arabic or English, with **Web Speech API** voice input and speech synthesis output. Responses are currently drawn from a fixed, clinician-reviewable answer set matched by keyword — there is no language model behind it yet.
 * **Journey Designer**: Interactive step-by-step questionnaire guiding patients to personalized treatment starting points.
 * **Real-Time Appointment Booking**: Real-time slot availability across 3 Cairo locations (Maadi, Mohandessin, Fifth Settlement) with a 5-minute atomic slot reservation hold pattern to prevent double booking.
 
@@ -50,27 +50,35 @@ The platform is designed around the philosophy that aesthetic care starts with u
 Care-Point/
 ├── app/
 │   ├── api/
-│   │   ├── availability/    # Real-time slot fetching & hold reservation endpoint
-│   │   └── bookings/        # Appointment confirmation & listing endpoint
-│   ├── command-center/      # Clinic OS operational dashboard & CSS
+│   │   ├── availability/    # Slot fetching & hold reservation endpoint
+│   │   └── bookings/        # Appointment confirmation & staff listing endpoint
+│   ├── command-center/      # Clinic OS operational dashboard & CSS (staff only)
 │   ├── components/
 │   │   ├── CarePointExperience.tsx  # Main interactive patient experience
 │   │   ├── ExperienceIntro.tsx      # Intro animation modal
 │   │   ├── JourneyDesigner.tsx      # Interactive care planning tool
-│   │   └── TreatmentUniverse.tsx    # 3D CareLens canvas exploration
+│   │   ├── Modal.tsx                # Accessible dialog shell (focus trap, Esc)
+│   │   └── TreatmentUniverse.tsx    # 3D CareLens canvas (lazy-loaded)
+│   ├── chatgpt-auth.ts      # Platform identity headers
+│   ├── error.tsx            # Route error boundary
+│   ├── not-found.tsx        # 404 page
 │   ├── globals.css          # Design system, CSS tokens & responsive rules
 │   ├── layout.tsx           # Root layout, metadata & Google Fonts setup
 │   └── page.tsx             # Main page entrypoint
+├── lib/
+│   ├── auth.ts              # Staff access control for Clinic OS & bookings API
+│   ├── clinic.ts            # Branches, schedules, services, contact details
+│   └── dates.ts             # Africa/Cairo calendar helpers
 ├── build/
 │   └── sites-vite-plugin.ts # Custom Vite build plugin for Cloudflare packaging
 ├── db/
-│   ├── bookings.ts          # D1 database operations & slot reservation logic
-│   ├── index.ts             # Drizzle ORM client initialization
-│   └── schema.ts            # Database schema definitions
+│   ├── bookings.ts          # D1 operations & slot reservation logic
+│   └── schema.ts            # Canonical schema (source for drizzle migrations)
 ├── drizzle/                 # Drizzle migration files & snapshots
 ├── public/                  # Brand assets, logos & OpenGraph images
 ├── tests/
-│   └── rendered-html.test.mjs # Integration & HTML rendering test suite
+│   ├── clinic.test.mts      # Clinic config & booking validation rules
+│   └── dates.test.mts       # Timezone-correct calendar logic
 ├── worker/
 │   └── index.ts             # Cloudflare Worker entrypoint
 ├── drizzle.config.ts        # Drizzle kit configuration
@@ -123,11 +131,14 @@ The application utilizes **Cloudflare D1** (SQLite) locally in development via M
 
 ## 🧪 Quality & Testing
 
-Verify application integrity, test assertions, and code style compliance:
-
-* **Run Test Suite**:
+* **Run Test Suite** (unit tests, no build required):
   ```bash
   npm run test
+  ```
+
+* **Typecheck**:
+  ```bash
+  npm run typecheck
   ```
 
 * **Run Linter**:
@@ -139,6 +150,20 @@ Verify application integrity, test assertions, and code style compliance:
   ```bash
   npm run build
   ```
+
+---
+
+## ⚙️ Configuration
+
+* **Clinic details** — branches, opening times, closed days, consultation types and
+  contact numbers all live in [`lib/clinic.ts`](lib/clinic.ts). The phone and
+  WhatsApp numbers there are **placeholders** and must be replaced before launch.
+* **Site URL** — set the `SITE_URL` environment variable to the clinic's real
+  domain so OpenGraph and canonical URLs resolve correctly.
+* **Staff access** — `/command-center` and `GET /api/bookings` expose patient
+  contact details and require an authenticated staff session, supplied by the
+  hosting platform's identity headers. Local development bypasses this check;
+  production never does.
 
 ---
 

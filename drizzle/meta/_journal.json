@@ -8,6 +8,13 @@
       "when": 1785189698300,
       "tag": "0000_sparkling_gauntlet",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1785196232466,
+      "tag": "0001_free_rocket_raccoon",
+      "breakpoints": true
     }
   ]
 }

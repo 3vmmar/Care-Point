@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import Modal from "./Modal";
 
 type Language = "en" | "ar";
 
@@ -102,8 +103,11 @@ export default function JourneyDesigner({
   }
 
   return (
-    <div className="modal-layer journey-layer" role="dialog" aria-modal="true">
-      <button className="modal-scrim" onClick={onClose} aria-label="Close" />
+    <Modal
+      onClose={onClose}
+      layerClassName="modal-layer journey-layer"
+      label={rtl ? "صمّم رحلتك" : "Design your journey"}
+    >
       <section className="journey-designer" dir={rtl ? "rtl" : "ltr"}>
         <header>
           <div>
@@ -193,6 +197,6 @@ export default function JourneyDesigner({
           </div>
         )}
       </section>
-    </div>
+    </Modal>
   );
 }

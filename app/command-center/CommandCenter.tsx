@@ -3,20 +3,21 @@
 import Link from "next/link";
 import {
   Activity,
+  AlertTriangle,
   ArrowLeft,
   CalendarCheck2,
-  CheckCircle2,
+  CalendarDays,
   Clock3,
   MapPin,
-  MessageCircle,
-  MoreHorizontal,
+  Phone,
   RefreshCw,
   Search,
   Sparkles,
-  TrendingUp,
-  UsersRound,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { BRANCHES, SERVICES } from "@/lib/clinic";
+import { CLINIC_TIMEZONE } from "@/lib/clinic";
+import { clinicToday } from "@/lib/dates";
 
 type Booking = {
   id: string;
@@ -24,98 +25,124 @@ type Booking = {
   service: string;
   slotDate: string;
   slotTime: string;
-  patientName: string;
-  patientPhone: string;
-  patientEmail?: string;
-  confirmedAt?: string;
-  live?: boolean;
+  patientName: string | null;
+  patientPhone: string | null;
+  patientEmail?: string | null;
+  language?: string;
+  confirmedAt?: string | null;
 };
 
-function dateOffset(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+type Summary = {
+  upcoming: number;
+  today: number;
+  confirmedThisWeek: number;
+};
+
+type View = "Overview" | "Appointments" | "NOOR Insights";
+
+const REFRESH_INTERVAL_MS = 15000;
+
+const serviceLabel = (id: string) =>
+  SERVICES.find((service) => service.id === id)?.en ?? id;
+const branchLabel = (id: string) =>
+  BRANCHES.find((branch) => branch.id === id)?.en ?? id;
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: CLINIC_TIMEZONE,
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  }).format(new Date(`${value}T12:00:00.000Z`));
 }
 
-const seededBookings: Booking[] = [
-  {
-    id: "DEMO-1024",
-    branch: "Maadi",
-    service: "Rhinoplasty consultation",
-    slotDate: dateOffset(1),
-    slotTime: "11:00",
-    patientName: "Mariam H.",
-    patientPhone: "+20 10 *** 4821",
-  },
-  {
-    id: "DEMO-1025",
-    branch: "Mohandessin",
-    service: "Face & neck consultation",
-    slotDate: dateOffset(1),
-    slotTime: "14:00",
-    patientName: "Nour A.",
-    patientPhone: "+20 12 *** 0344",
-  },
-  {
-    id: "DEMO-1026",
-    branch: "Fifth Settlement",
-    service: "Body contouring consultation",
-    slotDate: dateOffset(2),
-    slotTime: "18:00",
-    patientName: "Salma K.",
-    patientPhone: "+20 11 *** 7162",
-  },
-  {
-    id: "DEMO-1027",
-    branch: "Maadi",
-    service: "Non-surgical aesthetics",
-    slotDate: dateOffset(3),
-    slotTime: "16:30",
-    patientName: "Dina M.",
-    patientPhone: "+20 10 *** 1994",
-  },
-];
+function greeting() {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: CLINIC_TIMEZONE,
+      hour: "2-digit",
+      hour12: false,
+    }).format(new Date()),
+  );
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
 
-export default function CommandCenter() {
-  const [liveBookings, setLiveBookings] = useState<Booking[]>([]);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+export default function CommandCenter({ staffName }: { staffName: string }) {
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [loaded, setLoaded] = useState(false);
   const [query, setQuery] = useState("");
-  const [activeNav, setActiveNav] = useState("Overview");
+  const [view, setView] = useState<View>("Overview");
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
       const response = await fetch("/api/bookings", { cache: "no-store" });
-      const data = (await response.json()) as { bookings?: Booking[] };
-      setLiveBookings(
-        (data.bookings ?? []).map((booking) => ({ ...booking, live: true })),
-      );
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401
+            ? "Your session expired. Sign in again to view appointments."
+            : "Could not reach the appointment database.",
+        );
+      }
+      const data = (await response.json()) as {
+        bookings?: Booking[];
+        summary?: Summary;
+      };
+      setBookings(data.bookings ?? []);
+      setSummary(data.summary ?? null);
       setLastUpdated(new Date());
+      setLoadError("");
+    } catch (error) {
+      // Previously uncaught: a network blip left the dashboard silently stale.
+      setLoadError(error instanceof Error ? error.message : "Refresh failed.");
     } finally {
       setRefreshing(false);
+      setLoaded(true);
     }
   }, []);
 
   useEffect(() => {
-    const initialRefresh = window.setTimeout(refresh, 0);
-    const interval = window.setInterval(refresh, 15000);
+    // Deferred so the first render commits before the fetch flips `refreshing`.
+    const initial = window.setTimeout(() => void refresh(), 0);
+    // Polling a hidden tab wastes requests and keeps a phone awake in a pocket.
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, REFRESH_INTERVAL_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
-      window.clearTimeout(initialRefresh);
+      window.clearTimeout(initial);
       window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [refresh]);
 
-  const bookings = useMemo(() => {
-    const all = [...liveBookings, ...seededBookings];
+  const filtered = useMemo(() => {
     const normalized = query.toLowerCase().trim();
-    if (!normalized) return all;
-    return all.filter((booking) =>
-      [booking.patientName, booking.service, booking.branch, booking.slotDate].some(
-        (value) => value.toLowerCase().includes(normalized),
-      ),
+    if (!normalized) return bookings;
+    return bookings.filter((booking) =>
+      [
+        booking.patientName,
+        booking.patientPhone,
+        serviceLabel(booking.service),
+        branchLabel(booking.branch),
+        booking.slotDate,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(normalized)),
     );
-  }, [liveBookings, query]);
+  }, [bookings, query]);
+
+  const today = clinicToday();
+  const visible = view === "Overview" ? filtered.slice(0, 6) : filtered;
 
   return (
     <main className="command-shell">
@@ -128,15 +155,15 @@ export default function CommandCenter() {
           </div>
         </div>
         <nav>
-          {["Overview", "Appointments", "Patients", "NOOR Insights"].map((item) => (
+          {(["Overview", "Appointments", "NOOR Insights"] as View[]).map((item) => (
             <button
               key={item}
-              className={activeNav === item ? "active" : ""}
-              onClick={() => setActiveNav(item)}
+              className={view === item ? "active" : ""}
+              onClick={() => setView(item)}
+              aria-current={view === item ? "page" : undefined}
             >
               {item === "Overview" && <Activity size={17} />}
               {item === "Appointments" && <CalendarCheck2 size={17} />}
-              {item === "Patients" && <UsersRound size={17} />}
               {item === "NOOR Insights" && <Sparkles size={17} />}
               {item}
             </button>
@@ -144,10 +171,17 @@ export default function CommandCenter() {
         </nav>
         <div className="command-sidebar-bottom">
           <div className="system-status">
-            <span />
+            <span className={loadError ? "offline" : undefined} />
             <div>
-              <strong>All systems online</strong>
-              <small>Booking · NOOR · CRM</small>
+              <strong>{loadError ? "Connection issue" : "Booking service online"}</strong>
+              <small>
+                {lastUpdated
+                  ? `Updated ${lastUpdated.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}`
+                  : "Connecting…"}
+              </small>
             </div>
           </div>
           <Link href="/">
@@ -161,7 +195,9 @@ export default function CommandCenter() {
         <header className="command-header">
           <div>
             <span>LIVE CLINIC VIEW</span>
-            <h1>Good morning, Dr. Ashraf.</h1>
+            <h1>
+              {greeting()}, {staffName}.
+            </h1>
           </div>
           <div className="command-header-actions">
             <label>
@@ -172,113 +208,142 @@ export default function CommandCenter() {
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
-            <button onClick={refresh} aria-label="Refresh">
+            <button onClick={() => void refresh()} aria-label="Refresh appointments">
               <RefreshCw className={refreshing ? "spin" : ""} size={17} />
             </button>
             <div className="avatar">AM</div>
           </div>
         </header>
 
-        <div className="demo-ribbon">
-          <Sparkles size={15} />
-          <p>
-            Tomorrow demo mode — new reservations from the patient website appear
-            here automatically.
-          </p>
-          <span>
-            Updated{" "}
-            {lastUpdated.toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </span>
-        </div>
-
-        <section className="metric-grid">
-          <article>
-            <div><span>UPCOMING VISITS</span><CalendarCheck2 /></div>
-            <strong>{bookings.length + 8}</strong>
-            <p><TrendingUp size={13} /> 18% vs. last week</p>
-          </article>
-          <article>
-            <div><span>NEW INQUIRIES</span><MessageCircle /></div>
-            <strong>27</strong>
-            <p><TrendingUp size={13} /> 9 qualified by NOOR</p>
-          </article>
-          <article>
-            <div><span>CONFIRMATION RATE</span><CheckCircle2 /></div>
-            <strong>86<small>%</small></strong>
-            <p>4 awaiting confirmation</p>
-          </article>
-          <article>
-            <div><span>AVG. RESPONSE</span><Clock3 /></div>
-            <strong>38<small>s</small></strong>
-            <p>Powered by NOOR concierge</p>
-          </article>
-        </section>
-
-        <section className="command-grid">
-          <div className="schedule-card">
-            <div className="card-heading">
-              <div><span>APPOINTMENT FLOW</span><h2>Next visits</h2></div>
-              <button onClick={() => setActiveNav("Appointments")}>View schedule</button>
-            </div>
-            <div className="booking-table">
-              <div className="table-head">
-                <span>PATIENT</span><span>CONSULTATION</span><span>TIME & PLACE</span>
-                <span>STATUS</span><span />
-              </div>
-              {bookings.slice(0, 6).map((booking, index) => (
-                <div className="table-row" key={`${booking.id}-${index}`}>
-                  <div className="patient-cell">
-                    <span>{booking.patientName.slice(0, 1)}</span>
-                    <div><strong>{booking.patientName}</strong><small>{booking.patientPhone}</small></div>
-                  </div>
-                  <div>
-                    <strong>{booking.service}</strong>
-                    <small>{booking.live ? "Website booking" : "Demo patient"}</small>
-                  </div>
-                  <div>
-                    <strong>{formatDate(booking.slotDate)} · {booking.slotTime}</strong>
-                    <small><MapPin size={11} />{booking.branch}</small>
-                  </div>
-                  <div>
-                    <span className={booking.live ? "status-pill live" : "status-pill"}>
-                      {booking.live ? "New" : "Confirmed"}
-                    </span>
-                  </div>
-                  <button aria-label="More options"><MoreHorizontal size={17} /></button>
-                </div>
-              ))}
-            </div>
+        {loadError && (
+          <div className="command-alert" role="alert">
+            <AlertTriangle size={15} />
+            <p>{loadError}</p>
+            <button onClick={() => void refresh()}>Retry</button>
           </div>
+        )}
 
-          <aside className="insight-card">
-            <div className="insight-orb"><span /><span /></div>
-            <span>NOOR SIGNAL</span>
-            <h2>Patients are asking about recovery.</h2>
-            <p>
-              42% of this week’s conversations mention return-to-work timing,
-              swelling, or aftercare.
-            </p>
-            <div className="insight-bars">
-              <div><span>Recovery timeline</span><strong>82</strong><i><b style={{ width: "82%" }} /></i></div>
-              <div><span>Expected results</span><strong>64</strong><i><b style={{ width: "64%" }} /></i></div>
-              <div><span>Cost & payment</span><strong>49</strong><i><b style={{ width: "49%" }} /></i></div>
+        {view !== "NOOR Insights" && (
+          <section className="metric-grid">
+            <article>
+              <div><span>UPCOMING VISITS</span><CalendarCheck2 /></div>
+              <strong>{summary?.upcoming ?? "—"}</strong>
+              <p>Confirmed, from today onward</p>
+            </article>
+            <article>
+              <div><span>TODAY</span><CalendarDays /></div>
+              <strong>{summary?.today ?? "—"}</strong>
+              <p>{formatDate(today)}</p>
+            </article>
+            <article>
+              <div><span>BOOKED THIS WEEK</span><Clock3 /></div>
+              <strong>{summary?.confirmedThisWeek ?? "—"}</strong>
+              <p>Confirmed in the last 7 days</p>
+            </article>
+            <article>
+              <div><span>CLINICS</span><MapPin /></div>
+              <strong>{BRANCHES.length}</strong>
+              <p>{BRANCHES.map((branch) => branch.en).join(" · ")}</p>
+            </article>
+          </section>
+        )}
+
+        {view === "NOOR Insights" ? (
+          <section className="command-grid command-grid--single">
+            <div className="schedule-card">
+              <div className="card-heading">
+                <div><span>NOOR SIGNAL</span><h2>Patient question trends</h2></div>
+              </div>
+              <div className="empty-state">
+                <Sparkles size={22} />
+                <h3>No conversation data yet</h3>
+                <p>
+                  NOOR conversations are not recorded, so there are no question
+                  trends to report. Once conversation logging is enabled, the most
+                  common patient questions will appear here.
+                </p>
+              </div>
             </div>
-            <button>Turn insight into content <Sparkles size={14} /></button>
-          </aside>
-        </section>
+          </section>
+        ) : (
+          <section className="command-grid command-grid--single">
+            <div className="schedule-card">
+              <div className="card-heading">
+                <div>
+                  <span>APPOINTMENT FLOW</span>
+                  <h2>{view === "Overview" ? "Next visits" : "All upcoming appointments"}</h2>
+                </div>
+                {view === "Overview" && filtered.length > 6 && (
+                  <button onClick={() => setView("Appointments")}>View schedule</button>
+                )}
+              </div>
+
+              {!loaded ? (
+                <div className="empty-state">
+                  <p>Loading appointments…</p>
+                </div>
+              ) : visible.length === 0 ? (
+                <div className="empty-state">
+                  <CalendarCheck2 size={22} />
+                  <h3>{query ? "No matching appointments" : "No upcoming appointments"}</h3>
+                  <p>
+                    {query
+                      ? "Try a different name, phone number, or clinic."
+                      : "Confirmed bookings from the patient website appear here as soon as they are made."}
+                  </p>
+                </div>
+              ) : (
+                <div className="booking-table">
+                  <div className="table-head">
+                    <span>PATIENT</span><span>CONSULTATION</span><span>TIME &amp; PLACE</span>
+                    <span>STATUS</span><span />
+                  </div>
+                  {visible.map((booking) => (
+                    <div className="table-row" key={booking.id}>
+                      <div className="patient-cell">
+                        <span>{(booking.patientName ?? "?").slice(0, 1)}</span>
+                        <div>
+                          <strong>{booking.patientName ?? "Unnamed"}</strong>
+                          <small>{booking.patientPhone ?? "No phone"}</small>
+                        </div>
+                      </div>
+                      <div>
+                        <strong>{serviceLabel(booking.service)}</strong>
+                        <small>{booking.language === "ar" ? "Arabic" : "English"}</small>
+                      </div>
+                      <div>
+                        <strong>
+                          {formatDate(booking.slotDate)} · {booking.slotTime}
+                        </strong>
+                        <small><MapPin size={11} />{branchLabel(booking.branch)}</small>
+                      </div>
+                      <div>
+                        <span
+                          className={
+                            booking.slotDate === today ? "status-pill live" : "status-pill"
+                          }
+                        >
+                          {booking.slotDate === today ? "Today" : "Confirmed"}
+                        </span>
+                      </div>
+                      {booking.patientPhone ? (
+                        <a
+                          href={`tel:${booking.patientPhone}`}
+                          aria-label={`Call ${booking.patientName ?? "patient"}`}
+                        >
+                          <Phone size={16} />
+                        </a>
+                      ) : (
+                        <span />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
       </section>
     </main>
   );
-}
-
-function formatDate(value: string) {
-  const date = new Date(`${value}T12:00:00`);
-  return new Intl.DateTimeFormat("en", {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-  }).format(date);
 }

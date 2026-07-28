@@ -12,8 +12,9 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { Component, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
+import Modal from "./Modal";
 
 type Language = "en" | "ar";
 type AreaId = "face" | "nose" | "body" | "breast";
@@ -184,19 +185,56 @@ function AnatomicalSignal({ selected }: { selected: AreaId }) {
   );
 }
 
-function UniverseCanvas({ selected }: { selected: AreaId }) {
+/**
+ * Low-end and locked-down devices can fail to create a WebGL context. Without a
+ * boundary that failure takes the whole page down, so the scene degrades to a
+ * caption instead — the surrounding CareLens interface still works.
+ */
+class CanvasBoundary extends Component<
+  { fallback: ReactNode; children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("CareLens scene failed to render", error);
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
+function UniverseCanvas({ selected, rtl }: { selected: AreaId; rtl: boolean }) {
   return (
-    <Canvas
-      camera={{ position: [0, 0.15, 5.5], fov: 34 }}
-      dpr={[1, 1.6]}
-      gl={{ antialias: true, alpha: true }}
+    <CanvasBoundary
+      fallback={
+        <div className="universe-fallback">
+          <strong>{rtl ? "كير لِنز" : "CareLens"}</strong>
+          <p>
+            {rtl
+              ? "لا يدعم هذا الجهاز العرض ثلاثي الأبعاد. يمكنك متابعة استكشاف المناطق والخيارات بالكامل."
+              : "This device cannot display the 3D scene. You can still explore every area and option below."}
+          </p>
+        </div>
+      }
     >
-      <ambientLight intensity={1.1} />
-      <directionalLight position={[3, 4, 5]} intensity={3.2} color="#fff3e5" />
-      <pointLight position={[-3, 0, 3]} intensity={2.2} color="#a84e69" />
-      <pointLight position={[2, -2, 2]} intensity={1.7} color="#c9af86" />
-      <AnatomicalSignal selected={selected} />
-    </Canvas>
+      <Canvas
+        camera={{ position: [0, 0.15, 5.5], fov: 34 }}
+        dpr={[1, 1.6]}
+        gl={{ antialias: true, alpha: true }}
+      >
+        <ambientLight intensity={1.1} />
+        <directionalLight position={[3, 4, 5]} intensity={3.2} color="#fff3e5" />
+        <pointLight position={[-3, 0, 3]} intensity={2.2} color="#a84e69" />
+        <pointLight position={[2, -2, 2]} intensity={1.7} color="#c9af86" />
+        <AnatomicalSignal selected={selected} />
+      </Canvas>
+    </CanvasBoundary>
   );
 }
 
@@ -218,7 +256,7 @@ export default function TreatmentUniverse({
     <>
       <div className="treatment-universe">
         <div className="universe-canvas">
-          <UniverseCanvas selected={selected} />
+          <UniverseCanvas selected={selected} rtl={rtl} />
           <div className="universe-scan-line" aria-hidden />
           <div className="universe-corner universe-corner--one" aria-hidden />
           <div className="universe-corner universe-corner--two" aria-hidden />
@@ -268,8 +306,11 @@ export default function TreatmentUniverse({
       </div>
 
       {detailOpen && (
-        <div className="specialty-layer" role="dialog" aria-modal="true">
-          <button className="modal-scrim" onClick={() => setDetailOpen(false)} aria-label="Close" />
+        <Modal
+          onClose={() => setDetailOpen(false)}
+          layerClassName="specialty-layer"
+          labelledBy="care-map-title"
+        >
           <section className="specialty-deep-dive" dir={rtl ? "rtl" : "ltr"}>
             <header>
               <button onClick={() => setDetailOpen(false)}>
@@ -282,7 +323,7 @@ export default function TreatmentUniverse({
             <div className="deep-dive-grid">
               <div className="deep-dive-intro">
                 <span>{rtl ? "خريطة استشارتك" : "YOUR CONSULTATION MAP"}</span>
-                <h2>{rtl ? active.ar : active.title}</h2>
+                <h2 id="care-map-title">{rtl ? active.ar : active.title}</h2>
                 <p>{rtl ? active.arDescription : active.description}</p>
                 <div className="deep-dive-orb" aria-hidden><i /><i /><i /></div>
               </div>
@@ -329,7 +370,7 @@ export default function TreatmentUniverse({
               </div>
             </div>
           </section>
-        </div>
+        </Modal>
       )}
     </>
   );

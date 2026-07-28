@@ -1367,6 +1367,20 @@ section[id] {
   box-shadow: 0 34px 90px rgba(37, 28, 25, 0.15);
 }
 
+/* Reserves the scene's footprint while its chunk loads, so nothing shifts. */
+.treatment-universe--loading {
+  display: block;
+  background: linear-gradient(120deg, #171716, #201d1d, #171716);
+  background-size: 220% 100%;
+  animation: universeShimmer 1.6s var(--ease-smooth) infinite;
+}
+
+@keyframes universeShimmer {
+  to {
+    background-position: -220% 0;
+  }
+}
+
 .universe-canvas {
   min-height: 720px;
   position: relative;
@@ -3245,6 +3259,121 @@ footer p {
   color: #9e233d;
   background: #f4e6e8;
   padding: 10px 12px;
+  font-size: 9px;
+}
+
+.slots-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.route-message {
+  min-height: 100vh;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.route-message span {
+  color: var(--burgundy);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+}
+
+.route-message h1 {
+  margin: 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-weight: 500;
+  font-size: clamp(28px, 5vw, 46px);
+}
+
+.route-message p {
+  margin: 0;
+  max-width: 46ch;
+  color: var(--muted);
+}
+
+.route-message-actions {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.route-message-actions a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* Shown when WebGL is unavailable or the CareLens scene fails to initialise. */
+.universe-fallback {
+  height: 100%;
+  min-height: 420px;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  padding: 30px;
+  text-align: center;
+  color: #b9b0a6;
+}
+
+.universe-fallback strong {
+  font-family: var(--font-display), Georgia, serif;
+  font-weight: 500;
+  font-size: 20px;
+  color: #f1e7dc;
+}
+
+.universe-fallback p {
+  margin: 0;
+  max-width: 34ch;
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.hold-countdown {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--burgundy);
+  background: rgba(123, 38, 60, 0.07);
+  padding: 10px 12px;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.booking-unavailable {
+  padding: 26px 0;
+  display: grid;
+  gap: 14px;
+}
+
+.booking-unavailable p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.booking-unavailable-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.booking-unavailable-actions a {
+  color: var(--burgundy);
+  text-decoration: underline;
+  text-underline-offset: 4px;
   font-size: 9px;
 }
 
