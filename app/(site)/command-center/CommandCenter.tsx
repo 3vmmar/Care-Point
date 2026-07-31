@@ -925,7 +925,10 @@ function AppointmentRow({
     appointment.slotTime <= addMinutes(clinicTime, 60);
 
   return (
-    <div className={`table-row${expanded ? " table-row--open" : ""}`}>
+    <div
+      className={`table-row${expanded ? " table-row--open" : ""}`}
+      data-appointment-id={appointment.id}
+    >
       <div className="row-main">
         <div className="time-cell">
           <strong>{formatSlotTime(appointment.slotTime)}</strong>

@@ -328,7 +328,7 @@ export default function CarePointExperience({ language }: { language: Language }
       // force3D keeps transformed elements on their own compositor layer for
       // the length of the tween, which is what removes the edge shimmer on the
       // portrait and the section reveals.
-      gsap.defaults({ force3D: true });
+      gsap.config({ force3D: true });
 
       gsap.fromTo(
         ".portrait-frame",

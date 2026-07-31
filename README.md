@@ -49,7 +49,7 @@ Plus: **patient history** on any row (matched on phone across formats, so `01501
 | **Animations & Motion** | [GSAP](https://gsap.com/) (ScrollTrigger) + [Lenis](https://lenis.darkroom.engineering/) Smooth Scroll |
 | **Icons & Typography** | [Lucide React](https://lucide.dev/), Google Fonts (*Manrope*, *Cormorant Garamond*, *IBM Plex Sans Arabic*) |
 | **Language & Styling** | TypeScript 5.9, Vanilla CSS (Design Tokens, Glassmorphism, Dual LTR/RTL) |
-| **Testing & Linting** | Node Native Test Runner, ESLint 9 |
+| **Testing & Linting** | Node test runner, Workers Vitest + D1, Playwright, ESLint 9 |
 
 ---
 
@@ -162,10 +162,23 @@ The application utilizes **Cloudflare D1** (SQLite) locally in development via M
 
 ## 🧪 Quality & Testing
 
-* **Run Test Suite** (unit tests, no build required):
+* **Run Unit + Workers/D1 Tests**:
   ```bash
   npm run test
   ```
+
+* **Run Browser Journeys + HTTP Contracts**:
+  ```bash
+  npx playwright install chromium
+  npm run test:e2e
+  ```
+
+* **Run the Entire Phase 4 Gate**:
+  ```bash
+  npm run test:phase4
+  ```
+
+See [`docs/TESTING.md`](docs/TESTING.md) for isolation, concurrency and load-test details.
 
 * **Typecheck**:
   ```bash

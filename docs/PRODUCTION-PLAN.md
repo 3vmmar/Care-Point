@@ -232,6 +232,14 @@ and failures surface.
 
 ### Phase 4 — Proving it works (~6–8 days)
 
+> **Implementation increment (2026-07-31):** CI now applies all committed
+> migrations to an isolated Workers-native D1 database, proves the booking
+> lifecycle and a twelve-request database race, then boots the actual
+> application for HTTP and Chromium journeys. The suite covers every API route,
+> a second ten-way race, booking, reschedule, cancel, Clinic OS status actions,
+> LTR/RTL, a full Cairo calendar year and an 80-request bilingual availability
+> burst. A larger staging load run still depends on the real Cloudflare account.
+
 - Integration tests against real D1 via `@cloudflare/vitest-pool-workers`,
   covering every route.
 - **Concurrency test**: N parallel holds on one slot, exactly one wins.

@@ -14,9 +14,9 @@ concurrency:
 
 jobs:
   verify:
-    name: Typecheck, lint, test, build
+    name: Typecheck, lint, D1, browser, build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +38,12 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Install browser runtime
+        run: npx playwright install --with-deps chromium
+
+      - name: Test patient and clinic journeys
+        run: npm run test:e2e
+
       - name: Build
         run: npm run build
 
@@ -53,3 +59,14 @@ jobs:
             git status --porcelain drizzle
             exit 1
           fi
+
+      - name: Preserve browser diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7

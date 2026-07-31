@@ -4,6 +4,7 @@ import {
   addDays,
   addMinutesToSlot,
   clinicInstant,
+  clinicTimeNow,
   clinicToday,
   daysBetween,
   formatDayLabel,
@@ -84,6 +85,29 @@ test("clinicInstant resolves a clinic wall-clock time to the right instant", () 
     clinicInstant("2026-01-15", "15:00").toISOString(),
     "2026-01-15T13:00:00.000Z",
   );
+});
+
+test("clinic wall-clock conversion survives every day and both DST transitions", () => {
+  const deltas: number[] = [];
+  let day = "2026-01-01";
+  let previous: Date | null = null;
+
+  for (let index = 0; index < 365; index += 1) {
+    const instant = clinicInstant(day, "12:00");
+    assert.equal(clinicToday(instant), day, `${day} changed calendar day`);
+    assert.equal(clinicTimeNow(instant), "12:00", `${day} changed wall-clock time`);
+
+    if (previous) deltas.push((instant.getTime() - previous.getTime()) / 3_600_000);
+    previous = instant;
+    day = addDays(day, 1);
+  }
+
+  // Cairo moves noon by one UTC hour in spring and restores it in autumn.
+  // A missing transition or an invented third jump means the runtime timezone
+  // data and our conversion algorithm no longer agree.
+  assert.equal(deltas.filter((hours) => hours !== 24).length, 2);
+  assert.ok(deltas.includes(23), "the spring-forward transition was not observed");
+  assert.ok(deltas.includes(25), "the autumn rollback transition was not observed");
 });
 
 test("lead time keeps imminent slots out of the offered window", () => {
