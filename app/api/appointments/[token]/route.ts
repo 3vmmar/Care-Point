@@ -7,7 +7,6 @@ import {
 import { AVAILABILITY_WINDOW_DAYS, findBranch } from "@/lib/clinic";
 import { isSlotBookable, openDayKeys } from "@/lib/dates";
 import { generateSlots } from "@/lib/schedule";
-import { notify } from "@/lib/notify";
 import { reportError } from "@/lib/observability";
 
 /**
@@ -106,21 +105,6 @@ export async function PATCH(
       );
     }
 
-    await notify({
-      kind: "booking.rescheduled",
-      appointment: {
-        id: appointment.id,
-        branch: appointment.branch,
-        service: appointment.service,
-        slotDate: appointment.slotDate,
-        slotTime: appointment.slotTime,
-        patientName: appointment.patientName,
-        patientPhone: appointment.patientPhone,
-        patientEmail: appointment.patientEmail,
-        language: appointment.language,
-      },
-    });
-
     return NextResponse.json(
       { appointment: summarise(appointment) },
       { headers: PRIVATE_HEADERS },
@@ -157,21 +141,6 @@ export async function DELETE(
       { status: 409, headers: PRIVATE_HEADERS },
     );
   }
-
-  await notify({
-    kind: "booking.cancelled",
-    appointment: {
-      id: existing.id,
-      branch: existing.branch,
-      service: existing.service,
-      slotDate: existing.slotDate,
-      slotTime: existing.slotTime,
-      patientName: existing.patientName,
-      patientPhone: existing.patientPhone,
-      patientEmail: existing.patientEmail,
-      language: existing.language,
-    },
-  });
 
   return NextResponse.json({ ok: true }, { headers: PRIVATE_HEADERS });
 }

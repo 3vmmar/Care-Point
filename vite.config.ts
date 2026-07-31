@@ -17,11 +17,10 @@ const appSurface =
 const localBindingConfig = {
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
-  // Expired holds and the PII retention purge run here rather than on the
-  // request path. The frequent trigger keeps the calendar tidy; the 03:00 one
-  // additionally carries the retention job (see `worker/index.ts`).
+  // The minute trigger drains the durable notification outbox and clears
+  // expired holds. The 03:00 trigger additionally carries retention jobs.
   triggers: {
-    crons: ["*/10 * * * *", "0 3 * * *"],
+    crons: ["* * * * *", "0 3 * * *"],
   },
   vars: {
     APP_SURFACE: appSurface,

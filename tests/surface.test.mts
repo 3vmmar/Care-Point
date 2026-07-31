@@ -25,6 +25,8 @@ test("staff routes include every patient-data endpoint used by Clinic OS", () =>
   assert.equal(isStaffRequest("PATCH", "/api/bookings/booking-1"), true);
   assert.equal(isStaffRequest("GET", "/api/bookings/booking-1/history"), true);
   assert.equal(isStaffRequest("POST", "/api/clinic/appointments"), true);
+  assert.equal(isStaffRequest("GET", "/api/clinic/notifications"), true);
+  assert.equal(isStaffRequest("POST", "/api/clinic/notifications"), true);
 });
 
 test("the public deployment cannot serve the dashboard or staff APIs", async () => {
@@ -51,6 +53,7 @@ test("the clinic deployment exposes only staff operations and shared availabilit
   assert.equal(isClinicRequest("GET", "/api/availability"), true);
   assert.equal(isClinicRequest("POST", "/api/availability"), false);
   assert.equal(isClinicRequest("GET", "/api/clinic/audit"), true);
+  assert.equal(isClinicRequest("POST", "/api/clinic/notifications"), true);
 
   const root = enforceSurfaceBoundary(request("/"), { surface: "clinic" });
   assert.equal(root?.headers.get("location"), "https://example.test/command-center");

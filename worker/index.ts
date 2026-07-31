@@ -7,16 +7,16 @@ import {
 import handler from "vinext/server/app-router-entry";
 import {
   appointmentsNeedingReminder,
-  markReminderSent,
   purgeExpiredContactDetails,
   releaseExpiredHolds,
 } from "../db/bookings";
 import { sanitiseRequest } from "../lib/trusted-proxy";
 import { rejectCrossSite } from "../lib/csrf";
-import { notify } from "../lib/notify";
 import { reportError } from "../lib/observability";
 import { purgeExpiredAuditLog } from "../db/audit";
 import { enforceSurfaceBoundary } from "../lib/surface";
+import { purgeNotificationHistory, queueReminder } from "../db/notifications";
+import { processNotificationQueue } from "../lib/notification-worker";
 
 interface Env {
   ASSETS: Fetcher;
@@ -84,13 +84,9 @@ const SECURITY_HEADERS: Record<string, string> = {
 const DAILY_CRON = "0 3 * * *";
 
 /**
- * Tomorrow's reminders, sent one at a time.
- *
- * Each appointment is stamped before its message is attempted, so a transport
- * that fails halfway cannot cause the same patient to be reminded again on the
- * next run. Sequential rather than parallel: a clinic day is a few dozen
- * appointments, and a burst of parallel sends is the fastest way to get a
- * transactional email domain rate-limited.
+ * Tomorrow's reminders are written to the same durable outbox as every other
+ * booking event. Queueing and delivery have separate timestamps, so a provider
+ * outage cannot make an unsent reminder look successful.
  */
 async function sendDueReminders(): Promise<void> {
   let due: Awaited<ReturnType<typeof appointmentsNeedingReminder>>;
@@ -102,33 +98,25 @@ async function sendDueReminders(): Promise<void> {
   }
   if (due.length === 0) return;
 
-  let sent = 0;
+  let queued = 0;
   for (const appointment of due) {
     try {
-      await markReminderSent(appointment.id);
-      await notify({
-        kind: "booking.reminder",
-        appointment: {
-          id: appointment.id,
-          branch: appointment.branch,
-          service: appointment.service,
-          slotDate: appointment.slotDate,
-          slotTime: appointment.slotTime,
-          patientName: appointment.patientName,
-          patientPhone: appointment.patientPhone,
-          patientEmail: appointment.patientEmail,
-          language: appointment.language,
-        },
+      await queueReminder({
+        appointmentId: appointment.id,
+        branch: appointment.branch,
+        service: appointment.service,
+        slotDate: appointment.slotDate,
+        slotTime: appointment.slotTime,
       });
-      sent += 1;
+      queued += 1;
     } catch (error) {
       await reportError(error, {
-        where: "cron: send reminder",
+        where: "cron: queue reminder",
         extra: { appointmentId: appointment.id },
       });
     }
   }
-  console.log(`[cron] sent ${sent} of ${due.length} reminders`);
+  console.log(`[cron] queued ${queued} of ${due.length} reminders`);
 }
 
 function withSecurityHeaders(response: Response): Response {
@@ -247,7 +235,27 @@ const worker = {
             await reportError(error, { where: "cron: audit retention" });
           }
 
+          try {
+            const trimmed = await purgeNotificationHistory();
+            if (trimmed > 0) console.log(`[cron] trimmed ${trimmed} notification jobs`);
+          } catch (error) {
+            await reportError(error, { where: "cron: notification retention" });
+          }
+
           await sendDueReminders();
+        }
+
+        try {
+          const delivered = await processNotificationQueue();
+          if (delivered.claimed > 0) {
+            console.log(
+              `[cron] notification queue: ${delivered.delivered} delivered, ` +
+                `${delivered.retrying} retrying, ${delivered.blocked} blocked, ` +
+                `${delivered.dead} dead`,
+            );
+          }
+        } catch (error) {
+          await reportError(error, { where: "cron: process notification queue" });
         }
       })(),
     );

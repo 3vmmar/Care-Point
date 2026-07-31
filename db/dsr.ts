@@ -2,6 +2,10 @@ import { env } from "cloudflare:workers";
 import { clinicToday } from "@/lib/dates";
 import { recordAccess } from "@/db/audit";
 import { reportError } from "@/lib/observability";
+import {
+  ensureNotificationSchema,
+  notificationJobStatements,
+} from "@/db/notifications";
 
 /**
  * Data-subject requests — the mechanism behind a patient asking for a copy of
@@ -129,26 +133,37 @@ export async function submitDataRequest(input: {
   clientHash?: string;
 }): Promise<{ id: string }> {
   await ensureDataRequestSchema();
+  await ensureNotificationSchema();
+  const db = database();
   const id = crypto.randomUUID();
-  await database()
-    .prepare(
-      `INSERT INTO data_requests
-       (id, kind, status, requester_name, requester_phone, requester_email,
-        note, language, client_hash, created_at)
-       VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .bind(
-      id,
-      input.kind,
-      input.requesterName.trim(),
-      input.requesterPhone.trim(),
-      input.requesterEmail?.trim() || null,
-      input.note?.trim() || null,
-      input.language === "ar" ? "ar" : "en",
-      input.clientHash ?? null,
-      new Date().toISOString(),
-    )
-    .run();
+  const timestamp = new Date().toISOString();
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO data_requests
+         (id, kind, status, requester_name, requester_phone, requester_email,
+          note, language, client_hash, created_at)
+         VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        id,
+        input.kind,
+        input.requesterName.trim(),
+        input.requesterPhone.trim(),
+        input.requesterEmail?.trim() || null,
+        input.note?.trim() || null,
+        input.language === "ar" ? "ar" : "en",
+        input.clientHash ?? null,
+        timestamp,
+      ),
+    ...notificationJobStatements(db, {
+      kind: "data.request",
+      subjectType: "data_request",
+      subjectId: id,
+      eventKey: `data.request:${id}`,
+      createdAt: timestamp,
+    }),
+  ]);
   return { id };
 }
 

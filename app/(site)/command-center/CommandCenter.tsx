@@ -33,6 +33,7 @@ import { BRANCHES, CLINIC_TIMEZONE, SERVICES, branchLabel, findBranch, serviceLa
 import { addDays, formatShortDate, formatSlotTime } from "@/lib/dates";
 import AddAppointment from "./AddAppointment";
 import DataRequests from "./DataRequests";
+import NotificationCenter from "./NotificationCenter";
 import DayTimeline from "./DayTimeline";
 import PatientHistory from "./PatientHistory";
 import WeekView from "./WeekView";
@@ -45,7 +46,7 @@ import {
   type Summary,
 } from "./types";
 
-type View = "Today" | "Week" | "Schedule" | "Insights" | "Requests";
+type View = "Today" | "Week" | "Schedule" | "Insights" | "Requests" | "Notifications";
 
 const REFRESH_INTERVAL_MS = 20000;
 const PAGE_SIZE = 50;
@@ -86,6 +87,7 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
   const [actionError, setActionError] = useState("");
   /** Outstanding data-subject requests, badged in the nav. */
   const [pendingRequests, setPendingRequests] = useState(0);
+  const [notificationIssues, setNotificationIssues] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
   /** Ids present at the last refresh; `null` until the first load settles. */
   const seenIds = useRef<Set<string> | null>(null);
@@ -174,6 +176,20 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
     } catch {
       // Leave the previous count in place.
     }
+
+    try {
+      const response = await fetch("/api/clinic/notifications?limit=1", {
+        cache: "no-store",
+      });
+      if (response.ok) {
+        const data = (await response.json()) as {
+          summary?: { blocked?: number; dead?: number };
+        };
+        setNotificationIssues((data.summary?.blocked ?? 0) + (data.summary?.dead ?? 0));
+      }
+    } catch {
+      // Delivery status is additive; appointment refresh remains authoritative.
+    }
   }, [wide, page, branchFilter, statusFilter]);
 
   useEffect(() => {
@@ -218,8 +234,12 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
       } else if (event.key.toLowerCase() === "n") {
         event.preventDefault();
         setAddOpen(true);
-      } else if (event.key >= "1" && event.key <= "5") {
-        setView((["Today", "Week", "Schedule", "Insights", "Requests"] as View[])[Number(event.key) - 1]);
+      } else if (event.key >= "1" && event.key <= "6") {
+        setView(
+          (["Today", "Week", "Schedule", "Insights", "Requests", "Notifications"] as View[])[
+            Number(event.key) - 1
+          ],
+        );
       }
     }
     document.addEventListener("keydown", onKeyDown);
@@ -336,7 +356,7 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
         </div>
 
         <nav aria-label="Dashboard sections">
-          {(["Today", "Week", "Schedule", "Insights", "Requests"] as View[]).map((item, index) => (
+          {(["Today", "Week", "Schedule", "Insights", "Requests", "Notifications"] as View[]).map((item, index) => (
             <button
               key={item}
               className={view === item ? "active" : ""}
@@ -351,11 +371,15 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
               {item === "Schedule" && <CalendarCheck2 size={18} />}
               {item === "Insights" && <ChartNoAxesColumn size={18} />}
               {item === "Requests" && <ShieldAlert size={18} />}
+              {item === "Notifications" && <BellRing size={18} />}
               {item}
               {/* A pending data request carries a legal response deadline, so
                   it is surfaced in the nav rather than waiting to be found. */}
-              {item === "Requests" && pendingRequests > 0 ? (
-                <span className="nav-badge">{pendingRequests}</span>
+              {(item === "Requests" && pendingRequests > 0) ||
+              (item === "Notifications" && notificationIssues > 0) ? (
+                <span className="nav-badge">
+                  {item === "Requests" ? pendingRequests : notificationIssues}
+                </span>
               ) : (
                 <kbd>{index + 1}</kbd>
               )}
@@ -726,6 +750,10 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
         {view === "Insights" && <Insights summary={summary} clinicDate={clinicDate} />}
 
         {view === "Requests" && <DataRequests />}
+
+        {view === "Notifications" && (
+          <NotificationCenter onIssueCount={setNotificationIssues} />
+        )}
       </section>
 
       {addOpen && (

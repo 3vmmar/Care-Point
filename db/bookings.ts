@@ -9,6 +9,10 @@ import {
 } from "@/lib/clinic";
 import { generateSlots, occupiedCells } from "@/lib/schedule";
 import { addDays, clinicToday, openDayKeys, type DateKey } from "@/lib/dates";
+import {
+  ensureNotificationSchema,
+  notificationJobStatements,
+} from "@/db/notifications";
 
 export type AppointmentStatus =
   | "held"
@@ -159,6 +163,7 @@ async function createSchema() {
     "cancelled_by TEXT",
     "status_updated_at TEXT",
     "reminder_sent_at TEXT",
+    "reminder_queued_at TEXT",
     "purged_at TEXT",
     "practitioner TEXT",
   ]) {
@@ -636,36 +641,64 @@ export async function confirmAppointment(
   input: BookingInput,
 ): Promise<ConfirmedAppointment | null> {
   await ensureBookingSchema();
+  await ensureNotificationSchema();
+  const db = database();
   const timestamp = now();
   const manageToken = crypto.randomUUID();
+
+  const candidate = await db
+    .prepare(
+      `SELECT ${APPOINTMENT_COLUMNS}, manage_token AS manageToken
+       FROM appointments WHERE hold_token = ?`,
+    )
+    .bind(input.holdToken)
+    .first<ConfirmedAppointment>();
+  if (!candidate) return null;
+  if (candidate.status === "confirmed") return candidate;
 
   // Conditional UPDATE rather than read-then-write: the `status = 'held'` and
   // expiry predicates make claiming a hold atomic, so a hold that expired (or
   // was already confirmed) mid-form affects zero rows instead of overwriting.
-  const result = await database()
-    .prepare(
-      `UPDATE appointments
-       SET status = 'confirmed', patient_name = ?, patient_phone = ?,
-           patient_email = ?, patient_note = ?, language = ?, confirmed_at = ?,
-           consent_given_at = ?, consent_version = ?, manage_token = ?,
-           status_updated_at = ?, hold_expires_at = NULL
-       WHERE hold_token = ? AND status = 'held' AND hold_expires_at >= ?`,
-    )
-    .bind(
-      input.patientName.trim(),
-      input.patientPhone.trim(),
-      input.patientEmail?.trim() || null,
-      input.patientNote?.trim() || null,
-      input.language ?? "en",
-      timestamp,
-      timestamp,
-      CONSENT_VERSION,
-      manageToken,
-      timestamp,
-      input.holdToken,
-      timestamp,
-    )
-    .run();
+  const [result] = await db.batch([
+    db
+      .prepare(
+        `UPDATE appointments
+         SET status = 'confirmed', patient_name = ?, patient_phone = ?,
+             patient_email = ?, patient_note = ?, language = ?, confirmed_at = ?,
+             consent_given_at = ?, consent_version = ?, manage_token = ?,
+             status_updated_at = ?, hold_expires_at = NULL
+         WHERE id = ? AND hold_token = ? AND status = 'held' AND hold_expires_at >= ?`,
+      )
+      .bind(
+        input.patientName.trim(),
+        input.patientPhone.trim(),
+        input.patientEmail?.trim() || null,
+        input.patientNote?.trim() || null,
+        input.language ?? "en",
+        timestamp,
+        timestamp,
+        CONSENT_VERSION,
+        manageToken,
+        timestamp,
+        candidate.id,
+        input.holdToken,
+        timestamp,
+      ),
+    ...notificationJobStatements(db, {
+      kind: "booking.confirmed",
+      subjectType: "appointment",
+      subjectId: candidate.id,
+      eventKey: `booking.confirmed:${candidate.id}:${timestamp}`,
+      context: {
+        branch: candidate.branch,
+        service: candidate.service,
+        slotDate: candidate.slotDate,
+        slotTime: candidate.slotTime,
+      },
+      createdAt: timestamp,
+      expectedStatusUpdatedAt: timestamp,
+    }),
+  ]);
 
   if (!result.meta.changes) {
     /**
@@ -679,7 +712,7 @@ export async function confirmAppointment(
      * succeeded returns the same booking rather than an error. Only a hold that
      * genuinely no longer exists returns null.
      */
-    const existing = await database()
+    const existing = await db
       .prepare(
         `SELECT ${APPOINTMENT_COLUMNS}, manage_token AS manageToken
          FROM appointments WHERE hold_token = ? AND status = 'confirmed'`,
@@ -689,7 +722,7 @@ export async function confirmAppointment(
     return existing ?? null;
   }
 
-  return database()
+  return db
     .prepare(
       `SELECT ${APPOINTMENT_COLUMNS}, manage_token AS manageToken
        FROM appointments WHERE hold_token = ?`,
@@ -716,8 +749,19 @@ export async function getAppointmentByManageToken(token: string) {
 
 export async function cancelByManageToken(token: string) {
   await ensureBookingSchema();
+  await ensureNotificationSchema();
   const db = database();
   const timestamp = now();
+
+  const existing = await db
+    .prepare(
+      `SELECT id, branch, service, slot_date AS slotDate, slot_time AS slotTime
+       FROM appointments WHERE manage_token = ?
+         AND status IN ('confirmed', 'checked_in') AND slot_date >= ?`,
+    )
+    .bind(token, clinicToday())
+    .first<{ id: string; branch: string; service: string; slotDate: string; slotTime: string }>();
+  if (!existing) return false;
 
   const [cancelled] = await db.batch([
     db
@@ -725,10 +769,10 @@ export async function cancelByManageToken(token: string) {
         `UPDATE appointments
          SET status = 'cancelled', cancelled_at = ?, cancelled_by = 'patient',
              status_updated_at = ?
-         WHERE manage_token = ? AND status IN ('confirmed', 'checked_in')
+         WHERE id = ? AND manage_token = ? AND status IN ('confirmed', 'checked_in')
            AND slot_date >= ?`,
       )
-      .bind(timestamp, timestamp, token, clinicToday()),
+      .bind(timestamp, timestamp, existing.id, token, clinicToday()),
     // A cancelled visit must hand its time straight back to the calendar.
     db
       .prepare(
@@ -736,6 +780,20 @@ export async function cancelByManageToken(token: string) {
            SELECT id FROM appointments WHERE manage_token = ? AND status = 'cancelled')`,
       )
       .bind(token),
+    ...notificationJobStatements(db, {
+      kind: "booking.cancelled",
+      subjectType: "appointment",
+      subjectId: existing.id,
+      eventKey: `booking.cancelled:${existing.id}:${timestamp}`,
+      context: {
+        branch: existing.branch,
+        service: existing.service,
+        slotDate: existing.slotDate,
+        slotTime: existing.slotTime,
+      },
+      createdAt: timestamp,
+      expectedStatusUpdatedAt: timestamp,
+    }),
   ]);
   return (cancelled.meta.changes ?? 0) > 0;
 }
@@ -747,6 +805,7 @@ export async function rescheduleByManageToken(input: {
   practitioner?: string;
 }) {
   await ensureBookingSchema();
+  await ensureNotificationSchema();
   const db = database();
   const timestamp = now();
 
@@ -785,6 +844,19 @@ export async function rescheduleByManageToken(input: {
       slotDate: input.slotDate,
       slotTime: input.slotTime,
       durationMinutes: existing.durationMinutes,
+    }),
+    ...notificationJobStatements(db, {
+      kind: "booking.rescheduled",
+      subjectType: "appointment",
+      subjectId: existing.id,
+      eventKey: `booking.rescheduled:${existing.id}:${timestamp}`,
+      context: {
+        branch: existing.branch,
+        slotDate: input.slotDate,
+        slotTime: input.slotTime,
+      },
+      createdAt: timestamp,
+      expectedStatusUpdatedAt: timestamp,
     }),
   ]);
 
@@ -1034,44 +1106,71 @@ export async function updateAppointmentStatus(input: {
   actor: string;
 }) {
   await ensureBookingSchema();
+  await ensureNotificationSchema();
+  const db = database();
   const timestamp = now();
   const isCancel = input.status === "cancelled";
   const isCheckIn = input.status === "checked_in";
 
-  const result = await database()
+  const existing = await db
     .prepare(
-      `UPDATE appointments
-       SET status = ?,
-           status_updated_at = ?,
-           checked_in_at = CASE WHEN ? THEN ? ELSE checked_in_at END,
-           cancelled_at = CASE WHEN ? THEN ? ELSE cancelled_at END,
-           cancelled_by = CASE WHEN ? THEN ? ELSE cancelled_by END
-       WHERE id = ? AND status <> 'held'`,
+      `SELECT id, branch, service, slot_date AS slotDate, slot_time AS slotTime
+       FROM appointments WHERE id = ? AND status <> 'held'`,
     )
-    .bind(
-      input.status,
-      timestamp,
-      isCheckIn ? 1 : 0,
-      timestamp,
-      isCancel ? 1 : 0,
-      timestamp,
-      isCancel ? 1 : 0,
-      input.actor,
-      input.id,
-    )
-    .run();
+    .bind(input.id)
+    .first<{ id: string; branch: string; service: string; slotDate: string; slotTime: string }>();
+  if (!existing) return null;
+
+  const statements: D1PreparedStatement[] = [
+    db
+      .prepare(
+        `UPDATE appointments
+         SET status = ?,
+             status_updated_at = ?,
+             checked_in_at = CASE WHEN ? THEN ? ELSE checked_in_at END,
+             cancelled_at = CASE WHEN ? THEN ? ELSE cancelled_at END,
+             cancelled_by = CASE WHEN ? THEN ? ELSE cancelled_by END
+         WHERE id = ? AND status <> 'held' AND status <> ?`,
+      )
+      .bind(
+        input.status,
+        timestamp,
+        isCheckIn ? 1 : 0,
+        timestamp,
+        isCancel ? 1 : 0,
+        timestamp,
+        isCancel ? 1 : 0,
+        input.actor,
+        input.id,
+        input.status,
+      ),
+  ];
+
+  if (isCancel) {
+    statements.push(
+      db.prepare("DELETE FROM appointment_cells WHERE appointment_id = ?").bind(input.id),
+      ...notificationJobStatements(db, {
+        kind: "booking.cancelled",
+        subjectType: "appointment",
+        subjectId: input.id,
+        eventKey: `booking.cancelled:${input.id}:${timestamp}`,
+        context: {
+          branch: existing.branch,
+          service: existing.service,
+          slotDate: existing.slotDate,
+          slotTime: existing.slotTime,
+        },
+        createdAt: timestamp,
+        expectedStatusUpdatedAt: timestamp,
+      }),
+    );
+  }
+
+  const [result] = await db.batch(statements);
 
   if (!(result.meta.changes ?? 0)) return null;
 
-  // A staff cancellation frees the slot exactly as a patient one does.
-  if (isCancel) {
-    await database()
-      .prepare("DELETE FROM appointment_cells WHERE appointment_id = ?")
-      .bind(input.id)
-      .run();
-  }
-
-  return database()
+  return db
     .prepare(`SELECT ${APPOINTMENT_COLUMNS} FROM appointments WHERE id = ?`)
     .bind(input.id)
     .first<Appointment>();
@@ -1107,9 +1206,12 @@ export async function createClinicAppointment(input: {
   actor: string;
 }) {
   await ensureBookingSchema();
+  await ensureNotificationSchema();
   const db = database();
   const timestamp = now();
   const id = crypto.randomUUID();
+  const holdToken = crypto.randomUUID();
+  const manageToken = crypto.randomUUID();
   const durationMinutes = serviceDuration(input.service);
   const practitioner = input.practitioner ?? null;
 
@@ -1127,7 +1229,7 @@ export async function createClinicAppointment(input: {
     )
     .bind(
       id,
-      crypto.randomUUID(),
+      holdToken,
       input.branch,
       input.service,
       input.slotDate,
@@ -1142,7 +1244,7 @@ export async function createClinicAppointment(input: {
       input.source ?? "clinic",
       timestamp,
       CONSENT_VERSION,
-      crypto.randomUUID(),
+      manageToken,
       timestamp,
       timestamp,
       timestamp,
@@ -1155,6 +1257,20 @@ export async function createClinicAppointment(input: {
       slotTime: input.slotTime,
       durationMinutes,
     }),
+    ...notificationJobStatements(db, {
+      kind: "booking.confirmed",
+      subjectType: "appointment",
+      subjectId: id,
+      eventKey: `booking.confirmed:${id}:${timestamp}`,
+      context: {
+        branch: input.branch,
+        service: input.service,
+        slotDate: input.slotDate,
+        slotTime: input.slotTime,
+      },
+      createdAt: timestamp,
+      expectedStatusUpdatedAt: timestamp,
+    }),
   ]);
 
   return db
@@ -1166,9 +1282,8 @@ export async function createClinicAppointment(input: {
 /**
  * Confirmed visits inside the reminder window that have not been told yet.
  *
- * Bounded to tomorrow only: a sweep that reached further would send a reminder
- * days early, and `reminder_sent_at` means it could never be sent again at the
- * right time.
+ * Bounded to tomorrow only. `reminder_queued_at` closes duplicate scheduling;
+ * `reminder_sent_at` is written only after a patient channel confirms delivery.
  */
 export async function appointmentsNeedingReminder(limit = 200) {
   await ensureBookingSchema();
@@ -1177,27 +1292,13 @@ export async function appointmentsNeedingReminder(limit = 200) {
     .prepare(
       `SELECT ${APPOINTMENT_COLUMNS}, manage_token AS manageToken
        FROM appointments
-       WHERE status = 'confirmed' AND reminder_sent_at IS NULL
+       WHERE status = 'confirmed' AND reminder_queued_at IS NULL
          AND slot_date = ?
        ORDER BY slot_time ASC LIMIT ?`,
     )
     .bind(tomorrow, limit)
     .all<ConfirmedAppointment>();
   return result.results ?? [];
-}
-
-/**
- * Stamped before delivery is attempted, not after.
- *
- * A patient who receives no reminder is mildly inconvenienced; one who receives
- * the same reminder on every cron tick because delivery half-failed will not
- * book again. Failing quiet beats failing loud here.
- */
-export async function markReminderSent(id: string) {
-  await database()
-    .prepare("UPDATE appointments SET reminder_sent_at = ? WHERE id = ?")
-    .bind(now(), id)
-    .run();
 }
 
 /**

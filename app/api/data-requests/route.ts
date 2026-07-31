@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recentRequestCount, submitDataRequest, type DataRequestKind } from "@/db/dsr";
-import { notify } from "@/lib/notify";
 import { reportError } from "@/lib/observability";
 import { clientFingerprint } from "@/lib/request";
 import { verifyTurnstile } from "@/lib/turnstile";
@@ -89,24 +88,6 @@ export async function POST(request: NextRequest) {
       note: note || undefined,
       language,
       clientHash,
-    });
-
-    // A request nobody notices is a legal obligation quietly going unmet, so it
-    // is announced on the same channel as a booking.
-    await notify({
-      kind: "data.request",
-      appointment: {
-        id,
-        branch: "—",
-        service: `data request: ${kind}`,
-        slotDate: new Date().toISOString().slice(0, 10),
-        slotTime: "00:00",
-        patientName: requesterName,
-        patientPhone: requesterPhone,
-        patientEmail: requesterEmail || null,
-        patientNote: note || null,
-        language,
-      },
     });
 
     return NextResponse.json(

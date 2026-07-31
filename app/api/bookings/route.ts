@@ -10,7 +10,6 @@ import { getClinicStaff, staffAllowlistConfigured } from "@/lib/auth";
 import { BRANCH_IDS } from "@/lib/clinic";
 import { addDays, clinicTimeNow, clinicToday, isDateKey, isOpenDay } from "@/lib/dates";
 import { dayCapacity } from "@/lib/schedule";
-import { notify } from "@/lib/notify";
 import { reportError } from "@/lib/observability";
 import { recordAccess } from "@/db/audit";
 import { clientFingerprint } from "@/lib/request";
@@ -229,25 +228,6 @@ export async function POST(request: NextRequest) {
     const manageUrl = booking.manageToken
       ? new URL(`/appointment/${booking.manageToken}`, request.nextUrl.origin).toString()
       : undefined;
-
-    // Delivery runs after the row is committed and can never fail the booking:
-    // every transport inside `notify` is individually guarded.
-    await notify({
-      kind: "booking.confirmed",
-      appointment: {
-        id: booking.id,
-        branch: booking.branch,
-        service: booking.service,
-        slotDate: booking.slotDate,
-        slotTime: booking.slotTime,
-        patientName: booking.patientName,
-        patientPhone: booking.patientPhone,
-        patientEmail: booking.patientEmail,
-        patientNote: booking.patientNote,
-        language: booking.language,
-      },
-      manageUrl,
-    });
 
     return NextResponse.json(
       {

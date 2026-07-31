@@ -66,13 +66,17 @@ The most dangerous failure, because **everything looks fine**. Patients believe
 they are booked; the clinic never finds out.
 
 1. `curl -s https://<site>/api/health` → check `configuration.notifications`.
-2. If `false`, the transport env vars are missing. Set `NOTIFY_WEBHOOK_URL` or
-   `RESEND_API_KEY` + `NOTIFY_FROM_EMAIL` and redeploy.
-3. If `true` but nothing is arriving:
+2. If `false`, no clinic alert path is configured. Set `CLINIC_NOTIFY_EMAIL`
+   with `RESEND_API_KEY` + `NOTIFY_FROM_EMAIL`, or set `NOTIFY_WEBHOOK_URL`,
+   then redeploy.
+3. Open **Clinic OS → Notifications**. `Setup required` means a provider or an
+   approved WhatsApp template is absent; `Needs attention` means automatic
+   retries were exhausted. Use **Retry** only after correcting the provider.
+4. If `true` but nothing is arriving:
    - Check the error tracker for `notification delivery failed`.
    - Email: check the provider dashboard for bounces; verify SPF/DKIM/DMARC.
    - Webhook: check the receiving automation has not been paused.
-4. **Recover the missed bookings.** They are all in the database — open
+5. **Recover the missed bookings.** They are all in the database — open
    `/command-center`, filter to the affected dates, and export CSV. Nothing is
    lost, it just was not announced.
 

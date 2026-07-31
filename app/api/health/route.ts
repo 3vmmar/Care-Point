@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { checkDatabase } from "@/db/bookings";
 import { errorReportingConfigured } from "@/lib/observability";
 import { getClinicStaff, staffAllowlistConfigured } from "@/lib/auth";
-import { notificationsConfigured } from "@/lib/notify";
+import {
+  notificationConfiguration,
+  notificationsConfigured,
+} from "@/lib/notify";
+import { notificationQueueSummary } from "@/db/notifications";
 import { turnstileConfigured } from "@/lib/turnstile";
 import { proxyVerificationConfigured } from "@/lib/trusted-proxy";
 import { clinicTimeNow, clinicToday } from "@/lib/dates";
@@ -40,12 +44,27 @@ export async function GET() {
   // reconnaissance gift to anyone probing the site. An uptime monitor only
   // needs the verdict, so the detail is reserved for signed-in staff.
   const staff = await getClinicStaff();
+  let notificationQueue: Awaited<ReturnType<typeof notificationQueueSummary>> | null = null;
+  if (staff && database.ok) {
+    try {
+      notificationQueue = await notificationQueueSummary();
+    } catch {
+      // The database verdict above remains authoritative; a queue detail is
+      // diagnostic context and must not turn the health endpoint into a 500.
+    }
+  }
 
   return NextResponse.json(
     {
       status,
       database: database.ok ? "ok" : "unreachable",
-      ...(staff ? { configuration } : {}),
+      ...(staff
+        ? {
+            configuration,
+            notificationProviders: notificationConfiguration(),
+            notificationQueue,
+          }
+        : {}),
       clinicDate: clinicToday(),
       clinicTime: clinicTimeNow(),
       latencyMs: Date.now() - started,

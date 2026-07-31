@@ -200,17 +200,19 @@ and durations, contact numbers and the data-retention window.
 | **`STAFF_EMAILS`** | environment | Comma-separated staff addresses. **Empty means nobody is authorised** — the dashboard fails closed and warns on screen. |
 | **`SITE_URL`** | environment | Canonical, OpenGraph, sitemap and structured-data URLs. |
 
-### Notifications — optional, but a booking notifies nobody without them
+### Notifications — durable, but providers still need configuration
 
-Configure either transport, or both. Unconfigured, events are logged to the
-worker instead of being silently dropped.
+Every event is committed to D1 with the booking change. Configure one or more
+providers; unconfigured channels remain visible and retryable in Clinic OS.
 
 | Variable | Purpose |
 | :--- | :--- |
-| `NOTIFY_WEBHOOK_URL` | POSTs each booking event as JSON. Works with Zapier, Make, n8n, or a WhatsApp Business gateway. |
+| `NOTIFY_WEBHOOK_URL` | Sends the clinic-side event to Zapier, Make, n8n, or an internal endpoint. |
 | `NOTIFY_WEBHOOK_TOKEN` | Optional bearer token for that webhook. |
 | `RESEND_API_KEY`, `NOTIFY_FROM_EMAIL` | Transactional email to the patient. |
-| `CLINIC_NOTIFY_EMAIL` | Where the clinic's own copy of every booking is sent. |
+| `CLINIC_NOTIFY_EMAIL` | Clinic inbox that receives the staff copy. |
+| `WHATSAPP_WEBHOOK_URL`, `WHATSAPP_WEBHOOK_TOKEN` | Clinic-owned WhatsApp Business gateway. |
+| `WHATSAPP_TEMPLATE_*` | Approved template names for confirmation, cancellation, rescheduling, and reminders. |
 | `SEED_APPOINTMENT=0` | Skips the seeded demonstration appointment. |
 
 ### Access control

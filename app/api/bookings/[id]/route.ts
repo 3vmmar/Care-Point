@@ -6,7 +6,6 @@ import {
   type StaffStatusAction,
 } from "@/db/bookings";
 import { getClinicStaff } from "@/lib/auth";
-import { notify } from "@/lib/notify";
 import { reportError } from "@/lib/observability";
 import { recordAccess } from "@/db/audit";
 import { clientFingerprint } from "@/lib/request";
@@ -96,25 +95,6 @@ export async function PATCH(
         { message: "That appointment could not be updated." },
         { status: 404, headers: PRIVATE_HEADERS },
       );
-    }
-
-    // Telling the patient their visit was cancelled matters more than any other
-    // notification in the system, so it is not left to a phone call.
-    if (appointment.status === "cancelled") {
-      await notify({
-        kind: "booking.cancelled",
-        appointment: {
-          id: appointment.id,
-          branch: appointment.branch,
-          service: appointment.service,
-          slotDate: appointment.slotDate,
-          slotTime: appointment.slotTime,
-          patientName: appointment.patientName,
-          patientPhone: appointment.patientPhone,
-          patientEmail: appointment.patientEmail,
-          language: appointment.language,
-        },
-      });
     }
 
     await recordAccess({

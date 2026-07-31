@@ -50,6 +50,8 @@ export const appointments = sqliteTable(
     statusUpdatedAt: text("status_updated_at"),
     /** Set once the reminder for this visit has gone out, so it sends once. */
     reminderSentAt: text("reminder_sent_at"),
+    /** Set once a durable reminder job exists; delivery is tracked separately. */
+    reminderQueuedAt: text("reminder_queued_at"),
     /** Set when contact details were cleared by the retention job. */
     purgedAt: text("purged_at"),
   },
@@ -322,4 +324,64 @@ export const staffUserRoles = sqliteTable(
     createdAt: text("created_at").notNull(),
   },
   (table) => [primaryKey({ columns: [table.email, table.role] })],
+);
+
+/* -------------------------------------------------------------------------- */
+/* Durable notification outbox                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One row per event/channel pair. The row deliberately stores only a subject
+ * reference and a non-identifying appointment snapshot: recipient data is
+ * loaded from the authoritative appointment or data-request row at send time,
+ * so the outbox never becomes a second unmanaged patient directory.
+ */
+export const notificationJobs = sqliteTable(
+  "notification_jobs",
+  {
+    id: text("id").primaryKey(),
+    dedupeKey: text("dedupe_key").notNull().unique(),
+    kind: text("kind").notNull(),
+    subjectType: text("subject_type").notNull(),
+    subjectId: text("subject_id").notNull(),
+    channel: text("channel").notNull(),
+    contextJson: text("context_json"),
+    /** pending | processing | retrying | blocked | delivered | skipped | dead */
+    status: text("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(6),
+    nextAttemptAt: text("next_attempt_at").notNull(),
+    lockedAt: text("locked_at"),
+    lockedBy: text("locked_by"),
+    provider: text("provider"),
+    providerMessageId: text("provider_message_id"),
+    lastErrorCode: text("last_error_code"),
+    lastErrorMessage: text("last_error_message"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    deliveredAt: text("delivered_at"),
+  },
+  (table) => [
+    index("notification_jobs_due").on(table.status, table.nextAttemptAt),
+    index("notification_jobs_subject").on(table.subjectType, table.subjectId),
+    index("notification_jobs_created").on(table.createdAt),
+  ],
+);
+
+/** Attempt history contains delivery metadata, never message bodies or PII. */
+export const notificationAttempts = sqliteTable(
+  "notification_attempts",
+  {
+    id: text("id").primaryKey(),
+    jobId: text("job_id").notNull(),
+    attemptNumber: integer("attempt_number").notNull(),
+    outcome: text("outcome").notNull(),
+    provider: text("provider"),
+    statusCode: integer("status_code"),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    startedAt: text("started_at").notNull(),
+    finishedAt: text("finished_at").notNull(),
+  },
+  (table) => [index("notification_attempts_job").on(table.jobId, table.attemptNumber)],
 );

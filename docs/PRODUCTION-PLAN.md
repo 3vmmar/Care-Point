@@ -202,6 +202,14 @@ restore has actually been practised.
 
 ### Phase 3 — Notifications for real (~8–12 days eng, elapsed depends on Meta)
 
+> **Implementation increment (2026-07-31):** notification events now enter a
+> D1 transactional outbox from the same batch as each booking lifecycle change.
+> Email, WhatsApp, clinic-email and webhook channels are independent jobs with
+> deduplication, locks, bounded backoff, attempt history and a dead-letter state.
+> Clinic OS exposes provider readiness and manual retry without storing message
+> bodies or duplicate patient contact data in the outbox. Real credentials, DNS
+> authentication and approved WhatsApp templates remain launch dependencies.
+
 > **Production-foundation increment:** the database now has normalized clinic
 > catalogue, rota, schedule-exception and staff-role tables, and the application
 > has separate `patient` and `clinic` deployment profiles. The public Worker
