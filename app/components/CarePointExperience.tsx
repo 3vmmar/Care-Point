@@ -14,6 +14,7 @@ import {
   Menu,
   MessageCircle,
   Mic,
+  Navigation,
   ShieldCheck,
   Sparkles,
   X,
@@ -35,7 +36,18 @@ import {
 import ExperienceIntro from "./ExperienceIntro";
 import JourneyDesigner from "./JourneyDesigner";
 import Modal from "./Modal";
-import { BRANCHES, CONTACT, SERVICES, WHATSAPP_URL } from "@/lib/clinic";
+import Turnstile from "./Turnstile";
+import {
+  BRANCHES,
+  CONTACT,
+  branchOpenDays,
+  SERVICE_CATEGORIES,
+  SERVICES,
+  servicesInCategory,
+  WHATSAPP_URL,
+} from "@/lib/clinic";
+import { copyFor, LOCALE_PATH, otherLanguage, type Language } from "@/lib/i18n";
+import { TREATMENTS, treatmentCopy, treatmentPath } from "@/lib/treatments";
 
 // The CareLens scene pulls in Three.js — roughly 890KB that the hero does not
 // need, and that cannot render on the server anyway.
@@ -102,13 +114,14 @@ function LazyCareLens(props: {
   );
 }
 
-type Language = "en" | "ar";
 type AvailabilityDay = {
   date: string;
   weekday: string;
   day: string;
+  closure: string | null;
   slots: string[];
 };
+type NextAvailable = { date: string; time: string; label: string } | null;
 type ChatMessage = { role: "assistant" | "user"; text: string };
 
 type SpeechResult = { results: { 0: { 0: { transcript: string } } } };
@@ -121,73 +134,7 @@ type SpeechRecognitionLike = {
   onend?: () => void;
 };
 
-const LANGUAGE_STORAGE_KEY = "carepoint:language";
 const INTRO_STORAGE_KEY = "carepoint:intro-seen";
-
-const copy = {
-  en: {
-    nav: ["Expertise", "CareLens", "Journey"],
-    book: "Reserve a visit",
-    eyebrow: "Consultant Plastic Surgeon · Cairo",
-    titleA: "Aesthetic care,",
-    titleB: "designed around you.",
-    intro:
-      "Precision-led plastic surgery with an experience that begins long before the consultation.",
-    explore: "Explore your options",
-    ask: "Ask NOOR",
-    trust: "FRCS · EBOPRAS · Over 25 years of surgical experience",
-    available: "Next consultation",
-    heroDate: "Live availability",
-    signature: "Dr. Ashraf Metwally",
-    signatureRole: "Consultant Plastic Surgeon",
-    proofTitle: "Natural results. Clinical precision.",
-    proofBody:
-      "Every treatment plan starts with listening, rigorous assessment, and a shared definition of what feels right for you.",
-    careLensKicker: "Introducing CareLens",
-    careLensTitle: "Start with what you feel, not a procedure name.",
-    careLensBody:
-      "Choose an area and discover the questions, options, and recovery considerations worth discussing in consultation.",
-    journeyKicker: "Your care journey",
-    journeyTitle: "Clarity at every stage.",
-    journeyBody:
-      "From your first question to long-term follow-up, every touchpoint is designed to feel calm, personal, and informed.",
-    aiDisclaimer: "Educational guidance only — never a diagnosis.",
-    finalTitle: "Your questions deserve a thoughtful answer.",
-    finalBody:
-      "Meet Dr. Ashraf and leave with a plan built around your anatomy, priorities, and pace.",
-  },
-  ar: {
-    nav: ["الخبرات", "كير لِنز", "رحلتك"],
-    book: "احجز زيارتك",
-    eyebrow: "استشاري جراحات التجميل · القاهرة",
-    titleA: "رعاية تجميلية،",
-    titleB: "مصممة خصيصاً لك.",
-    intro:
-      "دقة جراحية وخبرة إنسانية تبدأ قبل الاستشارة وتستمر بعدها.",
-    explore: "اكتشف خياراتك",
-    ask: "اسأل نور",
-    trust: "زمالة الكلية الملكية · البورد الأوروبي · أكثر من ٢٥ عاماً من الخبرة",
-    available: "أقرب استشارة",
-    heroDate: "مواعيد متاحة الآن",
-    signature: "د. أشرف متولي",
-    signatureRole: "استشاري جراحات التجميل",
-    proofTitle: "نتائج طبيعية. دقة طبية.",
-    proofBody:
-      "كل خطة علاج تبدأ بالاستماع والتقييم الدقيق والاتفاق على النتيجة الأنسب لك.",
-    careLensKicker: "نقدم لك كير لِنز",
-    careLensTitle: "ابدأ بما تشعر به، وليس باسم الإجراء.",
-    careLensBody:
-      "اختر المنطقة واكتشف الأسئلة والخيارات وتفاصيل التعافي التي تستحق النقاش أثناء الاستشارة.",
-    journeyKicker: "رحلة رعايتك",
-    journeyTitle: "وضوح في كل خطوة.",
-    journeyBody:
-      "من أول سؤال وحتى المتابعة، صممنا كل لحظة لتكون هادئة وشخصية ومدروسة.",
-    aiDisclaimer: "معلومات تثقيفية فقط — وليست تشخيصاً طبياً.",
-    finalTitle: "أسئلتك تستحق إجابة مدروسة.",
-    finalBody:
-      "قابل د. أشرف واخرج بخطة تناسب تكوينك وأولوياتك والوقت المناسب لك.",
-  },
-};
 
 const journey = [
   {
@@ -234,43 +181,37 @@ function NoorOrb({ small = false }: { small?: boolean }) {
   );
 }
 
-export default function CarePointExperience() {
-  const [language, setLanguage] = useState<Language>("en");
+/**
+ * `language` arrives as a prop from the route rather than living in state: each
+ * language has its own URL, so the server already knows which one to render and
+ * the markup a crawler receives is correct without running any script.
+ */
+export default function CarePointExperience({ language }: { language: Language }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [noorOpen, setNoorOpen] = useState(false);
   const [bookingOpen, setBookingOpen] = useState(false);
   const [introOpen, setIntroOpen] = useState(true);
   const [journeyDesignerOpen, setJourneyDesignerOpen] = useState(false);
   const [heroPassed, setHeroPassed] = useState(false);
-  const t = copy[language];
+  const [footerInView, setFooterInView] = useState(false);
+  const [nextAvailable, setNextAvailable] = useState<NextAvailable>(null);
+  const [availabilityChecked, setAvailabilityChecked] = useState(false);
+  const t = copyFor(language);
   const rtl = language === "ar";
+  const altLanguage = otherLanguage(language);
 
-  // Restored before paint so a returning visitor does not see the intro replay
-  // or a flash of English. Initial state still matches the server render, so
-  // hydration stays clean — which is exactly why this cannot move into a
-  // `useState` initialiser, where `localStorage` is unavailable on the server.
+  // Restored before paint so a returning visitor does not see the intro replay.
+  // Initial state still matches the server render, so hydration stays clean —
+  // which is exactly why this cannot move into a `useState` initialiser, where
+  // `localStorage` is unavailable on the server.
   useLayoutEffect(() => {
     try {
-      const storedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
-      /* eslint-disable react-hooks/set-state-in-effect */
-      if (storedLanguage === "ar" || storedLanguage === "en") {
-        setLanguage(storedLanguage);
-      }
       if (window.localStorage.getItem(INTRO_STORAGE_KEY) === "1") {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setIntroOpen(false);
       }
-      /* eslint-enable react-hooks/set-state-in-effect */
     } catch {
       // Private browsing can deny storage access; defaults are fine.
-    }
-  }, []);
-
-  const chooseLanguage = useCallback((next: Language) => {
-    setLanguage(next);
-    try {
-      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
-    } catch {
-      // Persistence is best-effort.
     }
   }, []);
 
@@ -283,36 +224,62 @@ export default function CarePointExperience() {
     }
   }, []);
 
-  // Screen readers and search engines read the document element, not `main`,
-  // so the language switch has to reach it.
+  /**
+   * The hero used to advertise a hardcoded "Tomorrow · Maadi". It now shows the
+   * clinic's real next opening, so the headline claim and the booking modal can
+   * never disagree.
+   */
   useEffect(() => {
-    const root = document.documentElement;
-    root.lang = language;
-    root.dir = rtl ? "rtl" : "ltr";
-  }, [language, rtl]);
+    const controller = new AbortController();
+    fetch(`/api/availability?locale=${language}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("unavailable");
+        return (await response.json()) as { nextAvailable?: NextAvailable };
+      })
+      .then((data) => {
+        setNextAvailable(data.nextAvailable ?? null);
+        setAvailabilityChecked(true);
+      })
+      .catch((caught: unknown) => {
+        if (caught instanceof DOMException && caught.name === "AbortError") return;
+        setAvailabilityChecked(true);
+      });
+    return () => controller.abort();
+  }, [language]);
 
+  /**
+   * Smooth scrolling.
+   *
+   * Lenis and GSAP each want to own a requestAnimationFrame loop; running both
+   * means two callbacks per frame reading and writing scroll position, which is
+   * where the previous stutter came from. Driving Lenis from GSAP's ticker puts
+   * everything on one clock, and disabling lag smoothing stops GSAP from
+   * jumping the timeline forward after a dropped frame.
+   */
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     gsap.registerPlugin(ScrollTrigger);
     const lenis = new Lenis({
-      duration: 1.05,
+      // A lerp reads smoother than a fixed duration: it eases toward the target
+      // continuously instead of restarting a tween on every wheel event.
+      lerp: 0.09,
       smoothWheel: true,
       syncTouch: false,
-      wheelMultiplier: 0.9,
+      touchMultiplier: 1.6,
+      wheelMultiplier: 1,
     });
+
     const syncScroll = () => ScrollTrigger.update();
-    let animationFrame = 0;
-    const animate = (time: number) => {
-      lenis.raf(time);
-      animationFrame = requestAnimationFrame(animate);
-    };
+    const drive = (time: number) => lenis.raf(time * 1000);
 
     lenis.on("scroll", syncScroll);
-    animationFrame = requestAnimationFrame(animate);
+    gsap.ticker.add(drive);
+    gsap.ticker.lagSmoothing(0);
 
     return () => {
-      cancelAnimationFrame(animationFrame);
+      gsap.ticker.remove(drive);
+      gsap.ticker.lagSmoothing(500, 33);
       lenis.off("scroll", syncScroll);
       lenis.destroy();
     };
@@ -330,6 +297,24 @@ export default function CarePointExperience() {
     return () => observer.disconnect();
   }, []);
 
+  /**
+   * The floating NOOR button sits in the same corner as the footer's Clinic OS
+   * link and used to cover it outright at the bottom of the page. Docking it
+   * out of the way once the footer arrives keeps both reachable, and reads as
+   * intentional rather than as an overlap.
+   */
+  useEffect(() => {
+    const footer = document.querySelector(".site-footer");
+    if (!footer) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setFooterInView(entry.isIntersecting),
+      { rootMargin: "0px 0px -12% 0px", threshold: 0 },
+    );
+    observer.observe(footer);
+    return () => observer.disconnect();
+  }, []);
+
   useLayoutEffect(() => {
     gsap.registerPlugin(ScrollTrigger);
     if (
@@ -340,89 +325,91 @@ export default function CarePointExperience() {
     }
 
     const context = gsap.context(() => {
+      // force3D keeps transformed elements on their own compositor layer for
+      // the length of the tween, which is what removes the edge shimmer on the
+      // portrait and the section reveals.
+      gsap.defaults({ force3D: true });
+
       gsap.fromTo(
         ".portrait-frame",
         { clipPath: "inset(0 0 100% 0)" },
         {
           clipPath: "inset(0 0 0% 0)",
-          duration: 1.35,
+          duration: 1.5,
           delay: 0.08,
-          ease: "power4.inOut",
+          ease: "expo.out",
         },
       );
 
       gsap.fromTo(
         ".portrait-chrome, .portrait-footer",
-        { autoAlpha: 0, y: 18 },
+        { autoAlpha: 0, y: 14 },
         {
           autoAlpha: 1,
           y: 0,
-          duration: 0.75,
-          delay: 0.82,
-          stagger: 0.12,
-          ease: "power3.out",
+          duration: 0.85,
+          delay: 0.75,
+          stagger: 0.1,
+          ease: "power2.out",
         },
       );
 
       gsap.to(".scroll-progress span", {
         scaleX: 1,
         ease: "none",
-        scrollTrigger: {
-          start: 0,
-          end: "max",
-          scrub: 0.25,
-        },
+        scrollTrigger: { start: 0, end: "max", scrub: 0.3 },
       });
 
       gsap.to(".portrait-frame img", {
-        yPercent: 8,
-        scale: 1.08,
+        yPercent: 7,
+        scale: 1.07,
         ease: "none",
         scrollTrigger: {
           trigger: ".hero",
           start: "top top",
           end: "bottom top",
-          scrub: 1,
+          scrub: 1.1,
         },
       });
 
       gsap.to(".hero-copy", {
-        yPercent: 16,
-        opacity: 0.3,
+        yPercent: 13,
+        opacity: 0.32,
         ease: "none",
         scrollTrigger: {
           trigger: ".hero",
           start: "45% center",
           end: "bottom top",
-          scrub: 1,
+          scrub: 1.1,
         },
       });
 
-      gsap.utils
-        .toArray<HTMLElement>(
-          ".proof-intro, .proof-stats article, .section-heading, .treatment-universe, .journey-grid article, .final-cta > div, .final-cta > button",
-        )
-        .forEach((element, index) => {
-          gsap.fromTo(
-            element,
-            { autoAlpha: 0, y: 54 },
-            {
-              autoAlpha: 1,
-              y: 0,
-              duration: 0.9,
-              delay: (index % 4) * 0.04,
-              ease: "power3.out",
-              scrollTrigger: {
-                trigger: element,
-                start: "top 88%",
-                once: true,
+      // Batching lets ScrollTrigger stagger whatever actually enters together
+      // instead of giving every element a fixed index-based delay, so a section
+      // reveals as one movement rather than as a queue.
+      ScrollTrigger.batch(
+        ".proof-intro, .proof-stats article, .section-heading, .treatment-universe, .journey-grid article, .location-card, .final-cta > div, .final-cta .final-actions",
+        {
+          start: "top 88%",
+          once: true,
+          onEnter: (batch) =>
+            gsap.fromTo(
+              batch,
+              { autoAlpha: 0, y: 34 },
+              {
+                autoAlpha: 1,
+                y: 0,
+                duration: 1,
+                stagger: 0.08,
+                ease: "power2.out",
+                overwrite: true,
               },
-            },
-          );
-        });
+            ),
+        },
+      );
 
       const scenes = gsap.utils.toArray<HTMLElement>(".portal-scene");
-      gsap.set(scenes, { autoAlpha: 0, y: 60 });
+      gsap.set(scenes, { autoAlpha: 0, y: 48 });
       gsap.set(scenes[0], { autoAlpha: 1, y: 0 });
 
       const portalTimeline = gsap.timeline({
@@ -430,35 +417,36 @@ export default function CarePointExperience() {
           trigger: ".experience-portal",
           start: "top top",
           end: "bottom bottom",
-          scrub: 0.75,
+          scrub: 0.9,
         },
+        defaults: { ease: "power2.inOut" },
       });
 
       portalTimeline
-        .to(scenes[0], { autoAlpha: 0, y: -55, duration: 0.7 }, 0.55)
+        .to(scenes[0], { autoAlpha: 0, y: -46, duration: 0.7 }, 0.55)
         .fromTo(
           scenes[1],
-          { autoAlpha: 0, y: 65 },
+          { autoAlpha: 0, y: 55 },
           { autoAlpha: 1, y: 0, duration: 0.8 },
           0.75,
         )
-        .to(scenes[1], { autoAlpha: 0, y: -55, duration: 0.7 }, 1.7)
+        .to(scenes[1], { autoAlpha: 0, y: -46, duration: 0.7 }, 1.7)
         .fromTo(
           scenes[2],
-          { autoAlpha: 0, y: 65 },
+          { autoAlpha: 0, y: 55 },
           { autoAlpha: 1, y: 0, duration: 0.8 },
           1.9,
         );
 
       gsap.to(".portal-orb-core", {
         rotate: 290,
-        scale: 1.55,
+        scale: 1.5,
         ease: "none",
         scrollTrigger: {
           trigger: ".experience-portal",
           start: "top top",
           end: "bottom bottom",
-          scrub: 0.8,
+          scrub: 1,
         },
       });
 
@@ -469,64 +457,82 @@ export default function CarePointExperience() {
           trigger: ".experience-portal",
           start: "top top",
           end: "bottom bottom",
-          scrub: 0.2,
+          scrub: 0.3,
         },
       });
 
       gsap.to(".noor-atmosphere .noor-orb", {
         rotate: 210,
-        scale: 1.12,
+        scale: 1.1,
         ease: "none",
         scrollTrigger: {
           trigger: ".noor-feature",
           start: "top bottom",
           end: "bottom top",
-          scrub: 1,
+          scrub: 1.2,
         },
       });
     });
 
-    return () => context.revert();
+    // Late-loading fonts and the CareLens canvas both change layout height;
+    // without this the triggers keep firing against stale positions.
+    const refresh = () => ScrollTrigger.refresh();
+    const fontsReady = document.fonts?.ready;
+    void fontsReady?.then(refresh);
+    window.addEventListener("load", refresh);
+
+    return () => {
+      window.removeEventListener("load", refresh);
+      context.revert();
+    };
   }, [introOpen, language]);
 
-  function openBooking() {
+  const openBooking = useCallback(() => {
     setBookingOpen(true);
     setMobileOpen(false);
-  }
+  }, []);
+
+  const heroAvailability = !availabilityChecked
+    ? t.heroAvailabilityLoading
+    : nextAvailable
+      ? `${nextAvailable.label} · ${nextAvailable.time}`
+      : t.heroAvailabilityEmpty;
 
   return (
     <main className="site-shell" dir={rtl ? "rtl" : "ltr"}>
       {introOpen && <ExperienceIntro language={language} onEnter={dismissIntro} />}
       <div className="grain" aria-hidden />
       <div className="scroll-progress" aria-hidden><span /></div>
+      <a className="skip-link" href="#top">
+        {rtl ? "تخطي إلى المحتوى" : "Skip to content"}
+      </a>
       <header className="site-header">
-        <Link className="brand" href="#top" aria-label="Dr. Ashraf Metwally home">
-          <Image
-            src="/logo.png"
-            alt=""
-            width={52}
-            height={52}
-            priority
-            unoptimized
-          />
+        <Link className="brand" href="#top" aria-label={t.homeLabel}>
+          <Image src="/logo.png" alt="" width={52} height={52} priority unoptimized />
           <span>
-            <strong>{rtl ? "د. أشرف متولي" : "ASHRAF METWALLY"}</strong>
-            <small>{rtl ? "جراحات التجميل" : "PLASTIC SURGERY"}</small>
+            <strong>{t.brandName}</strong>
+            <small>{t.brandRole}</small>
           </span>
         </Link>
-        <nav className={mobileOpen ? "nav nav--open" : "nav"}>
-          {["expertise", "carelens", "journey"].map((id, index) => (
+        <nav className={mobileOpen ? "nav nav--open" : "nav"} id="site-nav">
+          {["expertise", "carelens", "journey", "locations"].map((id, index) => (
             <a href={`#${id}`} key={id} onClick={() => setMobileOpen(false)}>
               {t.nav[index]}
             </a>
           ))}
-          <button
+          {/*
+            A real link, not a state toggle: each language is its own indexable
+            URL, and `hrefLang` lets a crawler follow the pair.
+          */}
+          <Link
             className="language-button mobile-language"
-            onClick={() => chooseLanguage(rtl ? "en" : "ar")}
+            href={LOCALE_PATH[altLanguage]}
+            hrefLang={altLanguage}
+            onClick={() => setMobileOpen(false)}
           >
             <Globe2 size={15} />
-            {rtl ? "EN" : "عربي"}
-          </button>
+            {t.languageShort}
+          </Link>
           <button className="button button--dark nav-book" onClick={openBooking}>
             {t.book}
             <ArrowRight size={16} />
@@ -536,19 +542,20 @@ export default function CarePointExperience() {
           <button
             className="experience-replay"
             onClick={() => setIntroOpen(true)}
-            aria-label={rtl ? "أعد تشغيل المقدمة" : "Replay introduction"}
+            aria-label={t.replayLabel}
           >
             <Sparkles size={14} />
-            <span>{rtl ? "المقدمة" : "REPLAY"}</span>
+            <span>{t.replay}</span>
           </button>
-          <button
+          <Link
             className="language-button"
-            onClick={() => chooseLanguage(rtl ? "en" : "ar")}
-            aria-label={rtl ? "التبديل إلى الإنجليزية" : "Switch to Arabic"}
+            href={LOCALE_PATH[altLanguage]}
+            hrefLang={altLanguage}
+            aria-label={t.languageSwitch}
           >
             <Globe2 size={15} />
-            {rtl ? "EN" : "عربي"}
-          </button>
+            {t.languageShort}
+          </Link>
           <button className="button button--dark desktop-book" onClick={openBooking}>
             {t.book}
             <ArrowRight size={16} />
@@ -556,7 +563,9 @@ export default function CarePointExperience() {
           <button
             className="menu-button"
             onClick={() => setMobileOpen((value) => !value)}
-            aria-label="Open menu"
+            aria-label={mobileOpen ? t.closeMenu : t.openMenu}
+            aria-expanded={mobileOpen}
+            aria-controls="site-nav"
           >
             {mobileOpen ? <X /> : <Menu />}
           </button>
@@ -590,7 +599,7 @@ export default function CarePointExperience() {
                 onClick={() => setJourneyDesignerOpen(true)}
               >
                 <Sparkles size={15} />
-                <span>{rtl ? "صمّم رحلتك" : "Design my journey"}</span>
+                <span>{t.designJourney}</span>
                 <ArrowRight size={16} />
               </button>
             </div>
@@ -624,12 +633,12 @@ export default function CarePointExperience() {
               <button
                 className="availability-card"
                 onClick={openBooking}
-                aria-label="View live appointment availability"
+                aria-label={t.viewAvailability}
               >
                 <span className="live-dot" />
                 <span className="availability-copy">
                   <small>{t.heroDate}</small>
-                  <strong>{rtl ? "غداً · المعادي" : "Tomorrow · Maadi"}</strong>
+                  <strong>{heroAvailability}</strong>
                 </span>
                 <span className="availability-arrow" aria-hidden>
                   <ChevronRight size={18} />
@@ -640,17 +649,17 @@ export default function CarePointExperience() {
         </div>
 
         <div className="hero-rail" aria-hidden>
-          <span>SCROLL TO DISCOVER</span>
+          <span>{t.scrollToDiscover}</span>
           <i />
         </div>
       </section>
 
-      <section className="experience-portal" aria-label="Explore the experience">
+      <section className="experience-portal" aria-label={t.portalLabel}>
         <div className="portal-sticky">
           <div className="portal-word" aria-hidden>BEYOND</div>
           <div className="portal-heading">
-            <span>{rtl ? "مرّر لاكتشاف التجربة" : "SCROLL INTO THE EXPERIENCE"}</span>
-            <strong>{rtl ? "الرعاية، بشكل مختلف." : "Care, reimagined."}</strong>
+            <span>{t.portalKicker}</span>
+            <strong>{t.portalTitle}</strong>
           </div>
           <div className="portal-track" aria-hidden><span /></div>
           <div className="portal-orb" aria-hidden>
@@ -660,16 +669,12 @@ export default function CarePointExperience() {
           <article className="portal-scene portal-scene--one">
             <span className="portal-index">01 / 03 · CARELENS</span>
             <h2>
-              {rtl ? "لا تبدأ باسم الإجراء." : "Don’t start with a procedure."}
-              <em>{rtl ? "ابدأ بما تريد أن تشعر به." : "Start with how you want to feel."}</em>
+              {t.portalOneTitle}
+              <em>{t.portalOneEm}</em>
             </h2>
-            <p>
-              {rtl
-                ? "تجربة بصرية تحوّل إحساسك وأهدافك إلى حوار طبي أوضح."
-                : "A visual discovery tool that turns feelings and goals into a clearer clinical conversation."}
-            </p>
+            <p>{t.portalOneBody}</p>
             <a className="portal-action" href="#carelens">
-              {rtl ? "جرّب كير لِنز" : "Try CareLens"}
+              {t.portalOneAction}
               <ArrowRight size={17} />
             </a>
           </article>
@@ -677,40 +682,32 @@ export default function CarePointExperience() {
           <article className="portal-scene portal-scene--two">
             <span className="portal-index">02 / 03 · NOOR</span>
             <h2>
-              {rtl ? "اسأل السؤال الذي يشغلك." : "Ask the question you keep thinking about."}
-              <em>{rtl ? "بخصوصية. وبدون أحكام." : "Privately. Without judgement."}</em>
+              {t.portalTwoTitle}
+              <em>{t.portalTwoEm}</em>
             </h2>
-            <p>
-              {rtl
-                ? "نور تشرح الخيارات والاستعداد والتعافي بالعربية أو الإنجليزية."
-                : "NOOR explains options, preparation, and recovery in Arabic or English."}
-            </p>
+            <p>{t.portalTwoBody}</p>
             <button className="portal-action" onClick={() => setNoorOpen(true)}>
               <NoorOrb small />
-              {rtl ? "تحدث مع نور" : "Talk to NOOR"}
+              {t.portalTwoAction}
             </button>
           </article>
 
           <article className="portal-scene portal-scene--three">
             <span className="portal-index">03 / 03 · LIVE ACCESS</span>
             <h2>
-              {rtl ? "شاهد المواعيد الحقيقية." : "See real availability."}
-              <em>{rtl ? "واحجز خلال ثوانٍ." : "Reserve in seconds."}</em>
+              {t.portalThreeTitle}
+              <em>{t.portalThreeEm}</em>
             </h2>
-            <p>
-              {rtl
-                ? "اختر الفرع والموعد، وسيحتفظ النظام بالوقت أثناء إكمال بياناتك."
-                : "Choose a clinic and time; the system protects your slot while you complete the details."}
-            </p>
+            <p>{t.portalThreeBody}</p>
             <button className="portal-action portal-action--solid" onClick={openBooking}>
               <CalendarDays size={17} />
-              {rtl ? "اعرض المواعيد الآن" : "View live times"}
+              {t.portalThreeAction}
               <ArrowRight size={17} />
             </button>
           </article>
 
           <div className="portal-footnote">
-            <span>{rtl ? "تجربة رقمية متصلة" : "ONE CONNECTED EXPERIENCE"}</span>
+            <span>{t.portalFootnote}</span>
             <span>CARE LENS · NOOR · BOOKING · CLINIC OS</span>
           </div>
         </div>
@@ -725,15 +722,15 @@ export default function CarePointExperience() {
         <div className="proof-stats">
           <article>
             <strong>25<sup>+</sup></strong>
-            <span>{rtl ? "عاماً من الخبرة" : "Years of experience"}</span>
+            <span>{t.statYears}</span>
           </article>
           <article>
-            <strong>3</strong>
-            <span>{rtl ? "عيادات في القاهرة" : "Cairo locations"}</span>
+            <strong>{BRANCHES.length}</strong>
+            <span>{t.statClinics}</span>
           </article>
           <article>
             <strong>360°</strong>
-            <span>{rtl ? "رحلة رعاية متكاملة" : "Connected care journey"}</span>
+            <span>{t.statJourney}</span>
           </article>
         </div>
       </section>
@@ -752,6 +749,21 @@ export default function CarePointExperience() {
           onBook={openBooking}
           onAsk={() => setNoorOpen(true)}
         />
+
+        {/*
+          Real links out to the treatment pages. The CareLens scene itself is a
+          canvas, so without these the whole treatment library is invisible to
+          a crawler — and to anyone who prefers reading to exploring.
+        */}
+        <nav className="treatment-links" aria-label={t.careLensKicker}>
+          {TREATMENTS.map((item) => (
+            <Link key={item.slug} href={treatmentPath(item.slug, language)}>
+              <span>{item.number}</span>
+              <strong>{treatmentCopy(item, language).title}</strong>
+              <ArrowRight size={15} />
+            </Link>
+          ))}
+        </nav>
       </section>
 
       <section className="noor-feature section-pad">
@@ -761,24 +773,11 @@ export default function CarePointExperience() {
           <div className="orbit orbit-two" />
         </div>
         <div className="noor-copy">
-          <span className="section-index section-index--light">03 — NOOR AI CONCIERGE</span>
-          <h2>
-            {rtl ? "اسأل، افهم، ثم قرر." : "Ask. Understand. Then decide."}
-          </h2>
-          <p>
-            {rtl
-              ? "نور تساعدك على استكشاف الخيارات، فهم الاستعداد والتعافي، والوصول للاستشارة المناسبة — بالعربية أو الإنجليزية."
-              : "NOOR helps you explore options, understand preparation and recovery, and reach the right consultation — in Arabic or English."}
-          </p>
+          <span className="section-index section-index--light">03 — {t.noorKicker}</span>
+          <h2>{t.noorTitle}</h2>
+          <p>{t.noorBody}</p>
           <div className="prompt-chips">
-            {(rtl
-              ? ["ماذا أتوقع بعد تجميل الأنف؟", "ما أقرب موعد؟", "كيف أستعد للاستشارة؟"]
-              : [
-                  "What is rhinoplasty recovery like?",
-                  "Show me the next appointment",
-                  "How should I prepare?",
-                ]
-            ).map((prompt) => (
+            {t.noorPrompts.map((prompt) => (
               <button key={prompt} onClick={() => setNoorOpen(true)}>
                 <Sparkles size={14} />
                 {prompt}
@@ -816,9 +815,44 @@ export default function CarePointExperience() {
         </div>
       </section>
 
+      <section className="locations section-pad" id="locations">
+        <div className="section-heading">
+          <div>
+            <span className="section-index">05 — {t.locationsKicker}</span>
+            <h2>{t.locationsTitle}</h2>
+          </div>
+          <p>{t.locationsBody}</p>
+        </div>
+        <div className="locations-grid">
+          {BRANCHES.map((branch) => (
+            <article className="location-card" key={branch.id}>
+              <div className="location-mark" aria-hidden>
+                <MapPin size={18} strokeWidth={1.5} />
+              </div>
+              <h3>{rtl ? branch.ar : branch.en}</h3>
+              <p>{rtl ? branch.addressAr : branch.addressEn}</p>
+              <div className="location-hours">
+                <span>{t.consultingHours}</span>
+                <strong>{branchOpenDays(branch, language).join(" · ")}</strong>
+              </div>
+              <div className="location-actions">
+                <a href={branch.mapUrl} target="_blank" rel="noopener noreferrer">
+                  <Navigation size={15} />
+                  {t.directions}
+                </a>
+                <button onClick={openBooking}>
+                  <CalendarDays size={15} />
+                  {t.book}
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="final-cta">
         <div>
-          <span className="section-index">BEGIN YOUR JOURNEY</span>
+          <span className="section-index">{t.finalKicker}</span>
           <h2>{t.finalTitle}</h2>
           <p>{t.finalBody}</p>
         </div>
@@ -828,7 +862,7 @@ export default function CarePointExperience() {
             onClick={() => setJourneyDesignerOpen(true)}
           >
             <Sparkles size={18} />
-            {rtl ? "صمّم رحلتك" : "Design your journey"}
+            {t.designYourJourney}
           </button>
           <button className="button button--burgundy button--large" onClick={openBooking}>
             <CalendarDays size={19} />
@@ -838,34 +872,42 @@ export default function CarePointExperience() {
         </div>
       </section>
 
-      <footer>
+      <footer className="site-footer">
         <div className="footer-brand">
           <Image src="/logo.png" alt="" width={42} height={42} unoptimized />
           <span>
-            <strong>{rtl ? "د. أشرف متولي" : "ASHRAF METWALLY"}</strong>
-            <small>{rtl ? "جراحات التجميل" : "PLASTIC SURGERY"}</small>
+            <strong>{t.brandName}</strong>
+            <small>{t.brandRole}</small>
           </span>
         </div>
-        <p>Maadi · Mohandessin · Fifth Settlement</p>
+        <p>{t.footerLocations}</p>
         <div className="footer-links">
-          <a href={`tel:${CONTACT.phone}`}>{rtl ? "اتصل بالعيادة" : "Call clinic"}</a>
+          <a href={`tel:${CONTACT.phone}`}>{t.callClinic}</a>
           <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer">
             WhatsApp
           </a>
-          <Link href="/command-center">Clinic OS</Link>
+          <a href="#locations">{t.directions}</a>
+          <Link href={rtl ? "/ar/privacy" : "/privacy"}>{t.privacy}</Link>
+          <Link href={rtl ? "/ar/terms" : "/terms"}>{t.terms}</Link>
+          <Link href="/command-center">{t.clinicOs}</Link>
         </div>
       </footer>
 
       {heroPassed && (
         <button
-          className="floating-noor"
+          className={`floating-noor${footerInView ? " floating-noor--docked" : ""}`}
           onClick={() => setNoorOpen(true)}
-          aria-label={rtl ? "اسأل نور" : "Ask NOOR, the AI concierge"}
+          aria-label={t.floatingAria}
+          // While docked the button is inert: hidden from assistive technology
+          // and out of the tab order, so it cannot be reached by a route the
+          // pointer no longer has either. The footer's own links take over.
+          aria-hidden={footerInView || undefined}
+          tabIndex={footerInView ? -1 : 0}
         >
           <NoorOrb small />
           <span className="floating-noor-copy">
-            <small>{rtl ? "مساعدة ذكية" : "AI CONCIERGE"}</small>
-            <strong>{rtl ? "اسأل نور" : "Ask NOOR"}</strong>
+            <small>{t.floatingKicker}</small>
+            <strong>{t.floatingAction}</strong>
           </span>
         </button>
       )}
@@ -903,12 +945,10 @@ function NoorPanel({
   onClose: () => void;
   onBook: () => void;
 }) {
+  const t = copyFor(language);
   const rtl = language === "ar";
-  const initial = rtl
-    ? "أهلاً، أنا نور. أستطيع مساعدتك في فهم الخيارات، الاستعداد، التعافي أو العثور على موعد مناسب. ما الذي يشغل بالك؟"
-    : "Hello, I’m NOOR. I can help you understand options, preparation, recovery, or find a suitable appointment. What’s on your mind?";
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "assistant", text: initial },
+    { role: "assistant", text: t.noorGreeting },
   ]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -917,7 +957,7 @@ function NoorPanel({
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   useEffect(() => {
-    chatEnd.current?.scrollIntoView({ behavior: "smooth" });
+    chatEnd.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, thinking]);
 
   // Speech and timers outlive the component unless they are torn down: a reply
@@ -932,36 +972,22 @@ function NoorPanel({
     };
   }, []);
 
+  /**
+   * Keyword routing over a fixed, clinician-reviewable answer set. There is no
+   * language model behind this — the "Guided answers" label in the header says
+   * so rather than implying a capability the panel does not have.
+   */
   function answerFor(question: string) {
     const normalized = question.toLowerCase();
-    if (/book|appointment|available|موعد|حجز/.test(normalized)) {
-      return rtl
-        ? "أستطيع عرض المواعيد المتاحة الآن في المعادي أو المهندسين أو التجمع. اضغط «عرض المواعيد» وسأكمل معك."
-        : "I can show live availability in Maadi, Mohandessin, or Fifth Settlement now. Select “View times” and I’ll take you there.";
-    }
-    if (/nose|rhino|أنف|تجميل الأنف/.test(normalized)) {
-      return rtl
-        ? "في استشارة تجميل الأنف، يقيّم د. أشرف التناسق والتنفس وسُمك الجلد والتوقعات معاً. يختلف التعافي من شخص لآخر، لكن التورم والكدمات الأولية غالباً تتحسن تدريجياً خلال الأسابيع الأولى. القرار النهائي يحتاج كشفاً طبياً."
-        : "In a rhinoplasty consultation, Dr. Ashraf considers facial balance, breathing, skin thickness, and expectations together. Early swelling and bruising commonly ease over the first weeks, while refinement continues longer. Your exact plan requires an in-person assessment.";
-    }
-    if (/recover|healing|recovery|تعافي|نقاهة/.test(normalized)) {
-      return rtl
-        ? "مدة التعافي تعتمد على الإجراء وصحتك وطبيعة عملك. سنناقش العودة للنشاط، العناية بالجرح، المتابعة والعلامات التي تستدعي التواصل قبل تحديد الموعد."
-        : "Recovery depends on the procedure, your health, and your daily routine. Before scheduling, we’ll clarify time away from work, wound care, follow-up, movement, and when to contact the clinic.";
-    }
-    if (/price|cost|تكلفة|سعر/.test(normalized)) {
-      return rtl
-        ? "التكلفة تتحدد بعد التقييم لأنها تعتمد على الخطة، المستشفى، التخدير والمتابعة. يمكنني حجز استشارة تحصل بعدها على عرض واضح ومفصل."
-        : "Cost is confirmed after assessment because it depends on the plan, facility, anaesthesia, and follow-up. I can reserve a consultation so you receive a clear, itemised proposal.";
-    }
-    if (/prepare|consult|استعد|استشارة/.test(normalized)) {
-      return rtl
-        ? "اكتب أهدافك وأسئلتك، وأحضر تاريخك الطبي وقائمة الأدوية وصوراً مرجعية إن وجدت. الأهم أن تكون واضحاً بشأن النتيجة التي تريدها وما لا تريده."
-        : "Bring your goals, questions, medical history, medication list, and optional reference images. Most importantly, be clear about what you want to feel different—and what you do not want changed.";
-    }
-    return rtl
-      ? "أفهمك. أفضل خطوة هي تحديد المنطقة أو الهدف الذي تفكر فيه، ثم أشرح لك ما يمكن مناقشته في الاستشارة بدون افتراض تشخيص. هل تسأل عن الوجه، الأنف، القوام أم التعافي؟"
-      : "I understand. A useful next step is to name the area or change you’re considering, and I’ll explain what can be explored in consultation without assuming a diagnosis. Is this about the face, nose, body, or recovery?";
+    const answers = t.noorAnswers;
+    if (/book|appointment|available|موعد|حجز/.test(normalized)) return answers.booking;
+    if (/where|location|address|branch|direction|map|فرع|عنوان|مكان|خريطة/.test(normalized))
+      return answers.location;
+    if (/nose|rhino|أنف|تجميل الأنف/.test(normalized)) return answers.nose;
+    if (/recover|healing|recovery|تعافي|نقاهة/.test(normalized)) return answers.recovery;
+    if (/price|cost|تكلفة|سعر/.test(normalized)) return answers.cost;
+    if (/prepare|consult|استعد|استشارة/.test(normalized)) return answers.prepare;
+    return answers.fallback;
   }
 
   function submit(question: string) {
@@ -989,12 +1015,7 @@ function NoorPanel({
     if (!Recognition) {
       setMessages((current) => [
         ...current,
-        {
-          role: "assistant",
-          text: rtl
-            ? "الاستماع الصوتي غير متاح في هذا المتصفح، لكن يمكنك كتابة سؤالك هنا."
-            : "Voice listening is not available in this browser, but you can type your question here.",
-        },
+        { role: "assistant", text: t.noorNoVoice },
       ]);
       return;
     }
@@ -1023,7 +1044,7 @@ function NoorPanel({
   }
 
   return (
-    <Modal onClose={onClose} label={rtl ? "نور، المساعدة الذكية" : "NOOR, the AI concierge"}>
+    <Modal onClose={onClose} label={t.noorPanelLabel}>
       <aside className="noor-panel" dir={rtl ? "rtl" : "ltr"}>
         <div className="noor-panel-header">
           <div>
@@ -1032,16 +1053,16 @@ function NoorPanel({
               <strong>NOOR</strong>
               <small>
                 <i />
-                {rtl ? "متصلة الآن" : "Online now"}
+                {t.noorOnline}
               </small>
             </span>
           </div>
-          <button onClick={onClose} aria-label="Close NOOR">
+          <button onClick={onClose} aria-label={t.noorClose}>
             <X />
           </button>
         </div>
-        <div className="chat-log">
-          <div className="chat-date">{rtl ? "اليوم" : "TODAY"}</div>
+        <div className="chat-log" role="log" aria-live="polite">
+          <div className="chat-date">{t.noorToday}</div>
           {messages.map((message, index) => (
             <div className={`chat-message chat-message--${message.role}`} key={index}>
               {message.role === "assistant" && <NoorOrb small />}
@@ -1057,13 +1078,9 @@ function NoorPanel({
           <div ref={chatEnd} />
         </div>
         <div className="quick-prompts">
-          <button onClick={() => submit(rtl ? "ما أقرب موعد؟" : "What is the next available time?")}>
-            {rtl ? "أقرب موعد" : "Next appointment"}
-          </button>
-          <button onClick={() => submit(rtl ? "كيف أستعد؟" : "How should I prepare?")}>
-            {rtl ? "الاستعداد" : "Prepare"}
-          </button>
-          <button onClick={onBook}>{rtl ? "عرض المواعيد" : "View times"}</button>
+          <button onClick={() => submit(t.noorAskNext)}>{t.noorQuickNext}</button>
+          <button onClick={() => submit(t.noorAskPrepare)}>{t.noorQuickPrepare}</button>
+          <button onClick={onBook}>{t.noorQuickTimes}</button>
         </div>
         <form
           className="chat-input"
@@ -1072,27 +1089,25 @@ function NoorPanel({
             submit(input);
           }}
         >
-          <button type="button" onClick={startVoice} aria-label="Speak">
+          <button type="button" onClick={startVoice} aria-label={t.noorSpeak}>
             <Mic size={18} />
           </button>
           <input
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            placeholder={rtl ? "اكتب سؤالك هنا..." : "Ask anything about your care..."}
+            placeholder={t.noorPlaceholder}
           />
-          <button type="submit" aria-label="Send">
+          <button type="submit" aria-label={t.noorSend}>
             <ArrowRight size={18} />
           </button>
         </form>
         <button className="listen-button" onClick={speakLast}>
           <Zap size={13} />
-          {rtl ? "استمع لآخر إجابة" : "Listen to the last answer"}
+          {t.noorListen}
         </button>
         <p className="noor-legal">
           <ShieldCheck size={13} />
-          {rtl
-            ? "معلومات تثقيفية فقط. الحالات العاجلة تحتاج تواصلاً طبياً مباشراً."
-            : "Educational guidance only. Urgent concerns require direct medical care."}
+          {t.noorLegal}
         </p>
       </aside>
     </Modal>
@@ -1106,6 +1121,7 @@ function BookingModal({
   language: Language;
   onClose: () => void;
 }) {
+  const t = copyFor(language);
   const rtl = language === "ar";
   const [step, setStep] = useState<"slots" | "details" | "success">("slots");
   const [service, setService] = useState(SERVICES[0].id);
@@ -1119,15 +1135,20 @@ function BookingModal({
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [turnstileSiteKey, setTurnstileSiteKey] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [bookingId, setBookingId] = useState("");
+  const [confirmation, setConfirmation] = useState<{
+    reference: string;
+    manageToken: string | null;
+  } | null>(null);
   const selectedDay = useMemo(
     () => days.find((day) => day.date === selectedDate),
     [days, selectedDate],
   );
-  const branchLabel = BRANCHES.find((item) => item.id === branch);
-  const serviceLabel = SERVICES.find((item) => item.id === service);
+  const branchDetail = BRANCHES.find((item) => item.id === branch);
+  const serviceDetail = SERVICES.find((item) => item.id === service);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1146,10 +1167,14 @@ function BookingModal({
     )
       .then(async (response) => {
         if (!response.ok) throw new Error("unavailable");
-        return (await response.json()) as { dates: AvailabilityDay[] };
+        return (await response.json()) as {
+          dates: AvailabilityDay[];
+          turnstileSiteKey?: string | null;
+        };
       })
       .then((data) => {
         setDays(data.dates ?? []);
+        setTurnstileSiteKey(data.turnstileSiteKey ?? null);
         // Land on the first day that actually has a free slot.
         setSelectedDate(
           (data.dates ?? []).find((day) => day.slots.length > 0)?.date ??
@@ -1184,15 +1209,11 @@ function BookingModal({
         setStep("slots");
         setSelectedTime("");
         setReloadKey((key) => key + 1);
-        setError(
-          rtl
-            ? "انتهت مدة حجز الموعد المؤقت. اختر وقتاً جديداً."
-            : "Your held time expired. Please choose a new time.",
-        );
+        setError(t.holdExpired);
       }
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [holdExpiresAt, rtl]);
+  }, [holdExpiresAt, t.holdExpired]);
 
   async function holdSlot() {
     if (!selectedTime || !selectedDate) return;
@@ -1207,6 +1228,7 @@ function BookingModal({
           service,
           slotDate: selectedDate,
           slotTime: selectedTime,
+          turnstileToken,
         }),
       });
       const data = (await response.json()) as {
@@ -1224,9 +1246,9 @@ function BookingModal({
         expiresAt ? Math.max(0, Math.round((expiresAt - Date.now()) / 1000)) : 0,
       );
       setStep("details");
-      // Another visitor may have taken a slot while this one was choosing.
-      if (response.status === 409) setReloadKey((key) => key + 1);
     } catch (caught) {
+      // Any failure — including another visitor taking the slot first — means
+      // the offered times are stale, so they are refetched.
       setError(caught instanceof Error ? caught.message : "Please choose another time.");
       setReloadKey((key) => key + 1);
     } finally {
@@ -1248,16 +1270,20 @@ function BookingModal({
           patientName: form.get("name"),
           patientPhone: form.get("phone"),
           patientEmail: form.get("email"),
+          patientNote: form.get("note"),
           consent: form.get("consent") === "on",
           language,
         }),
       });
       const data = (await response.json()) as {
-        booking?: { id?: string };
+        booking?: { reference?: string; manageToken?: string | null };
         message?: string;
       };
       if (!response.ok) throw new Error(data.message || "Unable to confirm.");
-      setBookingId(data.booking?.id?.slice(0, 8).toUpperCase() || "");
+      setConfirmation({
+        reference: data.booking?.reference ?? "",
+        manageToken: data.booking?.manageToken ?? null,
+      });
       setHoldExpiresAt(0);
       setStep("success");
     } catch (caught) {
@@ -1275,19 +1301,13 @@ function BookingModal({
         <div className="booking-top">
           <div>
             <span className="section-index">
-              {step === "slots" ? "01" : step === "details" ? "02" : "03"} — LIVE BOOKING
+              {step === "slots" ? "01" : step === "details" ? "02" : "03"} — {t.bookingStepLabel}
             </span>
             <h2 id="booking-modal-title">
-              {step === "success"
-                ? rtl
-                  ? "تم حجز زيارتك."
-                  : "Your visit is reserved."
-                : rtl
-                  ? "اختر الموعد المناسب."
-                  : "Choose a time that fits."}
+              {step === "success" ? t.bookingSuccessTitle : t.bookingTitle}
             </h2>
           </div>
-          <button onClick={onClose} aria-label={rtl ? "إغلاق الحجز" : "Close booking"}>
+          <button onClick={onClose} aria-label={t.bookingClose}>
             <X />
           </button>
         </div>
@@ -1296,7 +1316,12 @@ function BookingModal({
           <div className="booking-content">
             <div className="booking-fields">
               <label>
-                <span>{rtl ? "نوع الاستشارة" : "Consultation type"}</span>
+                <span>{t.consultationType}</span>
+                {/*
+                  Grouped by line of care — the practice runs surgical,
+                  non-surgical and dental, and a flat list of ten makes a
+                  patient scan for theirs.
+                */}
                 <select
                   value={service}
                   onChange={(event) => {
@@ -1304,15 +1329,22 @@ function BookingModal({
                     setService(event.target.value);
                   }}
                 >
-                  {SERVICES.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {rtl ? item.ar : item.en}
-                    </option>
+                  {SERVICE_CATEGORIES.map((category) => (
+                    <optgroup
+                      key={category.id}
+                      label={rtl ? category.ar : category.en}
+                    >
+                      {servicesInCategory(category.id).map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {rtl ? item.ar : item.en}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               </label>
               <label>
-                <span>{rtl ? "الفرع" : "Clinic"}</span>
+                <span>{t.clinic}</span>
                 <select
                   value={branch}
                   onChange={(event) => {
@@ -1329,23 +1361,30 @@ function BookingModal({
               </label>
             </div>
 
+            {branchDetail && (
+              <a
+                className="booking-map-link"
+                href={branchDetail.mapUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <MapPin size={14} />
+                {rtl ? branchDetail.addressAr : branchDetail.addressEn}
+                <span>{t.openInMaps} ↗</span>
+              </a>
+            )}
+
             {loadFailed ? (
               <div className="booking-unavailable">
-                <p>
-                  {rtl
-                    ? "تعذر تحميل المواعيد المتاحة الآن."
-                    : "We could not load live availability right now."}
-                </p>
+                <p>{t.loadFailed}</p>
                 <div className="booking-unavailable-actions">
                   <button
                     className="button button--dark"
                     onClick={() => setReloadKey((key) => key + 1)}
                   >
-                    {rtl ? "إعادة المحاولة" : "Try again"}
+                    {t.tryAgain}
                   </button>
-                  <a href={`tel:${CONTACT.phone}`}>
-                    {rtl ? "اتصل بالعيادة" : "Call the clinic"}
-                  </a>
+                  <a href={`tel:${CONTACT.phone}`}>{t.callTheClinic}</a>
                   <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer">
                     WhatsApp
                   </a>
@@ -1353,12 +1392,14 @@ function BookingModal({
               </div>
             ) : (
               <>
-                <div className="date-tabs">
+                <div className="date-tabs" role="group" aria-label={t.availableTimes}>
                   {days.map((day) => (
                     <button
                       key={day.date}
                       className={selectedDate === day.date ? "active" : ""}
                       disabled={day.slots.length === 0}
+                      aria-pressed={selectedDate === day.date}
+                      title={day.closure ?? undefined}
                       onClick={() => {
                         setSelectedDate(day.date);
                         setSelectedTime("");
@@ -1372,18 +1413,19 @@ function BookingModal({
                 <div className="slot-heading">
                   <span>
                     <Clock3 size={16} />
-                    {rtl ? "المواعيد المتاحة" : "Available times"}
+                    {t.availableTimes}
                   </span>
                   <small>
                     <i />
-                    {loading ? (rtl ? "جاري التحديث" : "Refreshing") : rtl ? "مباشر" : "Live"}
+                    {loading ? t.refreshing : t.live}
                   </small>
                 </div>
-                <div className="slots" aria-busy={loading}>
+                <div className="slots" role="group" aria-label={t.availableTimes} aria-busy={loading}>
                   {(selectedDay?.slots ?? []).map((time) => (
                     <button
                       className={selectedTime === time ? "active" : ""}
                       key={time}
+                      aria-pressed={selectedTime === time}
                       onClick={() => setSelectedTime(time)}
                     >
                       {time}
@@ -1391,13 +1433,22 @@ function BookingModal({
                   ))}
                 </div>
                 {!loading && (selectedDay?.slots.length ?? 0) === 0 && (
-                  <p className="slots-empty">
-                    {rtl
-                      ? "لا توجد مواعيد متاحة في هذا اليوم. جرّب يوماً أو فرعاً آخر."
-                      : "No times left on this day. Try another day or clinic."}
-                  </p>
+                  <p className="slots-empty">{t.noTimesToday}</p>
                 )}
               </>
+            )}
+
+            {/*
+              Shown only once a time is chosen, so the patient is not asked to
+              prove anything before they have expressed any intent — and only
+              when the server actually has bot protection configured.
+            */}
+            {turnstileSiteKey && selectedTime && (
+              <Turnstile
+                siteKey={turnstileSiteKey}
+                language={language}
+                onToken={setTurnstileToken}
+              />
             )}
 
             {error && (
@@ -1408,16 +1459,20 @@ function BookingModal({
             <div className="booking-footer">
               <p>
                 <ShieldCheck size={15} />
-                {rtl
-                  ? "يُحفظ الموعد لمدة ٥ دقائق أثناء إكمال البيانات."
-                  : "Your time is held for 5 minutes while you complete the details."}
+                {t.holdNotice}
               </p>
               <button
                 className="button button--burgundy"
                 onClick={holdSlot}
-                disabled={!selectedTime || submitting || loading}
+                disabled={
+                  !selectedTime ||
+                  submitting ||
+                  loading ||
+                  // Only gates when a widget is actually on screen.
+                  Boolean(turnstileSiteKey && !turnstileToken)
+                }
               >
-                {submitting ? (rtl ? "لحظة..." : "Holding...") : rtl ? "متابعة" : "Continue"}
+                {submitting ? t.holding : t.continue}
                 <ArrowRight size={16} />
               </button>
             </div>
@@ -1430,36 +1485,34 @@ function BookingModal({
               <div>
                 <CalendarDays size={20} />
                 <span>
-                  <small>{rtl ? serviceLabel?.ar : serviceLabel?.en}</small>
+                  <small>{rtl ? serviceDetail?.ar : serviceDetail?.en}</small>
                   <strong>{selectedDay?.day} · {selectedTime}</strong>
                 </span>
               </div>
               <span>
                 <MapPin size={14} />
-                {rtl ? branchLabel?.ar : branchLabel?.en}
+                {rtl ? branchDetail?.ar : branchDetail?.en}
               </span>
             </div>
             {secondsLeft > 0 && (
               <p className="hold-countdown" role="status">
                 <Clock3 size={14} />
-                {rtl
-                  ? `هذا الموعد محجوز لك لمدة ${countdown}`
-                  : `This time is held for you for ${countdown}`}
+                {t.heldFor(countdown)}
               </p>
             )}
             <div className="form-grid">
               <label>
-                <span>{rtl ? "الاسم بالكامل" : "Full name"}</span>
+                <span>{t.fullName}</span>
                 <input
                   name="name"
                   required
                   maxLength={120}
                   autoComplete="name"
-                  placeholder={rtl ? "اكتب اسمك" : "Your name"}
+                  placeholder={t.yourName}
                 />
               </label>
               <label>
-                <span>{rtl ? "رقم الهاتف" : "Mobile number"}</span>
+                <span>{t.mobileNumber}</span>
                 <input
                   name="phone"
                   type="tel"
@@ -1470,7 +1523,7 @@ function BookingModal({
                 />
               </label>
               <label className="full">
-                <span>{rtl ? "البريد الإلكتروني (اختياري)" : "Email (optional)"}</span>
+                <span>{t.emailOptional}</span>
                 <input
                   name="email"
                   type="email"
@@ -1479,14 +1532,19 @@ function BookingModal({
                   placeholder="name@example.com"
                 />
               </label>
+              <label className="full">
+                <span>{t.noteOptional}</span>
+                <textarea
+                  name="note"
+                  rows={2}
+                  maxLength={500}
+                  placeholder={t.notePlaceholder}
+                />
+              </label>
             </div>
             <label className="consent">
               <input type="checkbox" name="consent" required />
-              <span>
-                {rtl
-                  ? "أوافق على تواصل العيادة لتأكيد الموعد."
-                  : "I agree to be contacted by the clinic to confirm my appointment."}
-              </span>
+              <span>{t.consentLabel}</span>
             </label>
             {error && (
               <p className="form-error" role="alert">
@@ -1495,12 +1553,10 @@ function BookingModal({
             )}
             <div className="booking-footer">
               <button type="button" className="back-button" onClick={() => setStep("slots")}>
-                {rtl ? "العودة" : "Back"}
+                {t.back}
               </button>
               <button className="button button--burgundy" disabled={submitting}>
-                {submitting
-                  ? rtl ? "جاري التأكيد..." : "Confirming..."
-                  : rtl ? "تأكيد الموعد" : "Confirm appointment"}
+                {submitting ? t.confirming : t.confirmAppointment}
                 <Check size={16} />
               </button>
             </div>
@@ -1510,18 +1566,41 @@ function BookingModal({
         {step === "success" && (
           <div className="booking-success">
             <div className="success-mark"><Check size={32} /></div>
-            {bookingId && <span className="confirmation-id">REF · {bookingId}</span>}
+            {confirmation?.reference && (
+              <span className="confirmation-id">REF · {confirmation.reference}</span>
+            )}
             <h3>
-              {selectedDay?.day} {rtl ? "الساعة" : "at"} {selectedTime}
+              {selectedDay?.day} {t.at} {selectedTime}
             </h3>
-            <p>
-              {rtl
-                ? `تم حجز الموعد في فرع ${branchLabel?.ar}. سيتواصل معك فريق العيادة لتأكيد التفاصيل.`
-                : `Your ${branchLabel?.en} visit is in the calendar. The clinic team will contact you to confirm the details.`}
-            </p>
+            <p>{t.bookingSuccessBody((rtl ? branchDetail?.ar : branchDetail?.en) ?? "")}</p>
+
+            <div className="success-links">
+              {confirmation?.manageToken && (
+                <a
+                  className="success-primary"
+                  href={`/api/appointments/${confirmation.manageToken}/calendar`}
+                >
+                  <CalendarDays size={16} />
+                  {t.addToCalendar}
+                </a>
+              )}
+              {branchDetail && (
+                <a href={branchDetail.mapUrl} target="_blank" rel="noopener noreferrer">
+                  <Navigation size={16} />
+                  {t.directions}
+                </a>
+              )}
+              {confirmation?.manageToken && (
+                <a href={`/appointment/${confirmation.manageToken}`}>
+                  <Clock3 size={16} />
+                  {t.manageBooking}
+                </a>
+              )}
+            </div>
+
             <div className="success-actions">
               <button className="button button--dark" onClick={onClose}>
-                {rtl ? "تم" : "Done"}
+                {t.done}
               </button>
               <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer">
                 <MessageCircle size={16} />

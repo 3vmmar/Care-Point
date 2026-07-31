@@ -2,15 +2,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   addDays,
+  addMinutesToSlot,
+  clinicInstant,
   clinicToday,
+  daysBetween,
   formatDayLabel,
+  formatSlotTime,
   isDateKey,
   isOpenDay,
+  isSlotBookable,
   isSlotTime,
   openDayKeys,
   weekdayIndex,
 } from "../lib/dates.ts";
-import { AVAILABILITY_WINDOW_DAYS, CLOSED_WEEKDAYS } from "../lib/clinic.ts";
+import {
+  AVAILABILITY_WINDOW_DAYS,
+  BOOKING_LEAD_HOURS,
+  CLOSED_WEEKDAYS,
+} from "../lib/clinic.ts";
 
 test("clinic days are derived in Cairo, not UTC", () => {
   // 22:30 UTC on 1 March is already 2 March in Cairo (UTC+2). Deriving the day
@@ -33,6 +42,12 @@ test("addDays crosses month and year boundaries", () => {
   assert.equal(addDays("2026-01-01", -1), "2025-12-31");
 });
 
+test("daysBetween counts whole calendar days in both directions", () => {
+  assert.equal(daysBetween("2026-07-28", "2026-08-04"), 7);
+  assert.equal(daysBetween("2026-08-04", "2026-07-28"), -7);
+  assert.equal(daysBetween("2026-07-28", "2026-07-28"), 0);
+});
+
 test("weekdayIndex matches the calendar", () => {
   assert.equal(weekdayIndex("2026-07-26"), 0); // Sunday
   assert.equal(weekdayIndex("2026-07-31"), 5); // Friday
@@ -47,13 +62,52 @@ test("closed days are excluded from the booking window", () => {
   }
 });
 
-test("the booking window starts tomorrow and is strictly increasing", () => {
+test("the booking window opens today and is strictly increasing", () => {
   const now = new Date("2026-07-28T09:00:00.000Z");
   const days = openDayKeys(AVAILABILITY_WINDOW_DAYS, now);
-  assert.ok(days[0] > clinicToday(now), "same-day booking must not be offered");
+  // Same-day booking is governed per slot by lead time, not by discarding the
+  // whole day — a clinic open until 20:30 can still take an 18:00 booking.
+  assert.equal(days[0], clinicToday(now));
   for (let index = 1; index < days.length; index += 1) {
     assert.ok(days[index] > days[index - 1], "days must be ordered and unique");
   }
+});
+
+test("clinicInstant resolves a clinic wall-clock time to the right instant", () => {
+  // Summer: Cairo runs at UTC+3, so 15:00 local is 12:00Z.
+  assert.equal(
+    clinicInstant("2026-07-29", "15:00").toISOString(),
+    "2026-07-29T12:00:00.000Z",
+  );
+  // Winter: UTC+2, so the same wall clock is 13:00Z.
+  assert.equal(
+    clinicInstant("2026-01-15", "15:00").toISOString(),
+    "2026-01-15T13:00:00.000Z",
+  );
+});
+
+test("lead time keeps imminent slots out of the offered window", () => {
+  const date = "2026-07-29"; // 15:00 local === 12:00Z
+  assert.equal(BOOKING_LEAD_HOURS, 4);
+
+  // Five hours ahead: bookable.
+  assert.ok(isSlotBookable(date, "15:00", new Date("2026-07-29T07:00:00.000Z")));
+  // Three hours ahead: inside the notice period, so it must not be offered.
+  assert.ok(!isSlotBookable(date, "15:00", new Date("2026-07-29T09:00:00.000Z")));
+  // Already past.
+  assert.ok(!isSlotBookable(date, "15:00", new Date("2026-07-29T13:00:00.000Z")));
+});
+
+test("lead time is exact at the boundary", () => {
+  // Exactly four hours before must still be accepted, or the UI and the hold
+  // endpoint disagree about the very slot the patient just clicked.
+  assert.ok(isSlotBookable("2026-07-29", "15:00", new Date("2026-07-29T08:00:00.000Z")));
+});
+
+test("closed days are never bookable regardless of lead time", () => {
+  // 2026-07-31 is a Friday.
+  assert.equal(weekdayIndex("2026-07-31"), 5);
+  assert.ok(!isSlotBookable("2026-07-31", "15:00", new Date("2026-07-20T06:00:00.000Z")));
 });
 
 test("date keys and slot times are validated strictly", () => {
@@ -77,4 +131,17 @@ test("day labels render in the requested locale", () => {
   const arabic = formatDayLabel("2026-07-29", "ar-EG");
   assert.ok(arabic.weekday.length > 0);
   assert.notEqual(arabic.weekday, english.weekday);
+});
+
+test("slot times render as 12-hour for staff surfaces", () => {
+  assert.match(formatSlotTime("15:00"), /3[:.]00/);
+  assert.match(formatSlotTime("09:30"), /9[:.]30/);
+  // Anything that is not a slot time is passed through untouched.
+  assert.equal(formatSlotTime("nonsense"), "nonsense");
+});
+
+test("appointment end times wrap correctly", () => {
+  assert.equal(addMinutesToSlot("15:00", 45), "15:45");
+  assert.equal(addMinutesToSlot("23:30", 60), "00:30");
+  assert.equal(addMinutesToSlot("10:30", 90), "12:00");
 });

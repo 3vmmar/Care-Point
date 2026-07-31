@@ -1,6 +1,19 @@
-/** Cloudflare Worker entry point for the vinext-starter template. */
-import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
+/** Cloudflare Worker entry point. */
+import {
+  handleImageOptimization,
+  DEFAULT_DEVICE_SIZES,
+  DEFAULT_IMAGE_SIZES,
+} from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import {
+  appointmentsNeedingReminder,
+  markReminderSent,
+  purgeExpiredContactDetails,
+  releaseExpiredHolds,
+} from "../db/bookings";
+import { notify } from "../lib/notify";
+import { reportError } from "../lib/observability";
+import { purgeExpiredAuditLog } from "../db/audit";
 
 interface Env {
   ASSETS: Fetcher;
@@ -19,6 +32,112 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
+interface ScheduledEvent {
+  cron: string;
+  scheduledTime: number;
+}
+
+/**
+ * Response headers applied to every document.
+ *
+ * The site renders patient-identifying pages (`/command-center`,
+ * `/appointment/*`), so clickjacking and referrer leakage are not theoretical:
+ * a framed dashboard or a manage-token leaked through `Referer` both expose
+ * real patient data.
+ *
+ * The CSP allows inline styles and scripts because the framework emits both;
+ * it still removes the classes of attack that matter most here by pinning every
+ * other source to this origin and forbidding framing outright.
+ */
+const SECURITY_HEADERS: Record<string, string> = {
+  "Content-Security-Policy": [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data: https://fonts.gstatic.com",
+    "connect-src 'self' https://challenges.cloudflare.com",
+    // Turnstile renders its challenge in a frame served from Cloudflare.
+    "frame-src https://challenges.cloudflare.com",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+    "upgrade-insecure-requests",
+  ].join("; "),
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), geolocation=(), payment=(), usb=()",
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+  "Cross-Origin-Opener-Policy": "same-origin",
+};
+
+/** The trigger that carries the once-a-day jobs. Must match `vite.config.ts`. */
+const DAILY_CRON = "0 3 * * *";
+
+/**
+ * Tomorrow's reminders, sent one at a time.
+ *
+ * Each appointment is stamped before its message is attempted, so a transport
+ * that fails halfway cannot cause the same patient to be reminded again on the
+ * next run. Sequential rather than parallel: a clinic day is a few dozen
+ * appointments, and a burst of parallel sends is the fastest way to get a
+ * transactional email domain rate-limited.
+ */
+async function sendDueReminders(): Promise<void> {
+  let due: Awaited<ReturnType<typeof appointmentsNeedingReminder>>;
+  try {
+    due = await appointmentsNeedingReminder();
+  } catch (error) {
+    await reportError(error, { where: "cron: read due reminders" });
+    return;
+  }
+  if (due.length === 0) return;
+
+  let sent = 0;
+  for (const appointment of due) {
+    try {
+      await markReminderSent(appointment.id);
+      await notify({
+        kind: "booking.reminder",
+        appointment: {
+          id: appointment.id,
+          branch: appointment.branch,
+          service: appointment.service,
+          slotDate: appointment.slotDate,
+          slotTime: appointment.slotTime,
+          patientName: appointment.patientName,
+          patientPhone: appointment.patientPhone,
+          patientEmail: appointment.patientEmail,
+          language: appointment.language,
+        },
+      });
+      sent += 1;
+    } catch (error) {
+      await reportError(error, {
+        where: "cron: send reminder",
+        extra: { appointmentId: appointment.id },
+      });
+    }
+  }
+  console.log(`[cron] sent ${sent} of ${due.length} reminders`);
+}
+
+function withSecurityHeaders(response: Response): Response {
+  // A body-less response (304, 204) must not be given one, and immutable
+  // asset responses are cheaper to leave untouched.
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    if (!headers.has(name)) headers.set(name, value);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 // Image security config. SVG sources with .svg extension auto-skip the
 // optimization endpoint on the client side (served directly, no proxy).
 // To route SVGs through the optimizer (with security headers), set
@@ -31,16 +150,61 @@ const worker = {
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
-      return handleImageOptimization(request, {
-        fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
-        transformImage: async (body, { width, format, quality }) => {
-          const result = await env.IMAGES.input(body).transform(width > 0 ? { width } : {}).output({ format, quality });
-          return result.response();
+      return handleImageOptimization(
+        request,
+        {
+          fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
+          transformImage: async (body, { width, format, quality }) => {
+            const result = await env.IMAGES.input(body)
+              .transform(width > 0 ? { width } : {})
+              .output({ format, quality });
+            return result.response();
+          },
         },
-      }, allowedWidths);
+        allowedWidths,
+      );
     }
 
-    return handler.fetch(request, env, ctx);
+    return withSecurityHeaders(await handler.fetch(request, env, ctx));
+  },
+
+  /**
+   * Scheduled maintenance, configured in `vite.config.ts`.
+   *
+   * Releasing expired holds used to run as a DELETE on every availability read,
+   * which meant a database write on every page view of the booking modal. Reads
+   * already ignore expired holds, so this is housekeeping and belongs here.
+   */
+  async scheduled(event: ScheduledEvent, _env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      (async () => {
+        try {
+          const released = await releaseExpiredHolds();
+          if (released > 0) console.log(`[cron] released ${released} expired holds`);
+        } catch (error) {
+          await reportError(error, { where: "cron: release expired holds" });
+        }
+
+        // The daily trigger carries the jobs that must not run every ten minutes.
+        if (event.cron === DAILY_CRON) {
+          try {
+            const purged = await purgeExpiredContactDetails();
+            if (purged > 0) console.log(`[cron] purged contact details on ${purged} rows`);
+          } catch (error) {
+            await reportError(error, { where: "cron: retention purge" });
+          }
+
+          try {
+            const trimmed = await purgeExpiredAuditLog();
+            if (trimmed > 0) console.log(`[cron] trimmed ${trimmed} audit entries`);
+          } catch (error) {
+            await reportError(error, { where: "cron: audit retention" });
+          }
+
+          await sendDueReminders();
+        }
+      })(),
+    );
   },
 };
 

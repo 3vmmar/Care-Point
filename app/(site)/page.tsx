@@ -1,5 +1,5 @@
-import CarePointExperience from "./components/CarePointExperience";
+import CarePointExperience from "@/app/components/CarePointExperience";
 
 export default function Home() {
-  return <CarePointExperience />;
+  return <CarePointExperience language="en" />;
 }

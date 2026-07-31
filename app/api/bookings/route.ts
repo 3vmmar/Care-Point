@@ -1,37 +1,155 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   confirmAppointment,
-  getBookingSummary,
-  listConfirmedAppointments,
+  dailyLoad,
+  getDashboardSummary,
+  listAppointments,
+  type AppointmentStatus,
 } from "@/db/bookings";
-import { getClinicStaff } from "@/lib/auth";
+import { getClinicStaff, staffAllowlistConfigured } from "@/lib/auth";
+import { BRANCH_IDS } from "@/lib/clinic";
+import { addDays, clinicTimeNow, clinicToday, isDateKey, isOpenDay } from "@/lib/dates";
+import { dayCapacity } from "@/lib/schedule";
+import { notify } from "@/lib/notify";
+import { reportError } from "@/lib/observability";
+import { recordAccess } from "@/db/audit";
+import { clientFingerprint } from "@/lib/request";
 
 const NAME_MAX = 120;
 const EMAIL_MAX = 200;
+const NOTE_MAX = 500;
 /** Deliberately permissive: international formats vary, we only reject nonsense. */
 const PHONE_PATTERN = /^[+()\d\s-]{7,20}$/;
+
+const VALID_STATUSES: AppointmentStatus[] = [
+  "confirmed",
+  "checked_in",
+  "completed",
+  "no_show",
+  "cancelled",
+];
+
+/** Patient records must never sit in a shared or browser cache. */
+const PRIVATE_HEADERS = { "Cache-Control": "no-store, private" };
+
+/**
+ * Booked-vs-available for the next fortnight.
+ *
+ * The number of consultation slots a day holds is simply the length of the
+ * branch's published slot list, so utilisation needs no extra table — and it
+ * cannot drift out of date when the clinic changes its hours.
+ */
+function buildCapacity(
+  today: string,
+  branchFilter: string | undefined,
+  load: Array<{ date: string; branch: string; total: number }>,
+) {
+  return Array.from({ length: 14 }, (_, index) => {
+    const date = addDays(today, index);
+    const open = isOpenDay(date);
+    const booked = load
+      .filter((row) => row.date === date)
+      .reduce((sum, row) => sum + row.total, 0);
+    // Capacity now varies by weekday, because the sessions do.
+    const total = open ? dayCapacity(date, "aesthetic", branchFilter) : 0;
+    return {
+      date,
+      open,
+      booked,
+      total,
+      percent: total > 0 ? Math.round((booked / total) * 100) : 0,
+    };
+  });
+}
 
 /**
  * Staff-only: this response contains patient names, phone numbers and email
  * addresses. It must never be reachable unauthenticated.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   const staff = await getClinicStaff();
   if (!staff) {
-    return NextResponse.json({ message: "Authentication required." }, { status: 401 });
+    return NextResponse.json(
+      { message: "Authentication required." },
+      { status: 401, headers: PRIVATE_HEADERS },
+    );
   }
 
+  const params = request.nextUrl.searchParams;
+  const statusParam = params.get("status");
+  const branchParam = params.get("branch");
+  const from = params.get("from");
+  const to = params.get("to");
+
+  const branchFilter =
+    branchParam && BRANCH_IDS.includes(branchParam as never) ? branchParam : undefined;
+
   try {
-    const [bookings, summary] = await Promise.all([
-      listConfirmedAppointments(),
-      getBookingSummary(),
+    const today = clinicToday();
+    const [list, summary, load] = await Promise.all([
+      listAppointments({
+        from: isDateKey(from) ? from : undefined,
+        to: isDateKey(to) ? to : undefined,
+        branch: branchFilter,
+        status:
+          statusParam === "active"
+            ? "active"
+            : VALID_STATUSES.includes(statusParam as AppointmentStatus)
+              ? (statusParam as AppointmentStatus)
+              : undefined,
+        limit: Number(params.get("limit")) || 100,
+        offset: Number(params.get("offset")) || 0,
+      }),
+      getDashboardSummary(),
+      dailyLoad({ from: today, to: addDays(today, 13), branch: branchFilter }),
     ]);
-    return NextResponse.json({ bookings, summary });
+
+    const timeNow = clinicTimeNow();
+
+    // Reading the list is a read of patient contact details, so it is audited
+    // like any other. Awaited rather than fired-and-forgotten: a Worker can be
+    // torn down the moment the response is returned.
+    await recordAccess({
+      actor: staff.email,
+      action: "list",
+      subjectCount: list.appointments.length,
+      clientHash: await clientFingerprint(request),
+      detail: params.toString() || null,
+    });
+
+    return NextResponse.json(
+      {
+        appointments: list.appointments,
+        // Kept for any client still reading the original field name.
+        bookings: list.appointments,
+        total: list.total,
+        limit: list.limit,
+        offset: list.offset,
+        summary: {
+          ...summary,
+          // Counted here because only the request knows the clinic wall clock.
+          todayRemaining: list.appointments.filter(
+            (appointment) =>
+              appointment.slotDate === today &&
+              appointment.slotTime >= timeNow &&
+              (appointment.status === "confirmed" || appointment.status === "checked_in"),
+          ).length,
+        },
+        // Capacity is derived from the published slot lists rather than stored,
+        // so "how full are we" stays correct the moment opening times change.
+        capacity: buildCapacity(today, branchFilter, load),
+        clinicToday: today,
+        clinicTime: timeNow,
+        staff: { name: staff.fullName ?? staff.displayName, email: staff.email },
+        allowlistConfigured: staffAllowlistConfigured(),
+      },
+      { headers: PRIVATE_HEADERS },
+    );
   } catch (error) {
-    console.error("list bookings failed", error);
+    await reportError(error, { where: "GET /api/bookings" });
     return NextResponse.json(
       { message: "The appointment database is unavailable." },
-      { status: 503 },
+      { status: 503, headers: PRIVATE_HEADERS },
     );
   }
 }
@@ -42,6 +160,7 @@ export async function POST(request: NextRequest) {
     patientName?: unknown;
     patientPhone?: unknown;
     patientEmail?: unknown;
+    patientNote?: unknown;
     language?: unknown;
     consent?: unknown;
   };
@@ -58,6 +177,8 @@ export async function POST(request: NextRequest) {
     typeof body.patientPhone === "string" ? body.patientPhone.trim() : "";
   const patientEmail =
     typeof body.patientEmail === "string" ? body.patientEmail.trim() : "";
+  const patientNote =
+    typeof body.patientNote === "string" ? body.patientNote.trim() : "";
   const language = body.language === "ar" ? "ar" : "en";
 
   if (!holdToken || !patientName || !patientPhone) {
@@ -66,7 +187,11 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
-  if (patientName.length > NAME_MAX || patientEmail.length > EMAIL_MAX) {
+  if (
+    patientName.length > NAME_MAX ||
+    patientEmail.length > EMAIL_MAX ||
+    patientNote.length > NOTE_MAX
+  ) {
     return NextResponse.json({ message: "Those details look too long." }, { status: 400 });
   }
   if (!PHONE_PATTERN.test(patientPhone)) {
@@ -91,6 +216,7 @@ export async function POST(request: NextRequest) {
       patientName,
       patientPhone,
       patientEmail: patientEmail || undefined,
+      patientNote: patientNote || undefined,
       language,
     });
     if (!booking) {
@@ -99,9 +225,47 @@ export async function POST(request: NextRequest) {
         { status: 410 },
       );
     }
-    return NextResponse.json({ booking }, { status: 201 });
+
+    const manageUrl = booking.manageToken
+      ? new URL(`/appointment/${booking.manageToken}`, request.nextUrl.origin).toString()
+      : undefined;
+
+    // Delivery runs after the row is committed and can never fail the booking:
+    // every transport inside `notify` is individually guarded.
+    await notify({
+      kind: "booking.confirmed",
+      appointment: {
+        id: booking.id,
+        branch: booking.branch,
+        service: booking.service,
+        slotDate: booking.slotDate,
+        slotTime: booking.slotTime,
+        patientName: booking.patientName,
+        patientPhone: booking.patientPhone,
+        patientEmail: booking.patientEmail,
+        patientNote: booking.patientNote,
+        language: booking.language,
+      },
+      manageUrl,
+    });
+
+    return NextResponse.json(
+      {
+        booking: {
+          id: booking.id,
+          reference: booking.id.slice(0, 8).toUpperCase(),
+          branch: booking.branch,
+          service: booking.service,
+          slotDate: booking.slotDate,
+          slotTime: booking.slotTime,
+          manageToken: booking.manageToken,
+          manageUrl,
+        },
+      },
+      { status: 201, headers: PRIVATE_HEADERS },
+    );
   } catch (error) {
-    console.error("confirm booking failed", error);
+    await reportError(error, { where: "POST /api/bookings" });
     return NextResponse.json(
       { message: "We could not confirm the appointment." },
       { status: 500 },

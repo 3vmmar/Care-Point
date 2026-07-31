@@ -4195,3 +4195,1158 @@ footer p {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ==========================================================================
+   Accessibility utilities
+   ========================================================================== */
+
+.skip-link {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 120;
+  padding: 12px 18px;
+  background: var(--charcoal);
+  color: var(--white);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transform: translateY(-160%);
+  transition: transform 0.28s var(--ease-out);
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* ==========================================================================
+   Floating NOOR — docking behaviour
+   --------------------------------------------------------------------------
+   The button shares the bottom corner with the footer Clinic OS link and used
+   to sit directly on top of it. It now parks itself once the footer arrives,
+   in both reading directions, instead of covering navigation the visitor
+   needs. Docking rather than unmounting keeps the movement readable.
+   ========================================================================== */
+
+.floating-noor {
+  bottom: max(clamp(18px, 2.2vw, 34px), env(safe-area-inset-bottom, 0px));
+  will-change: transform, opacity;
+  transition:
+    transform 0.55s var(--ease-out),
+    opacity 0.4s var(--ease-out),
+    box-shadow 0.45s var(--ease-out),
+    visibility 0s linear 0s;
+}
+
+.floating-noor--docked {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(140%) scale(0.94);
+  transition:
+    transform 0.55s var(--ease-out),
+    opacity 0.35s var(--ease-out),
+    visibility 0s linear 0.55s;
+}
+
+.floating-noor--docked:hover {
+  transform: translateY(140%) scale(0.94);
+}
+
+/* Room under the footer links so the button never lands on them mid-transition. */
+footer {
+  padding-bottom: max(30px, calc(30px + env(safe-area-inset-bottom, 0px)));
+}
+
+/* ==========================================================================
+   Locations
+   ========================================================================== */
+
+.locations {
+  background: var(--paper);
+  border-top: 1px solid var(--line);
+}
+
+.locations-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 46px;
+}
+
+.location-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 30px 26px 26px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  transition:
+    transform 0.5s var(--ease-out),
+    box-shadow 0.5s var(--ease-out);
+}
+
+.location-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow);
+}
+
+.location-mark {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  color: var(--burgundy);
+  background: rgba(123, 38, 60, 0.07);
+  border: 1px solid rgba(123, 38, 60, 0.14);
+}
+
+.location-card h3 {
+  margin: 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 26px;
+  font-weight: 500;
+}
+
+.location-card > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.location-hours {
+  display: grid;
+  gap: 6px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.location-hours span {
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.location-hours strong {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.location-actions {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.location-actions a,
+.location-actions button {
+  flex: 1 1 auto;
+  min-height: 44px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  transition:
+    background 0.35s var(--ease-out),
+    color 0.35s var(--ease-out),
+    border-color 0.35s var(--ease-out);
+}
+
+.location-actions a {
+  color: var(--burgundy);
+  border-color: rgba(123, 38, 60, 0.3);
+}
+
+.location-actions a:hover {
+  background: var(--burgundy);
+  border-color: var(--burgundy);
+  color: var(--white);
+}
+
+.location-actions button:hover {
+  background: var(--charcoal);
+  border-color: var(--charcoal);
+  color: var(--white);
+}
+
+/* ==========================================================================
+   Booking additions
+   ========================================================================== */
+
+.booking-map-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  transition: border-color 0.35s var(--ease-out);
+}
+
+.booking-map-link:hover {
+  border-color: var(--burgundy);
+}
+
+.booking-map-link span {
+  margin-inline-start: auto;
+  color: var(--burgundy);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.details-form textarea {
+  width: 100%;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.details-form textarea:focus-visible {
+  outline: 2px solid var(--burgundy);
+  outline-offset: 2px;
+}
+
+.success-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin: 24px 0 4px;
+}
+
+.success-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 12px;
+  transition:
+    background 0.35s var(--ease-out),
+    color 0.35s var(--ease-out),
+    border-color 0.35s var(--ease-out);
+}
+
+.success-links a:hover {
+  border-color: var(--charcoal);
+}
+
+.success-links .success-primary {
+  background: var(--burgundy);
+  border-color: var(--burgundy);
+  color: var(--white);
+}
+
+.success-links .success-primary:hover {
+  background: var(--burgundy-dark);
+  border-color: var(--burgundy-dark);
+}
+
+/* ==========================================================================
+   Patient self-service (/appointment/[token])
+   ========================================================================== */
+
+.manage-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 60px 22px;
+  background: var(--ivory);
+}
+
+.manage-card {
+  width: min(560px, 100%);
+  padding: 44px 38px 34px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.manage-kicker {
+  color: var(--burgundy);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  font-weight: 700;
+}
+
+.manage-card h1 {
+  margin: 12px 0 30px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 34px;
+  font-weight: 500;
+  line-height: 1.15;
+}
+
+.manage-details {
+  margin: 0 0 22px;
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+
+.manage-details > div {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 14px;
+  padding: 16px 18px;
+  background: var(--paper);
+}
+
+.manage-details dt {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.manage-details dd {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.manage-details dd strong {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.manage-details dd small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.manage-map {
+  display: inline-block;
+  margin-bottom: 26px;
+  color: var(--burgundy);
+  font-size: 13px;
+  border-bottom: 1px solid rgba(123, 38, 60, 0.3);
+  padding-bottom: 3px;
+}
+
+.manage-actions,
+.manage-outcome {
+  display: grid;
+  gap: 16px;
+}
+
+.manage-outcome {
+  padding: 22px;
+  background: rgba(119, 133, 122, 0.1);
+  border: 1px solid rgba(119, 133, 122, 0.28);
+  justify-items: start;
+  color: var(--ink);
+}
+
+.manage-outcome p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.manage-ics,
+.manage-buttons button,
+.manage-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 0 20px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  transition:
+    background 0.35s var(--ease-out),
+    color 0.35s var(--ease-out),
+    border-color 0.35s var(--ease-out);
+}
+
+.manage-ics {
+  background: var(--charcoal);
+  border-color: var(--charcoal);
+  color: var(--white);
+}
+
+.manage-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.manage-buttons button {
+  flex: 1 1 180px;
+}
+
+.manage-buttons button:hover:not(:disabled) {
+  border-color: var(--charcoal);
+}
+
+.manage-buttons button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.manage-primary {
+  background: var(--burgundy);
+  border-color: var(--burgundy);
+  color: var(--white);
+}
+
+.manage-danger {
+  color: var(--burgundy);
+  border-color: rgba(123, 38, 60, 0.34);
+}
+
+.manage-danger:hover:not(:disabled) {
+  background: var(--burgundy);
+  border-color: var(--burgundy);
+  color: var(--white);
+}
+
+.manage-confirm p,
+.manage-reschedule p {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.manage-dates,
+.manage-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.manage-dates button,
+.manage-slots button {
+  min-height: 46px;
+  padding: 6px 14px;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  transition:
+    background 0.3s var(--ease-out),
+    color 0.3s var(--ease-out),
+    border-color 0.3s var(--ease-out);
+}
+
+.manage-dates button small {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.manage-dates button.active,
+.manage-slots button.active {
+  background: var(--charcoal);
+  border-color: var(--charcoal);
+  color: var(--white);
+}
+
+.manage-dates button.active small {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.manage-dates button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.manage-error {
+  margin: 0;
+  color: var(--burgundy);
+  font-size: 13px;
+}
+
+.manage-note {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.manage-footer {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 22px;
+  font-size: 13px;
+}
+
+.manage-footer a {
+  color: var(--muted);
+  transition: color 0.3s var(--ease-out);
+}
+
+.manage-footer a:hover {
+  color: var(--burgundy);
+}
+
+.manage-spin {
+  animation: manageSpin 0.9s linear infinite;
+}
+
+@keyframes manageSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ==========================================================================
+   Motion quality
+   --------------------------------------------------------------------------
+   Elements the scroll timeline transforms are promoted to their own layer for
+   the duration of their animation. Leaving will-change on permanently costs
+   memory and can soften text rendering, so it is scoped and then released
+   under reduced-motion.
+   ========================================================================== */
+
+.portrait-frame img,
+.hero-copy,
+.portal-scene,
+.portal-orb-core,
+.scroll-progress span {
+  will-change: transform;
+}
+
+.portal-scene {
+  backface-visibility: hidden;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 1100px) {
+  .locations-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .locations-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .manage-card {
+    padding: 32px 22px 26px;
+  }
+
+  .manage-card h1 {
+    font-size: 27px;
+  }
+
+  .manage-details > div {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
+
+@media (max-width: 600px) {
+  .location-actions a,
+  .location-actions button,
+  .success-links a {
+    flex: 1 1 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-noor,
+  .floating-noor--docked {
+    transition: opacity 0.001ms linear !important;
+    transform: none !important;
+  }
+
+  .location-card:hover {
+    transform: none;
+  }
+
+  .portrait-frame img,
+  .hero-copy,
+  .portal-scene,
+  .portal-orb-core,
+  .scroll-progress span {
+    will-change: auto;
+  }
+}
+
+/* ==========================================================================
+   Treatment links on the CareLens section
+   ========================================================================== */
+
+.treatment-links {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 26px;
+}
+
+.treatment-links a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 68px;
+  padding: 0 18px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  transition:
+    border-color 0.35s var(--ease-out),
+    transform 0.35s var(--ease-out);
+}
+
+.treatment-links a:hover {
+  border-color: var(--burgundy);
+  transform: translateY(-2px);
+}
+
+.treatment-links span {
+  color: var(--champagne);
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 17px;
+}
+
+.treatment-links strong {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.treatment-links svg {
+  color: var(--burgundy);
+}
+
+/* ==========================================================================
+   Treatment page
+   ========================================================================== */
+
+.treatment-page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 24px 90px;
+  background: var(--ivory);
+}
+
+.treatment-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 26px 0;
+}
+
+.treatment-back,
+.treatment-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: color 0.3s var(--ease-out);
+}
+
+.treatment-back:hover,
+.treatment-lang:hover {
+  color: var(--burgundy);
+}
+
+.treatment-lang {
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+}
+
+.treatment-hero {
+  padding: 22px 0 44px;
+  border-bottom: 1px solid var(--line);
+}
+
+.treatment-index {
+  color: var(--burgundy);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.treatment-hero h1 {
+  margin: 14px 0 18px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: clamp(38px, 6vw, 58px);
+  font-weight: 500;
+  line-height: 1.05;
+}
+
+.treatment-feeling {
+  margin: 0 0 20px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 22px;
+  font-style: italic;
+  color: var(--burgundy);
+  line-height: 1.5;
+}
+
+.treatment-intro {
+  margin: 0 0 28px;
+  font-size: 17px;
+  line-height: 1.85;
+  color: var(--ink);
+}
+
+.treatment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+.treatment-actions a:not(.button) {
+  color: var(--muted);
+  font-size: 14px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 3px;
+}
+
+.treatment-actions a:not(.button):hover {
+  color: var(--burgundy);
+  border-color: var(--burgundy);
+}
+
+.treatment-credential {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 26px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.treatment-section {
+  padding: 42px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.treatment-section h2 {
+  margin: 0 0 24px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 30px;
+  font-weight: 500;
+}
+
+.treatment-checks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 14px;
+}
+
+.treatment-checks li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.treatment-checks svg {
+  flex: 0 0 auto;
+  margin-top: 4px;
+  color: var(--burgundy);
+}
+
+.treatment-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.treatment-tags span {
+  padding: 10px 16px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  font-size: 14px;
+}
+
+.treatment-phases {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.treatment-phases article {
+  padding: 22px 20px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.treatment-phases strong {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 30px;
+  font-weight: 500;
+  color: var(--champagne);
+  line-height: 1;
+}
+
+.treatment-phases small {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.treatment-phases p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.treatment-disclaimer {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 22px 0 0;
+  padding: 16px 18px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.treatment-disclaimer svg {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+
+.treatment-faq {
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+
+.treatment-faq details {
+  background: var(--white);
+}
+
+.treatment-faq summary {
+  padding: 18px 20px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 500;
+  list-style: none;
+}
+
+.treatment-faq summary::-webkit-details-marker {
+  display: none;
+}
+
+.treatment-faq summary::after {
+  content: "+";
+  float: inline-end;
+  color: var(--burgundy);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.treatment-faq details[open] summary::after {
+  content: "\2212";
+}
+
+.treatment-faq p {
+  margin: 0;
+  padding: 0 20px 20px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.85;
+}
+
+.treatment-clinics {
+  display: grid;
+  gap: 10px;
+}
+
+.treatment-clinics a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  transition: border-color 0.3s var(--ease-out);
+}
+
+.treatment-clinics a:hover {
+  border-color: var(--burgundy);
+}
+
+.treatment-clinics span {
+  flex: 1;
+  display: grid;
+  gap: 4px;
+}
+
+.treatment-clinics strong {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.treatment-clinics small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.treatment-clinics > a > svg:first-child {
+  color: var(--burgundy);
+}
+
+.treatment-clinics > a > svg:last-child {
+  color: var(--muted);
+}
+
+.treatment-cta {
+  padding: 48px 0;
+  text-align: start;
+}
+
+.treatment-cta h2 {
+  margin: 0 0 24px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: clamp(28px, 4vw, 38px);
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.treatment-more {
+  padding-top: 34px;
+  border-top: 1px solid var(--line);
+}
+
+.treatment-more > span {
+  display: block;
+  margin-bottom: 16px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+}
+
+.treatment-more > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.treatment-more a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  font-size: 14px;
+  transition: border-color 0.3s var(--ease-out);
+}
+
+.treatment-more a:hover {
+  border-color: var(--burgundy);
+}
+
+@media (max-width: 900px) {
+  .treatment-links {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .treatment-phases {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .treatment-links {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .treatment-page {
+    padding: 0 18px 70px;
+  }
+
+  .treatment-actions .button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ==========================================================================
+   Turnstile
+   --------------------------------------------------------------------------
+   Only present when bot protection is configured, so it must not reserve
+   layout space when absent.
+   ========================================================================== */
+
+.turnstile-field {
+  margin: 18px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.turnstile-error {
+  margin: 0;
+  color: var(--burgundy);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ==========================================================================
+   Legal pages
+   ========================================================================== */
+
+.legal-page {
+  min-height: 100vh;
+  background: var(--paper);
+  padding: 56px 22px 80px;
+}
+
+.legal-body {
+  width: min(760px, 100%);
+  margin: 0 auto;
+}
+
+.legal-back {
+  display: inline-block;
+  margin-bottom: 34px;
+  color: var(--muted);
+  font-size: 13px;
+  transition: color 0.3s var(--ease-out);
+}
+
+.legal-back:hover {
+  color: var(--burgundy);
+}
+
+.legal-kicker {
+  display: block;
+  color: var(--burgundy);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.legal-body h1 {
+  margin: 12px 0 28px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: clamp(32px, 5vw, 44px);
+  font-weight: 500;
+  line-height: 1.12;
+}
+
+.legal-body h2 {
+  margin: 40px 0 14px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 23px;
+  font-weight: 500;
+}
+
+.legal-body p {
+  margin: 0 0 14px;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.85;
+}
+
+/* The review notice must read as a warning, not as decoration. */
+.legal-review {
+  display: flex;
+  gap: 14px;
+  padding: 18px 20px;
+  margin: 0 0 12px;
+  background: #f6e7d3;
+  border: 1px solid #d9b98c;
+  color: #4a3a1b;
+}
+
+.legal-review svg {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  color: #a9702f;
+}
+
+.legal-review strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.legal-review p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: inherit;
+}
+
+.legal-contact {
+  color: var(--burgundy);
+  border-bottom: 1px solid rgba(123, 38, 60, 0.3);
+}
+
+.legal-footer {
+  margin-top: 54px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  font-size: 13px;
+}
+
+.legal-footer a {
+  color: var(--muted);
+  transition: color 0.3s var(--ease-out);
+}
+
+.legal-footer a:hover {
+  color: var(--burgundy);
+}

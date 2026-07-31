@@ -14,6 +14,12 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const localBindingConfig = {
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
+  // Expired holds and the PII retention purge run here rather than on the
+  // request path. The frequent trigger keeps the calendar tidy; the 03:00 one
+  // additionally carries the retention job (see `worker/index.ts`).
+  triggers: {
+    crons: ["*/10 * * * *", "0 3 * * *"],
+  },
   d1_databases: d1
     ? [
         {

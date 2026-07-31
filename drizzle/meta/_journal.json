@@ -15,6 +15,34 @@
       "when": 1785196232466,
       "tag": "0001_free_rocket_raccoon",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785199271008,
+      "tag": "0002_pale_malice",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1785444005528,
+      "tag": "0003_organic_wild_child",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1785457074278,
+      "tag": "0004_sparkling_the_order",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1785457931949,
+      "tag": "0005_zippy_titania",
+      "breakpoints": true
     }
   ]
 }
