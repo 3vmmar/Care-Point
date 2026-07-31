@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, IBM_Plex_Sans_Arabic, Manrope } from "next/font/google";
-import { clinicJsonLd, SITE_URL } from "@/lib/site";
+import { clinicJsonLd, SITE_URL, serialiseJsonLd } from "@/lib/site";
 import { directionFor, LOCALE_PATH, type Language } from "@/lib/i18n";
 import "./globals.css";
 
@@ -120,7 +120,7 @@ export default function RootShell({
         <script
           type="application/ld+json"
           // Serialised from our own configuration, never from user input.
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(clinicJsonLd()) }}
+          dangerouslySetInnerHTML={{ __html: serialiseJsonLd(clinicJsonLd()) }}
         />
       </body>
     </html>

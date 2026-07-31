@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { checkDatabase } from "@/db/bookings";
 import { errorReportingConfigured } from "@/lib/observability";
-import { staffAllowlistConfigured } from "@/lib/auth";
+import { getClinicStaff, staffAllowlistConfigured } from "@/lib/auth";
 import { notificationsConfigured } from "@/lib/notify";
 import { turnstileConfigured } from "@/lib/turnstile";
+import { proxyVerificationConfigured } from "@/lib/trusted-proxy";
 import { clinicTimeNow, clinicToday } from "@/lib/dates";
 
 /**
@@ -29,16 +30,22 @@ export async function GET() {
     errorReporting: errorReportingConfigured(),
     staffAllowlist: staffAllowlistConfigured(),
     botProtection: turnstileConfigured(),
+    proxyVerification: proxyVerificationConfigured(),
   };
 
   const misconfigured = Object.values(configuration).filter((ok) => !ok).length;
   const status = !database.ok ? "unhealthy" : misconfigured > 0 ? "degraded" : "ok";
 
+  // The *breakdown* is a map of which defences are switched off, which is a
+  // reconnaissance gift to anyone probing the site. An uptime monitor only
+  // needs the verdict, so the detail is reserved for signed-in staff.
+  const staff = await getClinicStaff();
+
   return NextResponse.json(
     {
       status,
       database: database.ok ? "ok" : "unreachable",
-      configuration,
+      ...(staff ? { configuration } : {}),
       clinicDate: clinicToday(),
       clinicTime: clinicTimeNow(),
       latencyMs: Date.now() - started,

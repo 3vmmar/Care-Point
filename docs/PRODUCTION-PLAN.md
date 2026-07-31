@@ -185,7 +185,11 @@ restore has actually been practised.
   exfiltration route in the system. Staff verify identity out of band, then
   fulfil from the dashboard. Erasure requires explicit confirmation (428),
   refuses while an upcoming appointment exists (409), anonymises rather than
-  deletes, and audits every affected row.
+  deletes, and audits every affected row. **Dashboard UI shipped**: a Requests
+  view with a pending-count badge in the nav, a 30-day deadline countdown per
+  request, a mandatory "how was identity verified?" note, a confirmation gate
+  that keeps the erase button disabled until ticked, and the produced records
+  rendered inline with CSV download.
 - ~~**Privacy policy and terms**~~ ⚠️ **Scaffolded, bilingual, and explicitly
   marked as unreviewed.** The factual sections are accurate — written against
   the code, so what they claim the system collects, keeps and deletes is what it
@@ -197,6 +201,12 @@ restore has actually been practised.
 **Exit:** an authorised penetration attempt finds nothing critical; legal pages live.
 
 ### Phase 3 — Notifications for real (~8–12 days eng, elapsed depends on Meta)
+
+> **Production-foundation increment:** the database now has normalized clinic
+> catalogue, rota, schedule-exception and staff-role tables, and the application
+> has separate `patient` and `clinic` deployment profiles. The public Worker
+> cannot serve Clinic OS pages or patient-data APIs. Provisioning both Workers
+> against the same real D1 and proving the proxy header remain account-blocked.
 
 - Email: provider live, **SPF/DKIM/DMARC** configured, deliverability tested to
   Gmail/Outlook/Egyptian ISPs. Bilingual templates.

@@ -11,13 +11,20 @@ import {
   purgeExpiredContactDetails,
   releaseExpiredHolds,
 } from "../db/bookings";
+import { sanitiseRequest } from "../lib/trusted-proxy";
+import { rejectCrossSite } from "../lib/csrf";
 import { notify } from "../lib/notify";
 import { reportError } from "../lib/observability";
 import { purgeExpiredAuditLog } from "../db/audit";
+import { enforceSurfaceBoundary } from "../lib/surface";
 
 interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
+  /** `patient` and `clinic` are deployed independently; local dev uses `combined`. */
+  APP_SURFACE?: string;
+  PUBLIC_SITE_URL?: string;
+  CLINIC_DASHBOARD_URL?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -148,6 +155,13 @@ const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
+    const boundaryResponse = enforceSurfaceBoundary(request, {
+      surface: env.APP_SURFACE,
+      publicSiteUrl: env.PUBLIC_SITE_URL,
+      clinicDashboardUrl: env.CLINIC_DASHBOARD_URL,
+    });
+    if (boundaryResponse) return withSecurityHeaders(boundaryResponse);
+
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
       return handleImageOptimization(
@@ -165,7 +179,39 @@ const worker = {
       );
     }
 
-    return withSecurityHeaders(await handler.fetch(request, env, ctx));
+    /**
+     * The trust boundary.
+     *
+     * Staff identity arrives as `oai-authenticated-user-*` headers injected by
+     * the platform's authenticating proxy — but this Worker is on the open
+     * internet, so any caller can send those headers too. Stripping them here,
+     * unless the request proves it came through the proxy, is what stops
+     * `curl -H "oai-authenticated-user-email: <any staff address>"` from
+     * returning the entire patient list.
+     *
+     * Done at the edge, before a single line of application code reads
+     * identity, so no route can forget to check.
+     */
+    const { request: safeRequest, decision } = await sanitiseRequest(request);
+    if (!decision.trusted && decision.reason === "no-secret-configured") {
+      console.error(
+        "[security] AUTH_PROXY_SECRET is not set; staff identity headers are being ignored. " +
+          "The Clinic OS dashboard will refuse every sign-in until it is configured.",
+      );
+    }
+
+    /**
+     * Cross-site request forgery.
+     *
+     * Staff identity is injected by the proxy from a session, so a hostile
+     * page could otherwise have a signed-in staff browser cancel appointments
+     * or erase a patient. Checked here, centrally, so a new endpoint cannot
+     * forget to opt in.
+     */
+    const blocked = rejectCrossSite(safeRequest);
+    if (blocked) return withSecurityHeaders(blocked);
+
+    return withSecurityHeaders(await handler.fetch(safeRequest, env, ctx));
   },
 
   /**

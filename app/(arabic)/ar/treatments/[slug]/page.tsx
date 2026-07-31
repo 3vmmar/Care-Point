@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import TreatmentPage from "@/app/components/TreatmentPage";
-import { treatmentJsonLd } from "@/lib/site";
+import { treatmentJsonLd, serialiseJsonLd } from "@/lib/site";
 import { findTreatment, TREATMENTS, treatmentCopy } from "@/lib/treatments";
 
 export function generateStaticParams() {
@@ -54,7 +54,7 @@ export default async function ArabicTreatment({
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(treatmentJsonLd(treatment, "ar")),
+          __html: serialiseJsonLd(treatmentJsonLd(treatment, "ar")),
         }}
       />
     </>

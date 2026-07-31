@@ -10,6 +10,9 @@ const { d1, r2 } = hostingConfig;
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
+const appSurface =
+  process.env.CAREPOINT_SURFACE ??
+  (process.env.NODE_ENV === "production" ? "patient" : "combined");
 
 const localBindingConfig = {
   main: "./worker/index.ts",
@@ -19,6 +22,14 @@ const localBindingConfig = {
   // additionally carries the retention job (see `worker/index.ts`).
   triggers: {
     crons: ["*/10 * * * *", "0 3 * * *"],
+  },
+  vars: {
+    APP_SURFACE: appSurface,
+    PUBLIC_SITE_URL:
+      process.env.PUBLIC_SITE_URL ?? "https://drashrafmetwally.com",
+      CLINIC_DASHBOARD_URL:
+        process.env.CLINIC_DASHBOARD_URL ??
+        (appSurface === "combined" ? "http://localhost:3001/command-center" : ""),
   },
   d1_databases: d1
     ? [

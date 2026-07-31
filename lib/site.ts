@@ -1,6 +1,6 @@
-import { BRANCHES, CONTACT, DOCTOR, SERVICES } from "./clinic";
-import type { Language } from "./i18n";
-import { treatmentCopy, treatmentPath, type Treatment } from "./treatments";
+import { BRANCHES, CONTACT, DOCTOR, SERVICES } from "./clinic.ts";
+import type { Language } from "./i18n.ts";
+import { treatmentCopy, treatmentPath, type Treatment } from "./treatments.ts";
 
 /**
  * Set SITE_URL to the clinic's real domain at build time. The preview host is
@@ -91,7 +91,6 @@ export function clinicJsonLd() {
     ],
   };
 }
-
 /**
  * Per-treatment structured data.
  *
@@ -147,4 +146,31 @@ export function treatmentJsonLd(treatment: Treatment, language: Language) {
       },
     ],
   };
+}
+
+
+/**
+ * Serialises structured data for embedding in a `<script>` block.
+ *
+ * `JSON.stringify` does not escape `<`, so a value containing `</script>`
+ * would close the block early and turn the rest into markup. Nothing in this
+ * app's configuration contains that today — but the treatments file is edited
+ * by hand, and this is the difference between "safe" and "safe by accident".
+ */
+export function serialiseJsonLd(value: unknown): string {
+  // Built from character codes rather than hand-written escape sequences, so
+  // there is no literal backslash-u string in this file to get subtly wrong.
+  // U+2028 and U+2029 are included because they are legal inside JSON but
+  // terminate a line in JavaScript, breaking the parser reading the block.
+  const BACKSLASH = String.fromCharCode(92);
+  const UNSAFE = new RegExp(
+    "[<>&" + String.fromCharCode(0x2028, 0x2029) + "]",
+    "g",
+  );
+
+  return JSON.stringify(value).replace(
+    UNSAFE,
+    (character) =>
+      BACKSLASH + "u" + character.charCodeAt(0).toString(16).padStart(4, "0"),
+  );
 }

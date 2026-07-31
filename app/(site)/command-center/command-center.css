@@ -1986,3 +1986,385 @@
     break-inside: avoid;
   }
 }
+
+/* ==========================================================================
+   Data-subject requests
+   ========================================================================== */
+
+.nav-badge {
+  margin-left: auto;
+  min-width: 22px;
+  padding: 2px 6px;
+  background: var(--cc-accent-deep);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  border-radius: 9px;
+}
+
+.dsr-intro,
+.dsr-overdue,
+.dsr-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--cc-line);
+}
+
+.dsr-intro {
+  background: var(--cc-panel-alt);
+  color: var(--cc-muted);
+}
+
+.dsr-intro svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--cc-accent);
+}
+
+.dsr-intro p,
+.dsr-overdue p,
+.dsr-error p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.dsr-intro strong {
+  color: var(--cc-ink);
+}
+
+.dsr-overdue {
+  background: #f6e7d3;
+  color: #4a3a1b;
+}
+
+.dsr-overdue svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #a9702f;
+}
+
+.dsr-error {
+  background: #f4e0d8;
+  color: #8a4633;
+}
+
+.dsr-error svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.dsr-error button {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.dsr-list {
+  display: grid;
+}
+
+.dsr-row {
+  border-bottom: 1px solid var(--cc-line-soft);
+}
+
+.dsr-row:last-child {
+  border-bottom: 0;
+}
+
+.dsr-row--open {
+  background: #fff;
+}
+
+.dsr-main {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr) 130px 120px;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 20px;
+}
+
+.dsr-kind {
+  width: fit-content;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.dsr-kind--access {
+  color: #4a5a70;
+  background: #e0e7ef;
+}
+
+.dsr-kind--erase {
+  color: #8a4633;
+  background: #f4e0d8;
+}
+
+.dsr-who,
+.dsr-age {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dsr-who strong,
+.dsr-age strong {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsr-who small,
+.dsr-age small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--cc-muted);
+  font-size: 12px;
+}
+
+.dsr-actions {
+  justify-self: end;
+}
+
+.dsr-actions button {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--cc-line);
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.dsr-actions button:hover {
+  border-color: rgba(35, 35, 34, 0.24);
+}
+
+/* Detail ------------------------------------------------------------------- */
+
+.dsr-detail {
+  padding: 4px 20px 22px;
+  display: grid;
+  gap: 16px;
+  border-top: 1px solid var(--cc-line-soft);
+}
+
+.dsr-blurb {
+  margin: 14px 0 0;
+  color: var(--cc-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.dsr-note {
+  margin: 0;
+  display: flex;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--cc-panel-alt);
+  border-inline-start: 3px solid var(--cc-accent);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.dsr-note svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--cc-accent);
+}
+
+.dsr-note span {
+  display: grid;
+  gap: 4px;
+}
+
+.dsr-note small {
+  color: var(--cc-muted);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.dsr-resolution {
+  display: grid;
+  gap: 7px;
+}
+
+.dsr-resolution span {
+  color: var(--cc-muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.dsr-resolution input {
+  min-height: 46px;
+  padding: 0 13px;
+  border: 1px solid var(--cc-line);
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+}
+
+/* The confirmation gate for an irreversible action. */
+.dsr-confirm {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: #f9ece7;
+  border: 1px solid #e0b9a9;
+}
+
+.dsr-confirm input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--cc-accent-deep);
+}
+
+.dsr-confirm span {
+  display: grid;
+  gap: 5px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #6b3a2a;
+}
+
+.dsr-confirm strong {
+  font-size: 13.5px;
+  color: #5a2f21;
+}
+
+.dsr-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dsr-buttons button {
+  min-height: 44px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--cc-line);
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13.5px;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.dsr-buttons .dsr-primary {
+  background: var(--cc-dark);
+  border-color: var(--cc-dark);
+  color: #fff;
+}
+
+.dsr-buttons .dsr-danger {
+  background: var(--cc-accent-deep);
+  border-color: var(--cc-accent-deep);
+  color: #fff;
+}
+
+.dsr-buttons button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Produced records --------------------------------------------------------- */
+
+.dsr-records {
+  padding: 16px;
+  background: var(--cc-panel-alt);
+  border: 1px solid var(--cc-line);
+}
+
+.dsr-records-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dsr-records-head strong {
+  font-size: 13.5px;
+}
+
+.dsr-records-head button {
+  min-height: 38px;
+  padding: 0 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--cc-line);
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.dsr-records ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 1px;
+  background: var(--cc-line);
+  border: 1px solid var(--cc-line);
+}
+
+.dsr-records li {
+  display: grid;
+  grid-template-columns: 110px 90px minmax(0, 1fr) 130px 100px;
+  gap: 12px;
+  padding: 11px 13px;
+  background: #fff;
+  font-size: 12.5px;
+}
+
+.dsr-record-status {
+  color: var(--cc-muted);
+  text-transform: capitalize;
+}
+
+.dsr-empty-records,
+.dsr-records-note {
+  margin: 10px 0 0;
+  color: var(--cc-muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+@media (max-width: 900px) {
+  .dsr-main {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 12px;
+  }
+
+  .dsr-actions {
+    justify-self: start;
+  }
+
+  .dsr-records li {
+    grid-template-columns: 1fr 1fr;
+  }
+}

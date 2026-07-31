@@ -61,7 +61,13 @@ export default function ManageBooking({
     setBusy(true);
     setError("");
     try {
-      const response = await fetch(`/api/appointments/${token}`, { method: "DELETE" });
+      const response = await fetch(`/api/appointments/${token}`, {
+        method: "DELETE",
+        // Carries no body, but the header is still required: the CSRF guard
+        // rejects any mutation that is not declared as JSON, which is what
+        // stops a cross-site HTML form from reaching these endpoints.
+        headers: { "Content-Type": "application/json" },
+      });
       const data = (await response.json()) as { message?: string };
       if (!response.ok) throw new Error(data.message);
       setOutcome("cancelled");

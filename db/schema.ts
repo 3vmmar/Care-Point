@@ -171,3 +171,155 @@ export const dataRequests = sqliteTable(
     index("data_requests_phone").on(table.requesterPhone),
   ],
 );
+
+/* -------------------------------------------------------------------------- */
+/* Clinic catalogue and rota                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The operational catalogue lives in D1 so the patient site and the separately
+ * deployed Clinic OS read the same branches, people, services and hours.
+ * Static configuration remains the migration fallback until the clinic has
+ * supplied and approved the real production data.
+ */
+export const departments = sqliteTable("departments", {
+  id: text("id").primaryKey(),
+  nameEn: text("name_en").notNull(),
+  nameAr: text("name_ar").notNull(),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const clinicBranches = sqliteTable("clinic_branches", {
+  id: text("id").primaryKey(),
+  nameEn: text("name_en").notNull(),
+  nameAr: text("name_ar").notNull(),
+  addressEn: text("address_en").notNull(),
+  addressAr: text("address_ar").notNull(),
+  mapUrl: text("map_url"),
+  timezone: text("timezone").notNull().default("Africa/Cairo"),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const practitioners = sqliteTable(
+  "practitioners",
+  {
+    id: text("id").primaryKey(),
+    departmentId: text("department_id").notNull(),
+    nameEn: text("name_en").notNull(),
+    nameAr: text("name_ar").notNull(),
+    titleEn: text("title_en").notNull(),
+    titleAr: text("title_ar").notNull(),
+    credentials: text("credentials"),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [index("practitioners_department").on(table.departmentId, table.active)],
+);
+
+export const clinicServices = sqliteTable(
+  "clinic_services",
+  {
+    id: text("id").primaryKey(),
+    departmentId: text("department_id").notNull(),
+    nameEn: text("name_en").notNull(),
+    nameAr: text("name_ar").notNull(),
+    durationMinutes: integer("duration_minutes").notNull(),
+    turnaroundMinutes: integer("turnaround_minutes").notNull().default(10),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [index("clinic_services_department").on(table.departmentId, table.active)],
+);
+
+export const practitionerBranches = sqliteTable(
+  "practitioner_branches",
+  {
+    practitionerId: text("practitioner_id").notNull(),
+    branchId: text("branch_id").notNull(),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+  },
+  (table) => [primaryKey({ columns: [table.practitionerId, table.branchId] })],
+);
+
+export const servicePractitioners = sqliteTable(
+  "service_practitioners",
+  {
+    serviceId: text("service_id").notNull(),
+    practitionerId: text("practitioner_id").notNull(),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+  },
+  (table) => [primaryKey({ columns: [table.serviceId, table.practitionerId] })],
+);
+
+export const weeklySessions = sqliteTable(
+  "weekly_sessions",
+  {
+    id: text("id").primaryKey(),
+    branchId: text("branch_id").notNull(),
+    practitionerId: text("practitioner_id").notNull(),
+    weekday: integer("weekday").notNull(),
+    startTime: text("start_time").notNull(),
+    endTime: text("end_time").notNull(),
+    intervalMinutes: integer("interval_minutes").notNull().default(30),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("weekly_sessions_branch_day").on(table.branchId, table.weekday, table.active),
+    index("weekly_sessions_practitioner_day").on(
+      table.practitionerId,
+      table.weekday,
+      table.active,
+    ),
+  ],
+);
+
+export const scheduleExceptions = sqliteTable(
+  "schedule_exceptions",
+  {
+    id: text("id").primaryKey(),
+    branchId: text("branch_id").notNull(),
+    practitionerId: text("practitioner_id"),
+    date: text("date").notNull(),
+    /** "closed" removes time; "added" opens an exceptional session. */
+    kind: text("kind").notNull(),
+    startTime: text("start_time"),
+    endTime: text("end_time"),
+    reason: text("reason"),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("schedule_exceptions_branch_date").on(table.branchId, table.date),
+    index("schedule_exceptions_practitioner_date").on(table.practitionerId, table.date),
+  ],
+);
+
+/** Staff directory and roles used by the private deployment. */
+export const staffUsers = sqliteTable("staff_users", {
+  email: text("email").primaryKey(),
+  displayName: text("display_name").notNull(),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const staffUserRoles = sqliteTable(
+  "staff_user_roles",
+  {
+    email: text("email").notNull(),
+    /** owner | doctor | receptionist | privacy_admin | auditor */
+    role: text("role").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.email, table.role] })],
+);

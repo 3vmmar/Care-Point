@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   Activity,
   AlertTriangle,
@@ -10,6 +9,7 @@ import {
   CalendarDays,
   CalendarRange,
   ChartNoAxesColumn,
+  ShieldAlert,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -32,6 +32,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BRANCHES, CLINIC_TIMEZONE, SERVICES, branchLabel, findBranch, serviceLabel } from "@/lib/clinic";
 import { addDays, formatShortDate, formatSlotTime } from "@/lib/dates";
 import AddAppointment from "./AddAppointment";
+import DataRequests from "./DataRequests";
 import DayTimeline from "./DayTimeline";
 import PatientHistory from "./PatientHistory";
 import WeekView from "./WeekView";
@@ -44,7 +45,7 @@ import {
   type Summary,
 } from "./types";
 
-type View = "Today" | "Week" | "Schedule" | "Insights";
+type View = "Today" | "Week" | "Schedule" | "Insights" | "Requests";
 
 const REFRESH_INTERVAL_MS = 20000;
 const PAGE_SIZE = 50;
@@ -83,6 +84,8 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
+  /** Outstanding data-subject requests, badged in the nav. */
+  const [pendingRequests, setPendingRequests] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
   /** Ids present at the last refresh; `null` until the first load settles. */
   const seenIds = useRef<Set<string> | null>(null);
@@ -156,6 +159,21 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
       setRefreshing(false);
       setLoaded(true);
     }
+
+    // Counted on the same cycle so the badge cannot go stale while someone
+    // sits on the dashboard all day. A failure here must never surface as a
+    // dashboard error — the appointment book is the important part.
+    try {
+      const response = await fetch("/api/clinic/data-requests?status=pending", {
+        cache: "no-store",
+      });
+      if (response.ok) {
+        const data = (await response.json()) as { requests?: unknown[] };
+        setPendingRequests(data.requests?.length ?? 0);
+      }
+    } catch {
+      // Leave the previous count in place.
+    }
   }, [wide, page, branchFilter, statusFilter]);
 
   useEffect(() => {
@@ -200,8 +218,8 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
       } else if (event.key.toLowerCase() === "n") {
         event.preventDefault();
         setAddOpen(true);
-      } else if (event.key >= "1" && event.key <= "4") {
-        setView((["Today", "Week", "Schedule", "Insights"] as View[])[Number(event.key) - 1]);
+      } else if (event.key >= "1" && event.key <= "5") {
+        setView((["Today", "Week", "Schedule", "Insights", "Requests"] as View[])[Number(event.key) - 1]);
       }
     }
     document.addEventListener("keydown", onKeyDown);
@@ -318,7 +336,7 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
         </div>
 
         <nav aria-label="Dashboard sections">
-          {(["Today", "Week", "Schedule", "Insights"] as View[]).map((item, index) => (
+          {(["Today", "Week", "Schedule", "Insights", "Requests"] as View[]).map((item, index) => (
             <button
               key={item}
               className={view === item ? "active" : ""}
@@ -332,8 +350,15 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
               {item === "Week" && <CalendarRange size={18} />}
               {item === "Schedule" && <CalendarCheck2 size={18} />}
               {item === "Insights" && <ChartNoAxesColumn size={18} />}
+              {item === "Requests" && <ShieldAlert size={18} />}
               {item}
-              <kbd>{index + 1}</kbd>
+              {/* A pending data request carries a legal response deadline, so
+                  it is surfaced in the nav rather than waiting to be found. */}
+              {item === "Requests" && pendingRequests > 0 ? (
+                <span className="nav-badge">{pendingRequests}</span>
+              ) : (
+                <kbd>{index + 1}</kbd>
+              )}
             </button>
           ))}
         </nav>
@@ -383,10 +408,10 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
               </small>
             </div>
           </div>
-          <Link href="/">
+          <a href="https://drashrafmetwally.com">
             <ArrowLeft size={15} />
             Patient experience
-          </Link>
+          </a>
         </div>
       </aside>
 
@@ -699,6 +724,8 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
         )}
 
         {view === "Insights" && <Insights summary={summary} clinicDate={clinicDate} />}
+
+        {view === "Requests" && <DataRequests />}
       </section>
 
       {addOpen && (

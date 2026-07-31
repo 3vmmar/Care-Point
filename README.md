@@ -6,7 +6,7 @@
 
 ## 🌟 Overview
 
-**Care Point** transforms the traditional surgical consultation into an intelligent, patient-centric digital experience. Built for edge-native deployment on Cloudflare Workers, Care Point combines a motion-driven patient web experience with an operational **Clinic OS Command Center**.
+**Care Point** transforms the traditional surgical consultation into an intelligent, patient-centric digital experience. Built for edge-native deployment on Cloudflare Workers, Care Point combines a motion-driven patient web experience with an operational **Clinic OS Command Center** deployed on a separate private surface.
 
 The platform is designed around the philosophy that aesthetic care starts with understanding patient feelings and goals rather than procedure names.
 

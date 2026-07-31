@@ -889,7 +889,6 @@ export default function CarePointExperience({ language }: { language: Language }
           <a href="#locations">{t.directions}</a>
           <Link href={rtl ? "/ar/privacy" : "/privacy"}>{t.privacy}</Link>
           <Link href={rtl ? "/ar/terms" : "/terms"}>{t.terms}</Link>
-          <Link href="/command-center">{t.clinicOs}</Link>
         </div>
       </footer>
 
