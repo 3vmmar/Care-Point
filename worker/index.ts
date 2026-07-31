@@ -14,7 +14,7 @@ import { sanitiseRequest } from "../lib/trusted-proxy";
 import { rejectCrossSite } from "../lib/csrf";
 import { reportError } from "../lib/observability";
 import { purgeExpiredAuditLog } from "../db/audit";
-import { enforceSurfaceBoundary } from "../lib/surface";
+import { appSurface, enforceSurfaceBoundary } from "../lib/surface";
 import { purgeNotificationHistory, queueReminder } from "../db/notifications";
 import { processNotificationQueue } from "../lib/notification-worker";
 
@@ -181,7 +181,11 @@ const worker = {
      * identity, so no route can forget to check.
      */
     const { request: safeRequest, decision } = await sanitiseRequest(request);
-    if (!decision.trusted && decision.reason === "no-secret-configured") {
+    if (
+      appSurface(env.APP_SURFACE) !== "patient" &&
+      !decision.trusted &&
+      decision.reason === "no-secret-configured"
+    ) {
       console.error(
         "[security] AUTH_PROXY_SECRET is not set; staff identity headers are being ignored. " +
           "The Clinic OS dashboard will refuse every sign-in until it is configured.",
