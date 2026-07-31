@@ -92,6 +92,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Verify doctor-controlled content approvals
+        run: npm run check:launch-content
+
       # A pre-deploy export is the difference between a bad migration being an
       # inconvenience and it being a lost appointment book.
       - name: Back up the database first

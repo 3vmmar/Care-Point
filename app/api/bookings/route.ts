@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
             : VALID_STATUSES.includes(statusParam as AppointmentStatus)
               ? (statusParam as AppointmentStatus)
               : undefined,
+        search: params.get("q")?.trim().slice(0, 120) || undefined,
         limit: Number(params.get("limit")) || 100,
         offset: Number(params.get("offset")) || 0,
       }),

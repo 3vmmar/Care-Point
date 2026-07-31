@@ -5,7 +5,8 @@
   --paper: #fbf9f4;
   --charcoal: #171716;
   --ink: #282624;
-  --muted: #746f68;
+  /* Small supporting copy still has to clear 4.5:1 on the ivory canvas. */
+  --muted: #69645e;
   --line: rgba(39, 36, 32, 0.14);
   --burgundy: #7b263c;
   --burgundy-dark: #511425;
@@ -460,7 +461,7 @@ section[id] {
   min-height: 38px;
   border: 1px solid transparent;
   background: transparent;
-  color: #817b74;
+  color: #69645e;
   padding: 0 10px;
   display: flex;
   align-items: center;
@@ -733,7 +734,7 @@ section[id] {
   display: flex;
   align-items: center;
   gap: 9px;
-  color: #78736c;
+  color: #69645e;
   font-size: 9px;
   letter-spacing: 0.05em;
 }
@@ -924,7 +925,7 @@ section[id] {
 .hero-rail span {
   font-size: 7px;
   letter-spacing: 0.2em;
-  color: #938c84;
+  color: #69645e;
 }
 
 .hero-rail i {
@@ -1241,7 +1242,7 @@ section[id] {
   bottom: 4.5vh;
   display: flex;
   justify-content: space-between;
-  color: #6d6965;
+  color: #a39d97;
 }
 
 .portal-footnote span:last-child {
@@ -1389,6 +1390,21 @@ section[id] {
   cursor: crosshair;
 }
 
+.universe-canvas-mount,
+.universe-canvas-placeholder {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.universe-canvas-placeholder {
+  background:
+    radial-gradient(circle at 50% 45%, rgba(123, 38, 60, 0.2), transparent 34%),
+    linear-gradient(120deg, #151414, #1d191a, #151414);
+  background-size: 100% 100%, 220% 100%;
+  animation: universeShimmer 1.6s var(--ease-smooth) infinite;
+}
+
 .universe-canvas::before,
 .universe-canvas::after {
   content: "";
@@ -1521,7 +1537,7 @@ section[id] {
 }
 
 .universe-tabs button > span {
-  color: var(--rose);
+  color: #7b4050;
   font-size: 8px;
   align-self: start;
 }
@@ -3018,11 +3034,9 @@ footer p {
 
 @keyframes modalRise {
   from {
-    opacity: 0;
     transform: translateY(22px) scale(0.985);
   }
   to {
-    opacity: 1;
     transform: translateY(0) scale(1);
   }
 }
@@ -3064,7 +3078,7 @@ footer p {
 .booking-fields label > span,
 .form-grid label > span {
   font-size: 8px;
-  color: #79736c;
+  color: #69645e;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 700;
@@ -3144,7 +3158,7 @@ footer p {
   display: flex;
   align-items: center;
   gap: 5px;
-  color: #6b8e72;
+  color: #486a50;
   font-size: 8px;
 }
 
@@ -4394,7 +4408,7 @@ footer {
   padding: 12px 14px;
   background: var(--paper);
   border: 1px solid var(--line);
-  color: var(--muted);
+  color: #554f49;
   font-size: 12px;
   transition: border-color 0.35s var(--ease-out);
 }
@@ -4839,9 +4853,18 @@ footer {
 }
 
 .treatment-links span {
-  color: var(--champagne);
+  /* The decorative gold is too pale on white at small text sizes. */
+  color: #745d3d;
   font-family: var(--font-display), Georgia, serif;
   font-size: 17px;
+}
+
+.booking-top .section-index {
+  color: #d59aab;
+}
+
+.site-footer .footer-brand small {
+  color: #d59aab;
 }
 
 .treatment-links strong {

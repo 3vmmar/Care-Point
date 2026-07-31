@@ -253,6 +253,15 @@ and failures surface.
 
 ### Phase 5 — Quality and content (~8–10 days eng + client time)
 
+> **Engineering increment (2026-07-31):** automated WCAG 2.1 AA scans now cover
+> both languages, the intro, booking slots/details, appointment self-service and
+> Clinic OS, with keyboard focus and reduced-motion checks. CareLens is split
+> into an 8.7 KB interface and a separately viewport-gated 3D engine; CI enforces
+> compressed/raw asset budgets and a constrained-mobile Core Web Vitals lab
+> guardrail. Production now fails closed on the doctor-controlled approval
+> manifest in `content/launch-approvals.json`. Real photography, clinic facts,
+> clinical/Arabic review and real-device field data remain external inputs.
+
 - Accessibility audit and remediation to WCAG 2.1 AA; keyboard and screen-reader
   passes on booking and dashboard.
 - Performance: budget, code-split CareLens further, measure CWV on a real

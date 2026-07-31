@@ -7,7 +7,7 @@ test("English booking completes in the browser and can be cancelled from its man
 }) => {
   await page.goto("/");
   await page.waitForLoadState("networkidle");
-  await page.getByRole("button", { name: "Skip introduction" }).click();
+  await page.getByRole("button", { name: /Skip introduction|تخطي المقدمة/ }).click();
   await expect(page.locator(".experience-intro")).toBeHidden({ timeout: 10_000 });
   await page.locator(".desktop-book").click();
   const modal = page.locator(".booking-modal");
@@ -61,7 +61,7 @@ test("the Arabic experience and booking surface are genuinely RTL", async ({ pag
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
 
-  await page.getByRole("button", { name: "Skip introduction" }).click();
+  await page.getByRole("button", { name: /Skip introduction|تخطي المقدمة/ }).click();
   await expect(page.locator(".experience-intro")).toBeHidden({ timeout: 10_000 });
   await page.locator(".desktop-book").click();
   await expect(page.locator(".booking-modal")).toHaveAttribute("dir", "rtl");

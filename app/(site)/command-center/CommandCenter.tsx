@@ -78,6 +78,7 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
 
   const [view, setView] = useState<View>("Today");
   const [query, setQuery] = useState("");
+  const [serverQuery, setServerQuery] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(0);
@@ -95,6 +96,14 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
   const today = view === "Today";
   const wide = view === "Today" || view === "Week";
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setServerQuery(query.trim());
+      setPage(0);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -107,6 +116,7 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
         params.set("limit", String(PAGE_SIZE));
         params.set("offset", String(page * PAGE_SIZE));
         if (statusFilter) params.set("status", statusFilter);
+        if (serverQuery) params.set("q", serverQuery);
       }
       // Applies to every view — the sidebar selector used to be ignored on the
       // day view, so filtering to one clinic silently did nothing there.
@@ -190,7 +200,7 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
     } catch {
       // Delivery status is additive; appointment refresh remains authoritative.
     }
-  }, [wide, page, branchFilter, statusFilter]);
+  }, [wide, page, branchFilter, statusFilter, serverQuery]);
 
   useEffect(() => {
     // Deferred so the first render commits before the fetch flips `refreshing`.
@@ -346,6 +356,9 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
 
   return (
     <main className="command-shell">
+      <a className="skip-link" href="#clinic-content">
+        Skip to clinic workspace
+      </a>
       <aside className="command-sidebar">
         <div className="command-brand">
           <span>AM</span>
@@ -439,7 +452,7 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
         </div>
       </aside>
 
-      <section className="command-main">
+      <section className="command-main" id="clinic-content" tabIndex={-1}>
         <header className="command-header">
           <div className="command-title">
             <span>

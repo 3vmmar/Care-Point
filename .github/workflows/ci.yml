@@ -47,6 +47,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Enforce patient performance budget
+        run: npm run test:performance
+
+      - name: Test constrained-mobile performance
+        run: npm run test:performance:lab
+
       # The runtime schema in db/bookings.ts and the Drizzle migrations describe
       # the same table. If schema.ts changes without a matching migration, this
       # leaves a dirty tree and fails — which is the only reliable way to stop

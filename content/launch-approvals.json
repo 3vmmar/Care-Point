@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "updatedAt": "2026-07-31",
+  "approvals": [
+    {
+      "id": "clinic-schedule",
+      "label": "Opening hours, practitioner rota, turnaround and closures for every branch",
+      "owner": "Clinic manager",
+      "status": "pending",
+      "reviewedBy": "",
+      "reviewedAt": "",
+      "evidence": ""
+    },
+    {
+      "id": "services-practitioners",
+      "label": "Bookable services, durations and named practitioner assignments",
+      "owner": "Dr. Ashraf and clinic manager",
+      "status": "pending",
+      "reviewedBy": "",
+      "reviewedAt": "",
+      "evidence": ""
+    },
+    {
+      "id": "locations-contact",
+      "label": "Addresses, Google place links, phone, WhatsApp and email",
+      "owner": "Clinic manager",
+      "status": "pending",
+      "reviewedBy": "",
+      "reviewedAt": "",
+      "evidence": ""
+    },
+    {
+      "id": "credentials-claims",
+      "label": "Credentials, professional title, years in practice and every factual claim",
+      "owner": "Dr. Ashraf",
+      "status": "pending",
+      "reviewedBy": "",
+      "reviewedAt": "",
+      "evidence": ""
+    },
+    {
+      "id": "english-clinical-copy",
+      "label": "English treatment, recovery, booking and NOOR guidance copy",
+      "owner": "Dr. Ashraf",
+      "status": "pending",
+      "reviewedBy": "",
+      "reviewedAt": "",
+      "evidence": ""
+    },
+    {
+      "id": "arabic-clinical-copy",
+      "label": "Arabic treatment, recovery, booking and NOOR guidance copy",
+      "owner": "Arabic-speaking clinician",
+      "status": "pending",
+      "reviewedBy": "",
+      "reviewedAt": "",
+      "evidence": ""
+    },
+    {
+      "id": "photography",
+      "label": "Hero, clinic, team and treatment photography with publication consent",
+      "owner": "Dr. Ashraf and photographer",
+      "status": "pending",
+      "reviewedBy": "",
+      "reviewedAt": "",
+      "evidence": ""
+    },
+    {
+      "id": "medical-advertising",
+      "label": "Patient-facing claims and imagery reviewed for Egyptian medical-advertising rules",
+      "owner": "Egyptian legal counsel",
+      "status": "pending",
+      "reviewedBy": "",
+      "reviewedAt": "",
+      "evidence": ""
+    }
+  ]
+}

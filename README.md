@@ -18,7 +18,7 @@ The platform is designed around the philosophy that aesthetic care starts with u
 * **Bilingual, on separate indexable URLs**: English at `/` and Arabic at `/ar`, each with its own root layout so `lang` and `dir` are correct in the *server-rendered* HTML — a crawler that never runs the script still receives Arabic markup declared as Arabic. Reciprocal `hreflang` alternates and a two-locale sitemap tell Google the pages are one document in two languages rather than duplicates. Every string lives in [`lib/i18n.ts`](lib/i18n.ts), typed so a missing translation is a compile error.
 * **Motion-First Interface**: Native RTL layout, custom Google Fonts (*Manrope*, *Cormorant Garamond*, *IBM Plex Sans Arabic*), Lenis smooth scrolling driven from GSAP's ticker (one clock, no competing rAF loops), and ScrollTrigger reveals that respect `prefers-reduced-motion`.
 * **Experience Intro**: Immersive video/motion intro modal welcoming patients into the clinic experience with instant replay capabilities.
-* **CareLens 3D Treatment Universe**: Interactive Three.js / `@react-three/fiber` visual discovery system for exploring treatments by anatomical region (Face, Rhinoplasty, Body, Breast, Skin) and aesthetic intent.
+* **CareLens 3D Treatment Universe**: Interactive Three.js / `@react-three/fiber` visual discovery system for exploring treatments by anatomical region. The readable interface and the WebGL engine are separate viewport-gated chunks, so the 3D download never competes with the hero.
 * **NOOR Concierge**: A guided patient assistant that explains procedures, preparation guidelines, and recovery timelines in Arabic or English, with **Web Speech API** voice input and speech synthesis output. Responses are currently drawn from a fixed, clinician-reviewable answer set matched by keyword — there is no language model behind it yet.
 * **Journey Designer**: Interactive step-by-step questionnaire guiding patients to personalized treatment starting points.
 * **Real-Time Appointment Booking**: Real-time slot availability across 3 Cairo locations (Maadi, Mohandessin, Fifth Settlement) with a 5-minute atomic slot reservation hold pattern to prevent double booking.
@@ -59,7 +59,7 @@ Plus: **patient history** on any row (matched on phone across formats, so `01501
 Care-Point/
 ├── app/
 │   ├── api/
-│   │   ├── availability/          # Live slots (GET) & 5-minute hold (POST)
+│   │   ├── availability/          # Live slots, atomic hold, abandoned-hold release
 │   │   ├── bookings/              # Staff list (GET) & patient confirm (POST)
 │   │   │   └── [id]/              # Staff status changes & clinic notes (PATCH)
 │   │   ├── appointments/[token]/  # Patient self-service: view, move, cancel
@@ -79,7 +79,8 @@ Care-Point/
 │   │   ├── ExperienceIntro.tsx      # Intro animation modal
 │   │   ├── JourneyDesigner.tsx      # Interactive care planning tool
 │   │   ├── Modal.tsx                # Accessible dialog shell (focus trap, Esc)
-│   │   └── TreatmentUniverse.tsx    # 3D CareLens canvas (lazy-loaded)
+│   │   ├── TreatmentUniverse.tsx    # Deferred CareLens controls and content
+│   │   └── TreatmentCanvas.tsx      # Second-gate WebGL engine (lazy-loaded)
 │   ├── robots.txt/, sitemap.xml/  # SEO route handlers (vinext emits no
 │   │                              # metadata files, so these are explicit)
 │   ├── chatgpt-auth.ts            # Platform identity headers

@@ -3,6 +3,7 @@ import {
   countActiveHoldsForClient,
   getBookedIntervals,
   holdAppointment,
+  releaseHold,
 } from "@/db/bookings";
 import { generateSlots, overlaps } from "@/lib/schedule";
 import {
@@ -188,6 +189,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { message: "We could not hold that time. Please try again." },
       { status: 500 },
+    );
+  }
+}
+
+/** Release a hold when the visitor closes or backs out of the details step. */
+export async function DELETE(request: NextRequest) {
+  let body: { holdToken?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ message: "Invalid request." }, { status: 400 });
+  }
+
+  const holdToken = typeof body.holdToken === "string" ? body.holdToken.trim() : "";
+  if (!holdToken) {
+    return NextResponse.json({ message: "A hold token is required." }, { status: 400 });
+  }
+
+  try {
+    const released = await releaseHold(holdToken, await clientFingerprint(request));
+    return NextResponse.json({ released }, { headers: LIVE_HEADERS });
+  } catch (error) {
+    await reportError(error, { where: "DELETE /api/availability" });
+    return NextResponse.json(
+      { message: "We could not release that time. It will expire automatically." },
+      { status: 500, headers: LIVE_HEADERS },
     );
   }
 }

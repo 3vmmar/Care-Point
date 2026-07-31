@@ -5,6 +5,8 @@ import {
   confirmAppointment,
   getAppointmentByManageToken,
   holdAppointment,
+  listAppointments,
+  releaseHold,
   rescheduleByManageToken,
 } from "@/db/bookings";
 import { BRANCHES, SERVICES } from "@/lib/clinic";
@@ -144,6 +146,42 @@ describe.sequential("booking lifecycle against an isolated D1 database", () => {
 
     const loaded = await getAppointmentByManageToken(confirmed!.manageToken!);
     expect(loaded?.slotTime).toBe(destination.slotTime);
+  });
+
+  it("searches the complete appointment set before applying pagination", async () => {
+    const slot = offeredSlots(1)[0];
+    const hold = await holdAppointment({ ...slot, fingerprint: "search-patient" });
+    const confirmed = await confirmAppointment({
+      holdToken: hold.holdToken,
+      patientName: "Unique Search Patient",
+      patientPhone: "+201008881234",
+      language: "en",
+    });
+    expect(confirmed).not.toBeNull();
+
+    const match = await listAppointments({ search: "unique search", limit: 1, offset: 0 });
+    expect(match.total).toBe(1);
+    expect(match.appointments[0]?.id).toBe(confirmed?.id);
+
+    const escapedWildcard = await listAppointments({ search: "%", limit: 1 });
+    expect(escapedWildcard.total).toBe(0);
+  });
+
+  it("releases an abandoned hold and all of its occupancy cells", async () => {
+    const slot = offeredSlots(1)[0];
+    const fingerprint = "release-patient";
+    const hold = await holdAppointment({ ...slot, fingerprint });
+
+    expect(await releaseHold(hold.holdToken, "someone-else")).toBe(false);
+    expect(await releaseHold(hold.holdToken, fingerprint)).toBe(true);
+    expect(await releaseHold(hold.holdToken, fingerprint)).toBe(false);
+
+    const cells = await env.DB.prepare(
+      "SELECT COUNT(*) AS total FROM appointment_cells WHERE appointment_id = ?",
+    )
+      .bind(hold.id)
+      .first<{ total: number }>();
+    expect(cells?.total).toBe(0);
   });
 
   it("allows exactly one winner when twelve requests race for one slot", async () => {

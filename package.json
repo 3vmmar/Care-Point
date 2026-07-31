@@ -18,6 +18,9 @@
     "test:integration": "vitest run --config vitest.config.ts",
     "test:e2e": "playwright test",
     "test:load": "playwright test tests/e2e/load.spec.ts",
+    "test:performance": "node scripts/check-performance-budget.mjs",
+    "test:performance:lab": "playwright test --config playwright.performance.config.ts",
+    "check:launch-content": "node scripts/check-launch-content.mjs",
     "test:phase4": "npm test && npm run test:e2e",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
@@ -37,6 +40,7 @@
     "three": "^0.185.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@cloudflare/vite-plugin": "1.37.1",
     "@cloudflare/vitest-pool-workers": "^0.20.1",
     "@cloudflare/workers-types": "^4.20260702.1",

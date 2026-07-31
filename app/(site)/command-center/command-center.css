@@ -137,7 +137,7 @@
 }
 
 .sidebar-label {
-  color: #837e78;
+  color: #aaa49e;
   font-size: 10px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -204,7 +204,7 @@
 }
 
 .system-status small {
-  color: #837e78;
+  color: #aaa49e;
   font-size: 11px;
 }
 
@@ -516,6 +516,7 @@
 
 .focus-empty {
   padding: 14px 0;
+  color: #69645e !important;
   font-size: 14px;
 }
 

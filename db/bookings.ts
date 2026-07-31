@@ -637,6 +637,33 @@ export async function holdAppointment(input: {
   return { id, holdToken, expiresAt };
 }
 
+/**
+ * Releases an abandoned browser hold without allowing one visitor to release
+ * another visitor's slot. Confirmed appointments never match this predicate.
+ */
+export async function releaseHold(holdToken: string, fingerprint: string) {
+  await ensureBookingSchema();
+  if (!holdToken || !fingerprint) return false;
+  const db = database();
+  const [, released] = await db.batch([
+    db
+      .prepare(
+        `DELETE FROM appointment_cells WHERE appointment_id IN (
+           SELECT id FROM appointments
+           WHERE hold_token = ? AND client_fingerprint = ? AND status = 'held'
+         )`,
+      )
+      .bind(holdToken, fingerprint),
+    db
+      .prepare(
+        `DELETE FROM appointments
+         WHERE hold_token = ? AND client_fingerprint = ? AND status = 'held'`,
+      )
+      .bind(holdToken, fingerprint),
+  ]);
+  return (released.meta.changes ?? 0) > 0;
+}
+
 export async function confirmAppointment(
   input: BookingInput,
 ): Promise<ConfirmedAppointment | null> {
@@ -876,6 +903,8 @@ export type AppointmentQuery = {
   to?: DateKey;
   branch?: string;
   status?: AppointmentStatus | "active";
+  /** Staff search, applied before pagination so page two can never disappear. */
+  search?: string;
   limit?: number;
   offset?: number;
 };
@@ -904,6 +933,20 @@ export async function listAppointments(query: AppointmentQuery = {}) {
   } else if (query.status) {
     clauses.push("status = ?");
     bindings.push(query.status);
+  }
+  const search = query.search?.trim().toLowerCase().slice(0, 120);
+  if (search) {
+    const pattern = `%${search.replace(/[\\%_]/g, "\\$&")}%`;
+    clauses.push(`(
+      LOWER(COALESCE(patient_name, '')) LIKE ? ESCAPE '\\'
+      OR LOWER(COALESCE(patient_phone, '')) LIKE ? ESCAPE '\\'
+      OR LOWER(COALESCE(patient_email, '')) LIKE ? ESCAPE '\\'
+      OR LOWER(branch) LIKE ? ESCAPE '\\'
+      OR LOWER(service) LIKE ? ESCAPE '\\'
+      OR slot_date LIKE ? ESCAPE '\\'
+      OR slot_time LIKE ? ESCAPE '\\'
+    )`);
+    bindings.push(pattern, pattern, pattern, pattern, pattern, pattern, pattern);
   }
 
   const where = clauses.join(" AND ");

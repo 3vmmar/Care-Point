@@ -499,11 +499,16 @@ export default function CarePointExperience({ language }: { language: Language }
       : t.heroAvailabilityEmpty;
 
   return (
-    <main className="site-shell" dir={rtl ? "rtl" : "ltr"}>
+    <main
+      className="site-shell"
+      dir={rtl ? "rtl" : "ltr"}
+      id="patient-content"
+      tabIndex={-1}
+    >
       {introOpen && <ExperienceIntro language={language} onEnter={dismissIntro} />}
       <div className="grain" aria-hidden />
       <div className="scroll-progress" aria-hidden><span /></div>
-      <a className="skip-link" href="#top">
+      <a className="skip-link" href="#patient-content">
         {rtl ? "تخطي إلى المحتوى" : "Skip to content"}
       </a>
       <header className="site-header">
@@ -1292,10 +1297,34 @@ function BookingModal({
     }
   }
 
+  const releaseCurrentHold = useCallback(
+    (refreshAvailability = false) => {
+      if (!holdToken) return;
+      const token = holdToken;
+      setHoldToken("");
+      setHoldExpiresAt(0);
+      setSecondsLeft(0);
+      void fetch("/api/availability", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ holdToken: token }),
+        keepalive: true,
+      }).finally(() => {
+        if (refreshAvailability) setReloadKey((key) => key + 1);
+      });
+    },
+    [holdToken],
+  );
+
+  const closeBooking = useCallback(() => {
+    if (step !== "success") releaseCurrentHold();
+    onClose();
+  }, [onClose, releaseCurrentHold, step]);
+
   const countdown = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`;
 
   return (
-    <Modal onClose={onClose} labelledBy="booking-modal-title">
+    <Modal onClose={closeBooking} labelledBy="booking-modal-title">
       <section className="booking-modal" dir={rtl ? "rtl" : "ltr"}>
         <div className="booking-top">
           <div>
@@ -1306,7 +1335,7 @@ function BookingModal({
               {step === "success" ? t.bookingSuccessTitle : t.bookingTitle}
             </h2>
           </div>
-          <button onClick={onClose} aria-label={t.bookingClose}>
+          <button onClick={closeBooking} aria-label={t.bookingClose}>
             <X />
           </button>
         </div>
@@ -1551,7 +1580,15 @@ function BookingModal({
               </p>
             )}
             <div className="booking-footer">
-              <button type="button" className="back-button" onClick={() => setStep("slots")}>
+              <button
+                type="button"
+                className="back-button"
+                onClick={() => {
+                  releaseCurrentHold(true);
+                  setSelectedTime("");
+                  setStep("slots");
+                }}
+              >
                 {t.back}
               </button>
               <button className="button button--burgundy" disabled={submitting}>
@@ -1598,7 +1635,7 @@ function BookingModal({
             </div>
 
             <div className="success-actions">
-              <button className="button button--dark" onClick={onClose}>
+              <button className="button button--dark" onClick={closeBooking}>
                 {t.done}
               </button>
               <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer">

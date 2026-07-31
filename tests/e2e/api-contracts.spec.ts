@@ -25,6 +25,7 @@ test.describe.serial("HTTP route contracts", () => {
   test("mutation routes reject malformed or nonexistent work explicitly", async ({ request }) => {
     const cases = [
       request.post("/api/availability", { data: {} }),
+      request.delete("/api/availability", { data: {} }),
       request.post("/api/bookings", { data: {} }),
       request.patch("/api/appointments/not-a-real-token", { data: {} }),
       request.delete("/api/appointments/not-a-real-token", {
