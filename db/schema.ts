@@ -54,6 +54,17 @@ export const appointments = sqliteTable(
     reminderQueuedAt: text("reminder_queued_at"),
     /** Set when contact details were cleared by the retention job. */
     purgedAt: text("purged_at"),
+    /**
+     * Why the appointment was cancelled, keyed to `cancellation_reasons`.
+     *
+     * The clinic recorded *that* a cancellation happened and never why, so the
+     * one number a practice can actually act on — are people cancelling because
+     * the time was wrong, or because they changed their mind about the treatment —
+     * did not exist.
+     */
+    cancellationReason: text("cancellation_reason"),
+    /** Free text, only ever entered by staff. Never shown to the patient. */
+    cancellationNote: text("cancellation_note"),
   },
   (table) => [
     index("appointments_status_date").on(table.status, table.slotDate),
@@ -224,6 +235,11 @@ export const practitioners = sqliteTable(
   (table) => [index("practitioners_department").on(table.departmentId, table.active)],
 );
 
+/**
+ * Consultation types. `department_id` doubles as the service *category* the
+ * booking form groups by — surgical, non-surgical, dental — which is why
+ * departments carry those ids rather than organisational ones.
+ */
 export const clinicServices = sqliteTable(
   "clinic_services",
   {
@@ -271,6 +287,16 @@ export const weeklySessions = sqliteTable(
     startTime: text("start_time").notNull(),
     endTime: text("end_time").notNull(),
     intervalMinutes: integer("interval_minutes").notNull().default(30),
+    /**
+     * Comma-separated department ids bookable in this session.
+     *
+     * Held on the session rather than derived through `service_practitioners`
+     * because it is a property of the *sitting*, not of the person: the surgeon's
+     * Tuesday evening at Maadi takes surgical and non-surgical work, and a dental
+     * appointment must not be bookable into it even though the same practitioner
+     * could in principle do one.
+     */
+    categories: text("categories").notNull().default(""),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -297,6 +323,8 @@ export const scheduleExceptions = sqliteTable(
     startTime: text("start_time"),
     endTime: text("end_time"),
     reason: text("reason"),
+    /** Patients see closures on the booking calendar, so the label is bilingual. */
+    reasonAr: text("reason_ar"),
     createdBy: text("created_by").notNull(),
     createdAt: text("created_at").notNull(),
   },
@@ -306,11 +334,58 @@ export const scheduleExceptions = sqliteTable(
   ],
 );
 
-/** Staff directory and roles used by the private deployment. */
+/**
+ * Staff directory, roles and second factor, used by the private deployment.
+ *
+ * The email is the primary key because identity arrives from the authenticating
+ * proxy as an email address and nothing else — there is no local password to key
+ * a surrogate id against.
+ */
 export const staffUsers = sqliteTable("staff_users", {
   email: text("email").primaryKey(),
   displayName: text("display_name").notNull(),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
+  /**
+   * PBKDF2 hash, salt and cost in one field — see `lib/password.ts`.
+   *
+   * Null for an account that has not claimed a password yet. Identity used to come
+   * entirely from a proxy header, which made the practice dependent on a
+   * credential it neither issued nor could rotate; this is the clinic owning its
+   * own front door.
+   */
+  passwordHash: text("password_hash"),
+  passwordSetAt: text("password_set_at"),
+  /**
+   * Set when an owner issues a temporary password. The holder can sign in and do
+   * exactly one thing: choose a real one.
+   */
+  mustChangePassword: integer("must_change_password", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  /**
+   * AES-GCM ciphertext of the TOTP secret, never the secret itself. A TOTP
+   * secret is a symmetric key: in the clear, a leaked copy of this table is a
+   * permanent second factor for every account, used silently and undetectably.
+   */
+  totpSecret: text("totp_secret"),
+  /** Set when a generated secret has been proved by a code, not merely issued. */
+  totpConfirmedAt: text("totp_confirmed_at"),
+  /**
+   * Highest time step already accepted. RFC 6238 §5.2 requires one code to be
+   * usable once, so a replay inside the same window is refused.
+   */
+  totpLastCounter: integer("totp_last_counter").notNull().default(0),
+  /** Consecutive failures, reset by a success. Drives the lockout below. */
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  lockedUntil: text("locked_until"),
+  /**
+   * Bumped by an MFA reset or a deactivation, which invalidates every session
+   * already issued to this person. Revocation that leaves live sessions running
+   * is not revocation.
+   */
+  sessionEpoch: integer("session_epoch").notNull().default(1),
+  invitedBy: text("invited_by"),
+  lastSeenAt: text("last_seen_at"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
@@ -324,6 +399,136 @@ export const staffUserRoles = sqliteTable(
     createdAt: text("created_at").notNull(),
   },
   (table) => [primaryKey({ columns: [table.email, table.role] })],
+);
+
+/**
+ * One-time codes for the day a phone is lost.
+ *
+ * Stored as a SHA-256 digest of a high-entropy generated code, so the table
+ * cannot be read back into working codes. Redemption marks the row used rather
+ * than deleting it, which is what allows "this account was recovered on the
+ * 14th" to be answered afterwards.
+ */
+export const staffRecoveryCodes = sqliteTable(
+  "staff_recovery_codes",
+  {
+    email: text("email").notNull(),
+    codeHash: text("code_hash").notNull(),
+    usedAt: text("used_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.email, table.codeHash] }),
+    index("staff_recovery_codes_email").on(table.email, table.usedAt),
+  ],
+);
+
+/**
+ * One row per issued MFA session.
+ *
+ * Staff could hold valid sessions on any number of devices with no way to see or
+ * end them: the only revocation available was bumping the epoch, which signs
+ * everybody's devices out at once and gives no answer to "where am I signed in?".
+ * That is the question somebody asks after leaving a browser open on a hotel
+ * computer, and it deserves a better answer than "reset your second factor".
+ *
+ * Holds a digest of the token, never the token: this table is a list of sessions,
+ * not a set of spare keys to them.
+ */
+export const staffSessions = sqliteTable(
+  "staff_sessions",
+  {
+    /** Random id carried inside the signed token, so a session is addressable. */
+    id: text("id").primaryKey(),
+    email: text("email").notNull(),
+    /** SHA-256 of the token, so a leaked row cannot be replayed as a session. */
+    tokenDigest: text("token_digest").notNull(),
+    /** Coarse device description parsed from the user agent. Never the full UA. */
+    device: text("device"),
+    /** Truncated hash of the caller IP — enough to spot an anomaly, not to track. */
+    clientHash: text("client_hash"),
+    issuedAt: text("issued_at").notNull(),
+    lastSeenAt: text("last_seen_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    revokedAt: text("revoked_at"),
+    /** "staff" when signed out deliberately, "owner" when ended by somebody else. */
+    revokedBy: text("revoked_by"),
+  },
+  (table) => [
+    index("staff_sessions_email").on(table.email, table.revokedAt),
+    index("staff_sessions_expires").on(table.expiresAt),
+  ],
+);
+
+/**
+ * Fixed-window counter for authentication attempts, keyed per client.
+ *
+ * The per-account lockout stops five wrong codes against one colleague. It does
+ * nothing about one source spreading five guesses across every address in the
+ * directory, which is the shape a real attack takes once the staff list is known.
+ * Cloudflare's WAF is the right place for volumetric limits; this is the floor
+ * that exists whether or not that has been configured.
+ */
+export const authThrottle = sqliteTable("auth_throttle", {
+  /** Client fingerprint, or an email for account-scoped limits. */
+  key: text("key").primaryKey(),
+  attempts: integer("attempts").notNull().default(0),
+  windowStartedAt: text("window_started_at").notNull(),
+  /** Set once the limit is hit, so the block outlives the counting window. */
+  blockedUntil: text("blocked_until"),
+});
+
+/**
+ * Why appointments get cancelled.
+ *
+ * A lookup table rather than free text so the answer can be counted. Free text
+ * would give the clinic a thousand ways to write "patient was travelling" and no
+ * way to see that travel is why a fifth of its Thursday evenings empty out.
+ */
+export const cancellationReasons = sqliteTable(
+  "cancellation_reasons",
+  {
+    code: text("code").primaryKey(),
+    labelEn: text("label_en").notNull(),
+    labelAr: text("label_ar").notNull(),
+    /** "patient" | "staff" | "both" — who is offered this reason. */
+    audience: text("audience").notNull().default("both"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+  },
+  (table) => [index("cancellation_reasons_audience").on(table.audience, table.active)],
+);
+
+/**
+ * Authentication and authorisation events, separate from `access_log`.
+ *
+ * `access_log` answers "who read this patient's record?". This answers "who
+ * tried to get in, who was refused, and who changed what somebody else is
+ * allowed to do?" — questions whose answers are needed even when no patient
+ * record was reached, which is exactly the case during an attack. Holds no
+ * patient data, so it is retained on the audit schedule rather than the PII one.
+ */
+export const securityEvents = sqliteTable(
+  "security_events",
+  {
+    id: text("id").primaryKey(),
+    /** Staff email where known; "anonymous" for an unauthenticated attempt. */
+    actor: text("actor").notNull(),
+    /** mfa_verified | mfa_failed | role_changed | permission_denied | … */
+    event: text("event").notNull(),
+    /** "allowed" | "denied" | "changed" — the shape of what happened. */
+    outcome: text("outcome").notNull(),
+    /** Who or what the event was about, when that differs from the actor. */
+    subject: text("subject"),
+    detail: text("detail"),
+    clientHash: text("client_hash"),
+    at: text("at").notNull(),
+  },
+  (table) => [
+    index("security_events_actor_at").on(table.actor, table.at),
+    index("security_events_event_at").on(table.event, table.at),
+    index("security_events_at").on(table.at),
+  ],
 );
 
 /* -------------------------------------------------------------------------- */
@@ -384,4 +589,84 @@ export const notificationAttempts = sqliteTable(
     finishedAt: text("finished_at").notNull(),
   },
   (table) => [index("notification_attempts_job").on(table.jobId, table.attemptNumber)],
+);
+
+/* -------------------------------------------------------------------------- */
+/* Pilot operations                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The pilot is deliberately controlled from one durable row. The public
+ * booking worker reads this policy before offering or holding a slot, while
+ * Clinic OS is the only surface allowed to change it.
+ */
+export const pilotSettings = sqliteTable("pilot_settings", {
+  id: text("id").primaryKey(),
+  /** setup | running | paused | complete */
+  status: text("status").notNull().default("setup"),
+  /** A running pilot is always bounded to exactly one branch. */
+  branchId: text("branch_id"),
+  startDate: text("start_date"),
+  endDate: text("end_date"),
+  /** pending | go | extend | stop */
+  decision: text("decision").notNull().default("pending"),
+  decisionNote: text("decision_note"),
+  updatedBy: text("updated_by").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+/** Operational sign-offs required before the pilot can honestly be started. */
+export const pilotChecklist = sqliteTable("pilot_checklist", {
+  itemKey: text("item_key").primaryKey(),
+  completed: integer("completed", { mode: "boolean" }).notNull().default(false),
+  note: text("note"),
+  updatedBy: text("updated_by").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+/**
+ * Operational problems noticed during the parallel run. These records contain
+ * no patient identifiers; individual patient issues belong on the appointment.
+ */
+export const pilotIncidents = sqliteTable(
+  "pilot_incidents",
+  {
+    id: text("id").primaryKey(),
+    summary: text("summary").notNull(),
+    /** low | medium | high | critical */
+    severity: text("severity").notNull(),
+    /** open | resolved */
+    status: text("status").notNull().default("open"),
+    openedBy: text("opened_by").notNull(),
+    openedAt: text("opened_at").notNull(),
+    resolvedBy: text("resolved_by"),
+    resolvedAt: text("resolved_at"),
+  },
+  (table) => [index("pilot_incidents_status").on(table.status, table.openedAt)],
+);
+
+/** Immutable weekly snapshots: the evidence behind a go/no-go decision. */
+export const pilotReviews = sqliteTable(
+  "pilot_reviews",
+  {
+    id: text("id").primaryKey(),
+    weekStart: text("week_start").notNull(),
+    branchId: text("branch_id"),
+    bookings: integer("bookings").notNull(),
+    completed: integer("completed").notNull(),
+    noShows: integer("no_shows").notNull(),
+    cancelled: integer("cancelled").notNull(),
+    notificationTotal: integer("notification_total").notNull(),
+    notificationFailed: integer("notification_failed").notNull(),
+    openIncidents: integer("open_incidents").notNull(),
+    /** continue | investigate | stop */
+    recommendation: text("recommendation").notNull(),
+    note: text("note"),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("pilot_reviews_week").on(table.weekStart),
+    index("pilot_reviews_created").on(table.createdAt),
+  ],
 );

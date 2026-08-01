@@ -98,6 +98,16 @@ test("CareLens remains readable and operable when its deferred interface mounts"
 });
 
 test("booking dialog passes WCAG checks and preserves keyboard focus", async ({ page }, testInfo) => {
+  /**
+   * Audited with motion reduced, so the result does not depend on timing.
+   *
+   * This test failed roughly one run in four: CareLens fades its detail panel in
+   * over 450ms, and a scan that landed mid-fade measured the *transitional*
+   * opacity — 2.58:1 for a label whose authored colour is 7.95:1. The site's
+   * global reduced-motion rule collapses that animation, so what is audited is
+   * the colour the design actually specifies rather than a frame of it.
+   */
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
   await page.waitForLoadState("networkidle");
   await dismissIntroduction(page);
@@ -144,9 +154,59 @@ test("appointment management and Clinic OS pass automated WCAG checks", async ({
     await page.waitForLoadState("networkidle");
     await expect(page.getByRole("heading", { name: /Good .+/ })).toBeVisible();
     await expectAccessible(page, testInfo, "Clinic OS dashboard");
+
+    await page.getByRole("button", { name: /Pilot/ }).click();
+    await expect(page.getByRole("heading", { name: "Pilot Control" })).toBeVisible();
+    await expectAccessible(page, testInfo, "Clinic OS Pilot Control");
   } finally {
     await cancelTestBooking(request, booking);
   }
+});
+
+/**
+ * The two-step screens, audited separately.
+ *
+ * These are the pages a member of staff meets when they are locked out and in a
+ * hurry — the worst possible moment to hand somebody an unlabelled input or a
+ * contrast failure.
+ */
+test("the two-step sign-in screens pass automated WCAG 2.1 AA checks", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/command-center/verify");
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("heading", { name: /two-step code/i })).toBeVisible();
+  await expectAccessible(page, testInfo, "Clinic OS two-step challenge");
+
+  await page.goto("/command-center/security");
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("heading", { name: "Two-step sign-in" })).toBeVisible();
+  await expectAccessible(page, testInfo, "Clinic OS security settings");
+});
+
+/**
+ * The clinic timetable editor.
+ *
+ * Dense, form-heavy, and the screen an owner uses least often — which is exactly
+ * where an unlabelled select or a contrast failure survives unnoticed.
+ */
+test("the clinic hours editor passes automated WCAG 2.1 AA checks", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/command-center");
+  await page.waitForLoadState("networkidle");
+  await page.locator(".command-sidebar nav button").filter({ hasText: "Hours" }).click();
+  await expect(page.getByRole("heading", { name: "The weekly rota" })).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.getByRole("heading", { name: "Who consults here" })).toBeVisible();
+  await expectAccessible(page, testInfo, "Clinic OS hours editor");
+
+  // The session editor is a separate form that only exists once opened.
+  await page.getByRole("button", { name: "Add a session" }).first().click();
+  await expect(page.getByRole("heading", { name: "New session" })).toBeVisible();
+  await expectAccessible(page, testInfo, "Clinic OS session editor");
 });
 
 test("reduced-motion visitors enter without a decorative exit delay", async ({ page }) => {

@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { branchLabel, serviceLabel } from "@/lib/clinic";
+import { csvDocument } from "@/lib/csv";
 import { formatShortDate, formatSlotTime } from "@/lib/dates";
 
 type Kind = "access" | "erase" | "correct";
@@ -197,33 +198,35 @@ export default function DataRequests() {
       "Consent given",
       "Consent version",
     ];
-    const cell = (value: string | null | undefined) =>
-      `"${String(value ?? "").replace(/"/g, '""')}"`;
-    const csv = [
-      header.map(cell).join(","),
-      ...rows.map((row) =>
-        [
-          row.id.slice(0, 8).toUpperCase(),
-          row.slotDate,
-          row.slotTime,
-          branchLabel(row.branch),
-          serviceLabel(row.service),
-          row.status,
-          row.patientName,
-          row.patientPhone,
-          row.patientEmail,
-          row.patientNote,
-          row.createdAt,
-          row.consentGivenAt,
-          row.consentVersion,
-        ]
-          .map(cell)
-          .join(","),
-      ),
-    ].join("\r\n");
+    /**
+     * Built with the shared escaper.
+     *
+     * This used to quote values without neutralising a leading `=`, so a patient
+     * who typed a formula into the public booking form got it executed on a
+     * clinic machine the moment staff opened the access pack. The appointment
+     * export already guarded against exactly this; the guard simply lived in the
+     * wrong file. It is now in `lib/csv.ts` and both callers share it.
+     */
+    const csv = csvDocument(
+      header,
+      rows.map((row) => [
+        row.id.slice(0, 8).toUpperCase(),
+        row.slotDate,
+        row.slotTime,
+        branchLabel(row.branch),
+        serviceLabel(row.service),
+        row.status,
+        row.patientName,
+        row.patientPhone,
+        row.patientEmail,
+        row.patientNote,
+        row.createdAt,
+        row.consentGivenAt,
+        row.consentVersion,
+      ]),
+    );
 
-    // BOM so Excel reads Arabic names correctly rather than as mojibake.
-    const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;

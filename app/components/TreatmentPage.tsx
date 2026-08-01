@@ -48,7 +48,7 @@ export default function TreatmentPage({
         <p className="treatment-feeling">&ldquo;{c.feeling}&rdquo;</p>
         <p className="treatment-intro">{c.intro}</p>
         <div className="treatment-actions">
-          <Link className="button button--burgundy" href={`${home}#book`}>
+          <Link className="button button--burgundy" href={`${home}?book=${treatment.service}#book`}>
             <CalendarDays size={18} />
             {t.book}
           </Link>
@@ -136,7 +136,7 @@ export default function TreatmentPage({
       <section className="treatment-cta">
         <h2>{t.finalTitle}</h2>
         <div className="treatment-actions">
-          <Link className="button button--burgundy button--large" href={`${home}#book`}>
+          <Link className="button button--burgundy button--large" href={`${home}?book=${treatment.service}#book`}>
             {t.book}
             <ArrowRight size={18} />
           </Link>

@@ -280,9 +280,18 @@ test("validation catches one practitioner in two places at once", () => {
       ],
     },
   ];
+  const problems = validateSchedule(clashing);
   assert.ok(
-    validateSchedule(clashing).some((p) => /also at/.test(p.message)),
+    problems.some((p) => /cannot be at .+ and .+ at the same time/.test(p.message)),
     "a practitioner double-booked across branches must be reported",
+  );
+  // Both branches are named, in a fixed order, so the clinic can act on the
+  // message without also knowing which row the validator happened to reach first.
+  assert.ok(
+    problems.some((p) =>
+      p.message.includes("cannot be at Maadi and Mohandessin at the same time on Sunday"),
+    ),
+    problems.map((p) => p.message).join(" | "),
   );
 });
 

@@ -88,13 +88,17 @@ Anything less and the clinic is carrying risk it hasn't agreed to.
 - Idempotency keys on confirm, so a double-tap on flaky mobile data can't
   double-charge the flow.
 - Real content: photography, doctor-reviewed copy, clinician-reviewed Arabic.
-- Multi-practitioner support, if anyone other than Dr. Ashraf consults.
+- ~~Multi-practitioner support, if anyone other than Dr. Ashraf consults.~~
+  ✅ **Done** — practitioners are managed from Clinic OS and each gets their own
+  room in the occupancy grid, so two clinicians at one address never collide.
 
 ### 🟡 Should follow soon after
 
 - NOOR decision (see §7).
 - Analytics and booking-funnel instrumentation.
-- Waitlist for cancelled slots.
+- Waitlist for cancelled slots. **Held until a notification provider exists** —
+  otherwise it is a queue that never fires. Cancellations now carry a reason, which
+  is the input a waitlist wants.
 - Patient-facing appointment history.
 - Before/after gallery — **subject to legal review**, see §6.
 
@@ -147,6 +151,8 @@ Nothing else can start cleanly until these exist.
 - ~~**Runbook**~~ ✅ **Done.** `docs/RUNBOOK.md` — triage by health status,
   rollback, restore drill, and the escalation path. Migrations are additive by
   policy so a Worker rollback is safe without a database rollback.
+- ~~🔒 **Confirm the proxy trust mechanism**~~ ✅ **No longer required.** Staff sign
+  in with a password the clinic issues; see the Phase 2 increment below.
 - 🔒 **Provision production + staging on Cloudflare** — needs the account.
 - 🔒 **Restore drill** — needs a real D1. The runbook has the procedure and a
   sign-off table; **that table being empty is a launch blocker.**
@@ -155,6 +161,33 @@ Nothing else can start cleanly until these exist.
 
 **Exit:** the app is live on the real domain, with the clinic's real hours, and a
 restore has actually been practised.
+
+
+> **Staff sign-in increment (2026-08-01, at the practice's request):** the dashboard
+> is served from the main website and staff sign in at `/login` with an email and a
+> password the clinic issues.
+>
+> - **The longest-standing launch blocker is gone.** Phase 1 listed "confirm the
+>   proxy trust mechanism" and §6 listed "can the platform proxy send a custom
+>   header?" as the first thing to chase. Neither gates production any more:
+>   `AUTH_PROXY_SECRET` is optional, the proxy path is opt-in via
+>   `STAFF_SIGN_IN=platform`, and it still fails closed when unconfigured.
+> - **PBKDF2-SHA256 at 210,000 iterations**, salted per user, cost stored inside
+>   each hash so it upgrades on sign-in. See S11 in `docs/SECURITY-REVIEW.md` for
+>   why not bcrypt or Argon2, and for the honest note about the cost being below
+>   OWASP's current figure.
+> - **MFA sits on top rather than beside.** A session records which factors it
+>   proved, inside its signature, so a password alone is enough only where the
+>   clinic is not requiring a second factor.
+> - **No emailed reset.** An owner issues a temporary password, shown once, which
+>   the holder must replace on first sign-in — a deliberate choice over a reset link
+>   that would silently fail while the practice has no mail provider.
+>
+> **The cost, stated plainly:** the patient and clinic surfaces are no longer
+> disjoint on the deployment the practice wants. A flaw in the marketing site now
+> sits next to the appointment book. The isolation is not deleted —
+> `CAREPOINT_SURFACE=patient` restores it and the unit suite asserts it — but it is
+> not what will be running.
 
 ### Phase 2 — Trust and safety (~8–10 days)
 
@@ -216,6 +249,61 @@ restore has actually been practised.
 > cannot serve Clinic OS pages or patient-data APIs. Provisioning both Workers
 > against the same real D1 and proving the proxy header remain account-blocked.
 
+> **Staff authentication increment (step 5 of the agreed order):** access is no
+> longer a single binary check against an email allowlist.
+>
+> - **Roles are real and enforced per route.** Owner / Doctor / Reception /
+>   Privacy admin / Read-only auditor, resolved from `staff_users` and
+>   `staff_user_roles` in D1 and editable from Clinic OS under Security. Each API
+>   declares the permission it needs. Reception can no longer export the register
+>   or anonymise a patient; an auditor sees the controls but no patient details.
+> - **Two-step sign-in.** RFC 6238 TOTP with encrypted secrets, ten recovery
+>   codes, a five-attempt lockout, single-use codes, and an HttpOnly signed
+>   session bound to the staff email and a revocation epoch. Enforced in
+>   production by default; `STAFF_MFA_REQUIRED` overrides either way and is the
+>   documented way back in if the practice loses every phone.
+> - **Bulk export became a server endpoint** so `patient:export` can actually be
+>   refused, and so every copy of the register taken is written to the access log.
+> - **A second audit trail**, `security_events`, records sign-ins, refusals and
+>   role changes — the questions that still have answers when an attacker never
+>   reached a patient record.
+>
+> New required production secrets: `STAFF_MFA_KEY` and `STAFF_SESSION_SECRET`,
+> both documented in `.env.example` alongside `AUTH_PROXY_SECRET`, which had been
+> load-bearing but undocumented. The pilot readiness gate now fails while staff
+> MFA is not genuinely enforced, so a pilot cannot start on header-only auth.
+>
+> **Still open:** no passkeys (TOTP codes can be relayed by a convincing phishing
+> page), no per-IP throttle on the MFA endpoint, no list of active sessions or
+> "sign out everywhere", and no QR code at enrolment — the secret is typed or
+> handed straight to the app via an `otpauth://` link. See S8 in
+> `docs/SECURITY-REVIEW.md`.
+
+> **Clinic catalogue increment:** the practice can now change its own opening
+> hours. The weekly rota, consultation durations and closures moved from constants
+> in `lib/clinic.ts` into the D1 tables that had been created for them and never
+> read, and **Clinic OS → Hours** edits all three behind a new `catalogue:write`
+> permission held by the owner and the doctor.
+>
+> - `lib/schedule.ts` stays pure: every function takes an optional catalogue and
+>   falls back to the constants, so all existing call sites and tests are unchanged.
+> - The constants are now the **seed** — a never-used table is populated from them
+>   on first read, so a fresh database serves a working booking page — and the
+>   **fallback**, so a D1 failure degrades to the last known good timetable rather
+>   than an empty calendar.
+> - Every save is validated against the *resulting* rota by the same
+>   `validateSchedule` that guards the constants in CI, so a change that would put
+>   a practitioner in two branches at once is refused with the reason.
+> - Proven end to end: moving a session from 16:00 to 17:30 in the dashboard took
+>   the public booking API from five slots to three, in the same process, with no
+>   deploy.
+>
+> **This closes the last engineering item on the critical path.** Entering the real
+> hours is now a data-entry task for the clinic rather than a code change, which
+> means Phase 0's oldest outstanding item no longer blocks anything in this
+> repository. Branch names, addresses and map links remain constants deliberately:
+> they change roughly never and are rendered into statically generated pages.
+
 - Email: provider live, **SPF/DKIM/DMARC** configured, deliverability tested to
   Gmail/Outlook/Egyptian ISPs. Bilingual templates.
 - **WhatsApp Business API** — in Egypt this is the channel patients actually use.
@@ -229,6 +317,37 @@ restore has actually been practised.
 
 **Exit:** a booking reliably reaches the patient and the clinic on two channels,
 and failures surface.
+
+
+> **Hardening increment (2026-08-01):** four items this plan and the handoff listed
+> as outstanding are now built and tested.
+>
+> - **Multi-practitioner support** (§3, 🟠). The rota always treated practitioners as
+>   first-class, but only two seeded people existed and nothing could create a third,
+>   so an associate or a second dentist could not be rostered at all. They can now be
+>   added, renamed and removed from Clinic OS → Hours. Removal is refused while they
+>   hold sessions rather than cascading; renaming leaves existing bookings protected
+>   under the name they were taken against.
+> - **`cancellation_reasons`** (§3 schema). The clinic recorded *that* an appointment
+>   was cancelled and never why. Now asked of both patient and staff — optionally, so
+>   a cancellation is never blocked by a question — with a separate list per audience,
+>   and shown as an Attrition panel in Insights. This is the first metric in the
+>   dashboard a practice can act on directly.
+> - **Per-client MFA throttle**, closing the gap S8 named: an attacker with the staff
+>   list still had five guesses per colleague. See S10 in `docs/SECURITY-REVIEW.md`.
+> - **Active sessions and sign out everywhere**, also from S8.
+>
+> Found while doing it, and fixed: 47KB of Clinic OS stylesheet was being downloaded
+> by every patient on the marketing site. Moving it behind the dashboard component
+> took the shared stylesheet from 22.1KB to **16.7KB gzip**. Separately, the
+> cancellation metrics were windowed on the appointment date rather than the
+> cancellation date, which excluded precisely the cancellations worth acting on — a
+> future slot just released.
+>
+> **Deliberately not built:** a waitlist for cancelled slots. It is now genuinely
+> worth having, but without a notification provider it would be a queue that never
+> fires — the same trap Phase 3 is already in. It belongs after the provider, not
+> before it.
 
 ### Phase 4 — Proving it works (~6–8 days)
 
@@ -271,6 +390,15 @@ and failures surface.
 - Verified credentials, services and hours.
 
 ### Phase 6 — Pilot (~4 weeks elapsed, low eng)
+
+> **Engineering increment (2026-08-01):** Clinic OS now includes a durable
+> Pilot Control room. It refuses to start before six operational sign-offs,
+> restricts public booking to one selected branch while running, and provides
+> an emergency pause that blocks new holds without touching existing
+> appointments. Weekly booking, attendance and delivery metrics, a PII-free
+> incident log, immutable review snapshots and an explicit go/extend/stop
+> decision are stored in D1. This makes the pilot operable; it does **not**
+> replace the four-week parallel run or activate one automatically.
 
 - Run **in parallel** with the existing WordPress site. Nothing switched off.
 - Start with one branch, or online-only bookings, to bound the blast radius.

@@ -23,6 +23,7 @@ export default function Modal({
   label,
   labelledBy,
   layerClassName = "modal-layer",
+  active = true,
   children,
 }: {
   onClose: () => void;
@@ -30,6 +31,8 @@ export default function Modal({
   label?: string;
   labelledBy?: string;
   layerClassName?: string;
+  /** Keeps an expensive dialog prepared but inert until its trigger is used. */
+  active?: boolean;
   children: ReactNode;
 }) {
   const layerRef = useRef<HTMLDivElement>(null);
@@ -42,6 +45,7 @@ export default function Modal({
   });
 
   useEffect(() => {
+    if (!active) return;
     const layer = layerRef.current;
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
@@ -90,16 +94,17 @@ export default function Modal({
       document.body.style.overflow = previousOverflow;
       previouslyFocused?.focus?.({ preventScroll: true });
     };
-  }, []);
+  }, [active]);
 
   return (
     <div
       ref={layerRef}
       className={layerClassName}
-      role="dialog"
-      aria-modal="true"
-      aria-label={labelledBy ? undefined : label}
-      aria-labelledby={labelledBy}
+      role={active ? "dialog" : undefined}
+      aria-modal={active ? "true" : undefined}
+      aria-label={active && !labelledBy ? label : undefined}
+      aria-labelledby={active ? labelledBy : undefined}
+      hidden={!active}
       tabIndex={-1}
     >
       <button className="modal-scrim" onClick={onClose} tabIndex={-1} aria-hidden />

@@ -952,7 +952,6 @@ section[id] {
 
 @keyframes revealUp {
   from {
-    opacity: 0;
     transform: translateY(16px);
   }
   to {
@@ -1562,12 +1561,20 @@ section[id] {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/**
+ * "AREA SELECTED" — a state label, not decoration, so it has to be legible.
+ *
+ * Was 7px, which is smaller than any browser's minimum readable size and well
+ * below the ~11px this file uses for every other small-caps label. The colour is
+ * fine on its own (7.95:1 against the panel); the size was the defect, and an
+ * automated contrast check cannot catch it.
+ */
 .universe-signal {
   display: flex;
   align-items: center;
   gap: 7px;
   color: var(--burgundy);
-  font-size: 7px;
+  font-size: 11px;
   letter-spacing: 0.16em;
 }
 
@@ -4208,6 +4215,26 @@ footer p {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+
+  /**
+   * Content hidden in wait for an animation that will never run.
+   *
+   * `.portal-scene` is `visibility: hidden` by default so GSAP can reveal it
+   * without a flash of unstyled content. But the GSAP effect returns early under
+   * reduced motion — so anyone with that preference set was shown three
+   * permanently blank sections where the practice's expertise, CareLens and
+   * booking narrative should be.
+   *
+   * An automated scan cannot catch this: axe sees an element that is correctly
+   * marked hidden and has no way to know it was supposed to appear. Anything
+   * hidden pending a JS reveal needs a no-JS/no-motion resting state, and this is
+   * that resting state.
+   */
+  .portal-scene {
+    visibility: visible;
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ==========================================================================
@@ -4646,6 +4673,35 @@ footer {
   background: var(--burgundy);
   border-color: var(--burgundy);
   color: var(--white);
+}
+
+/* Optional reason on the cancellation screen. */
+.manage-reason {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.manage-reason label {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.manage-reason select {
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  font: inherit;
+  font-size: 14px;
+  color: var(--charcoal);
+}
+
+.manage-reason select:focus-visible {
+  outline: 2px solid var(--burgundy);
+  outline-offset: 2px;
 }
 
 .manage-confirm p,

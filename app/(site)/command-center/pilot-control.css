@@ -1,0 +1,410 @@
+/* Pilot Control ----------------------------------------------------------- */
+
+.pilot-control {
+  display: grid;
+  gap: 18px;
+}
+
+.pilot-loading {
+  margin: 0;
+  padding: 42px;
+  border: 1px solid var(--cc-line);
+  background: #fff;
+  color: var(--cc-muted);
+  text-align: center;
+}
+
+.pilot-hero {
+  min-height: 180px;
+  padding: 28px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 30px;
+  color: #fff;
+  background:
+    radial-gradient(circle at 78% 18%, rgba(190, 135, 155, 0.25), transparent 34%),
+    linear-gradient(125deg, #171716, #282321 62%, #432a32);
+}
+
+.pilot-hero > div:first-child > span,
+.pilot-panel-heading span,
+.pilot-metrics article > span,
+.pilot-form-grid label > span,
+.pilot-decision-form label > span,
+.pilot-incident-form label > span,
+.pilot-review-form label > span {
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.pilot-hero h2 {
+  margin: 8px 0 4px;
+  font-family: var(--font-display), serif;
+  font-size: clamp(36px, 5vw, 62px);
+  font-weight: 400;
+  line-height: 0.95;
+}
+
+.pilot-hero p {
+  margin: 10px 0 0;
+  color: #c8c3bd;
+}
+
+.pilot-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 8px;
+}
+
+.pilot-hero-actions button,
+.pilot-primary,
+.pilot-decision-form button,
+.pilot-incident-form button,
+.pilot-review-form button,
+.pilot-incidents button {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--cc-line);
+  background: #fff;
+  color: var(--cc-ink);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.pilot-hero-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.pilot-hero-actions .pilot-pause {
+  border-color: #d99aae;
+  background: #792b43;
+}
+
+.pilot-state {
+  min-height: 42px;
+  padding: 0 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #eee9e5;
+  font-size: 11.5px;
+}
+
+.pilot-state i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c3a065;
+}
+
+.pilot-state[data-status="running"] i { background: #73bb8d; box-shadow: 0 0 0 5px rgba(115, 187, 141, 0.12); }
+.pilot-state[data-status="paused"] i { background: #ef809e; box-shadow: 0 0 0 5px rgba(239, 128, 158, 0.12); }
+
+.pilot-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pilot-metrics article {
+  min-height: 138px;
+  padding: 21px;
+  display: grid;
+  align-content: space-between;
+  border: 1px solid var(--cc-line);
+  background: #fff;
+}
+
+.pilot-metrics article[data-alert] {
+  border-color: rgba(157, 41, 71, 0.45);
+  background: #fff8fa;
+}
+
+.pilot-metrics strong {
+  margin-top: 18px;
+  font-size: 38px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.pilot-metrics p {
+  margin: 7px 0 0;
+  color: var(--cc-muted);
+  font-size: 11.5px;
+}
+
+.pilot-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.pilot-panel {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--cc-line);
+  background: #fff;
+}
+
+.pilot-panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 20px;
+}
+
+.pilot-panel-heading > svg {
+  color: var(--cc-accent);
+}
+
+.pilot-panel-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.pilot-panel-heading span { color: var(--cc-muted); }
+.pilot-panel-heading h3 { margin: 0; font-size: 19px; font-weight: 520; }
+
+.pilot-panel-heading > strong {
+  margin-left: auto;
+  padding: 7px 10px;
+  border: 1px solid var(--cc-line);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.pilot-panel-heading > strong[data-recommendation="continue"] { color: #2f6e48; background: #eef8f1; }
+.pilot-panel-heading > strong[data-recommendation="investigate"] { color: #80561f; background: #fff7e9; }
+.pilot-panel-heading > strong[data-recommendation="stop"] { color: #87213d; background: #fff0f4; }
+
+.pilot-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.pilot-form-grid label,
+.pilot-decision-form label,
+.pilot-incident-form label,
+.pilot-review-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--cc-muted);
+}
+
+.pilot-form-grid input,
+.pilot-form-grid select,
+.pilot-decision-form select,
+.pilot-decision-form textarea,
+.pilot-incident-form input,
+.pilot-incident-form select,
+.pilot-review-form select,
+.pilot-review-form textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 11px;
+  border: 1px solid var(--cc-line);
+  background: var(--cc-panel);
+  color: var(--cc-ink);
+  font: inherit;
+}
+
+.pilot-boundary,
+.pilot-gate {
+  margin: 15px 0;
+  padding: 11px 13px;
+  border-left: 3px solid var(--cc-accent);
+  background: var(--cc-panel-alt);
+  color: var(--cc-muted);
+  font-size: 12px;
+}
+
+.pilot-primary,
+.pilot-decision-form button,
+.pilot-incident-form button,
+.pilot-review-form button {
+  background: var(--cc-dark);
+  color: #fff;
+}
+
+.pilot-checklist {
+  display: grid;
+  gap: 7px;
+}
+
+.pilot-checklist label {
+  min-height: 58px;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid var(--cc-line);
+  cursor: pointer;
+}
+
+.pilot-checklist label[data-complete] { background: #f3f8f4; border-color: rgba(74, 125, 92, 0.28); }
+.pilot-checklist input { width: 17px; height: 17px; accent-color: var(--cc-green); }
+.pilot-checklist label > span { display: grid; gap: 2px; }
+.pilot-checklist strong { font-size: 12.5px; }
+.pilot-checklist small { color: var(--cc-muted); font-size: 10.5px; }
+.pilot-checklist svg { opacity: 0; color: var(--cc-green); }
+.pilot-checklist label[data-complete] svg { opacity: 1; }
+
+.pilot-checks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.pilot-checks span {
+  min-height: 42px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #ebc3cd;
+  background: #fff7f9;
+  color: #76243b;
+  font-size: 11.5px;
+}
+
+.pilot-checks span[data-pass] { border-color: #bed8c6; background: #f2f8f4; color: #326a47; }
+
+.pilot-decision-form {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 11px;
+}
+
+.pilot-incident-form,
+.pilot-review-form {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.pilot-incident-form button,
+.pilot-review-form button { grid-column: 1 / -1; justify-self: start; }
+.pilot-review-form { grid-template-columns: 150px minmax(0, 1fr); }
+
+.pilot-incidents,
+.pilot-reviews {
+  display: grid;
+  gap: 1px;
+  background: var(--cc-line);
+}
+
+.pilot-incidents > p,
+.pilot-reviews > p {
+  margin: 0;
+  padding: 22px;
+  background: var(--cc-panel);
+  color: var(--cc-muted);
+  text-align: center;
+}
+
+.pilot-incidents article {
+  min-height: 62px;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  background: #fff;
+}
+
+.pilot-incidents article > span {
+  padding: 4px 6px;
+  border: 1px solid var(--cc-line);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.pilot-incidents article[data-severity="critical"] > span,
+.pilot-incidents article[data-severity="high"] > span { color: #84233e; background: #fff0f4; }
+.pilot-incidents article[data-resolved] { opacity: 0.68; }
+.pilot-incidents small { color: var(--cc-muted); font-size: 10px; }
+.pilot-incidents em { color: var(--cc-green); font-size: 11px; font-style: normal; }
+
+.pilot-reviews article {
+  padding: 13px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  background: #fff;
+}
+
+.pilot-reviews article > span,
+.pilot-reviews article > small { color: var(--cc-muted); font-size: 10.5px; }
+.pilot-reviews article > strong { color: var(--cc-accent-deep); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+.pilot-reviews article > small,
+.pilot-reviews article > p { grid-column: 1 / -1; }
+.pilot-reviews article > p { margin: 4px 0 0; font-size: 11.5px; }
+
+@media (max-width: 1100px) {
+  .pilot-metrics { grid-template-columns: 1fr 1fr; }
+  .pilot-layout { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .pilot-hero { align-items: stretch; flex-direction: column; }
+  .pilot-hero-actions { justify-content: start; }
+  .pilot-metrics,
+  .pilot-form-grid,
+  .pilot-checks { grid-template-columns: 1fr; }
+  .pilot-decision-form,
+  .pilot-incident-form,
+  .pilot-review-form { grid-template-columns: 1fr; }
+  .pilot-decision-form button,
+  .pilot-incident-form button,
+  .pilot-review-form button { width: 100%; }
+  .pilot-incidents article { grid-template-columns: 65px minmax(0, 1fr); }
+  .pilot-incidents article > small,
+  .pilot-incidents article > button,
+  .pilot-incidents article > em { grid-column: 2; justify-self: start; }
+}
+
+
+/* Gate states.
+   `unknown` is deliberately neutral rather than red: it means the pilot has not
+   yet produced enough evidence to judge that gate, which is not a fault to
+   chase. Showing it as a failure would send the clinic hunting a problem that
+   does not exist; showing it as a pass would hide a gate nobody has measured. */
+.pilot-checks span[data-state="pass"] {
+  color: #2f5d40;
+  background: #e2ede5;
+  border-color: #bcd7c6;
+}
+
+.pilot-checks span[data-state="fail"] {
+  color: #7a3b28;
+  background: #f4e0d8;
+  border-color: #e0b9a9;
+}
+
+.pilot-checks span[data-state="unknown"] {
+  color: #57534e;
+  background: #efedea;
+  border-color: #d9d5cf;
+}
+
+.pilot-checks span[data-state="unknown"] svg {
+  opacity: 0.75;
+}

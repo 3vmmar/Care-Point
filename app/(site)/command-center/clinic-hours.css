@@ -1,0 +1,312 @@
+/* ==========================================================================
+   Clinic hours editor
+   Imported by ClinicHours.tsx rather than by the page, so it ships as its own
+   chunk instead of being folded into the stylesheet every patient downloads.
+   ========================================================================== */
+
+.hours-lede {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.75;
+  max-width: 68ch;
+}
+
+.hours-empty {
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.hours-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0 0 16px;
+  padding: 12px 15px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.hours-message svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.hours-message ul {
+  margin: 6px 0 0;
+  padding-inline-start: 18px;
+}
+
+.hours-message--error {
+  display: block;
+  border-color: rgba(123, 38, 60, 0.34);
+  background: rgba(123, 38, 60, 0.06);
+  color: var(--burgundy);
+}
+
+.hours-message--warn {
+  border-color: rgba(176, 122, 44, 0.4);
+  background: rgba(176, 122, 44, 0.08);
+  color: #7a5314;
+}
+
+.hours-message--ok {
+  border-color: rgba(31, 106, 74, 0.4);
+  background: rgba(31, 106, 74, 0.07);
+  color: #14503a;
+}
+
+.hours-branch {
+  margin: 0 0 26px;
+}
+
+.hours-branch-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 10px;
+}
+
+.hours-branch-head h3 {
+  margin: 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 19px;
+  font-weight: 500;
+}
+
+.hours-branch-head button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.hours-branch-head button:hover {
+  border-color: var(--charcoal);
+}
+
+.hours-table-wrap {
+  overflow-x: auto;
+}
+
+.hours-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.hours-table th,
+.hours-table td {
+  padding: 11px 12px;
+  text-align: start;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.hours-table th {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.hours-table td small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.hours-table select {
+  min-height: 38px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  font: inherit;
+  font-size: 13px;
+}
+
+.hours-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hours-row-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.hours-row-actions button:hover:not(:disabled) {
+  border-color: var(--charcoal);
+}
+
+.hours-row-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hours-editor {
+  margin: 20px 0 0;
+  padding: 20px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+
+.hours-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 16px;
+}
+
+.hours-editor-head h3 {
+  margin: 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.hours-fields {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.hours-fields label {
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hours-fields input,
+.hours-fields select {
+  min-height: 44px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  font: inherit;
+  font-size: 14px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--charcoal);
+}
+
+.hours-fields input:focus-visible,
+.hours-fields select:focus-visible,
+.hours-table select:focus-visible {
+  outline: 2px solid var(--burgundy);
+  outline-offset: 2px;
+}
+
+.hours-categories {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.hours-categories legend {
+  padding: 0;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hours-categories label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.hours-categories input {
+  accent-color: var(--burgundy);
+}
+
+.hours-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0 0;
+}
+
+.hours-actions button {
+  min-height: 46px;
+  padding: 10px 20px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+}
+
+.hours-primary {
+  background: var(--burgundy);
+  border-color: var(--burgundy);
+  color: var(--white);
+}
+
+.hours-primary:hover:not(:disabled) {
+  background: var(--burgundy-dark);
+  border-color: var(--burgundy-dark);
+}
+
+.hours-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.hours-note {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.7;
+  max-width: 68ch;
+}
+
+@media (max-width: 640px) {
+  .hours-editor {
+    padding: 16px;
+  }
+
+  .hours-fields {
+    grid-template-columns: 1fr;
+  }
+}

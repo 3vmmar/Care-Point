@@ -1,4 +1,4 @@
-import { BRANCHES, CONTACT, DOCTOR, SERVICES } from "./clinic.ts";
+import { BRANCHES, CONTACT, DOCTOR, PRACTITIONERS, SERVICES } from "./clinic.ts";
 import type { Language } from "./i18n.ts";
 import { treatmentCopy, treatmentPath, type Treatment } from "./treatments.ts";
 
@@ -40,12 +40,52 @@ export function clinicJsonLd() {
     url: SITE_URL,
     image: `${SITE_URL}/og.jpg`,
     telephone: CONTACT.phone,
-    availableService: SERVICES.map((service) => ({
-      "@type": "MedicalProcedure",
-      name: service.en,
-      alternateName: service.ar,
-    })),
+    /**
+     * Only what this physician personally performs.
+     *
+     * Every service used to be listed here, which asserted in machine-readable
+     * form that a consultant plastic surgeon performs dental implants and
+     * veneers. That is wrong as data, and in Egypt it is worse than wrong: the
+     * Medical Syndicate regulates how medical services may be advertised, and
+     * attributing another practitioner's speciality to the named doctor is
+     * exactly the kind of claim that invites a complaint.
+     *
+     * Dentistry is emitted separately below, against the clinic rather than the
+     * surgeon.
+     */
+    availableService: SERVICES.filter((service) => service.category !== "dental").map(
+      (service) => ({
+        "@type": "MedicalProcedure",
+        name: service.en,
+        alternateName: service.ar,
+      }),
+    ),
   };
+
+  /**
+   * The dental line of care, attributed to the practice.
+   *
+   * Emitted as a `Dentistry` medical business so the services are discoverable
+   * without being claimed by the plastic surgeon. Only rendered when dental
+   * services actually exist, so removing the category removes the node.
+   */
+  const dentalServices = SERVICES.filter((service) => service.category === "dental");
+  const dentistry =
+    dentalServices.length > 0
+      ? {
+          "@type": "Dentist",
+          "@id": `${SITE_URL}#dentistry`,
+          name: `${DOCTOR.nameEn} — ${PRACTITIONERS.dental}`,
+          medicalSpecialty: "Dentistry",
+          url: SITE_URL,
+          telephone: CONTACT.phone,
+          availableService: dentalServices.map((service) => ({
+            "@type": "MedicalProcedure",
+            name: service.en,
+            alternateName: service.ar,
+          })),
+        }
+      : null;
 
   const clinics = BRANCHES.map((branch) => ({
     "@type": "MedicalClinic",
@@ -79,6 +119,8 @@ export function clinicJsonLd() {
     "@context": "https://schema.org",
     "@graph": [
       physician,
+      // Only present while the practice actually offers dentistry.
+      ...(dentistry ? [dentistry] : []),
       ...clinics,
       {
         "@type": "WebSite",

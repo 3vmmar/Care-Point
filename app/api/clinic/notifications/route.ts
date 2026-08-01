@@ -6,7 +6,7 @@ import {
   type NotificationStatus,
 } from "@/db/notifications";
 import { recordAccess } from "@/db/audit";
-import { getClinicStaff } from "@/lib/auth";
+import { requireStaffPermission } from "@/lib/auth";
 import { notificationConfiguration } from "@/lib/notify";
 import { reportError } from "@/lib/observability";
 import { clientFingerprint } from "@/lib/request";
@@ -24,13 +24,12 @@ const FILTER_STATUSES: NotificationStatus[] = [
 ];
 
 export async function GET(request: NextRequest) {
-  const staff = await getClinicStaff();
-  if (!staff) {
-    return NextResponse.json(
-      { message: "Authentication required." },
-      { status: 401, headers: PRIVATE_HEADERS },
-    );
-  }
+  const gate = await requireStaffPermission("notifications:read", {
+    clientHash: await clientFingerprint(request),
+  });
+  if (!gate.ok) return gate.response;
+  const staff = gate.staff;
+
   const rawStatus = request.nextUrl.searchParams.get("status");
   const status = FILTER_STATUSES.includes(rawStatus as NotificationStatus)
     ? (rawStatus as NotificationStatus)
@@ -61,13 +60,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const staff = await getClinicStaff();
-  if (!staff) {
-    return NextResponse.json(
-      { message: "Authentication required." },
-      { status: 401, headers: PRIVATE_HEADERS },
-    );
-  }
+  const gate = await requireStaffPermission("notifications:write", {
+    clientHash: await clientFingerprint(request),
+  });
+  if (!gate.ok) return gate.response;
+  const staff = gate.staff;
+
   let body: { id?: unknown; action?: unknown };
   try {
     body = await request.json();

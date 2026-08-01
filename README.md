@@ -27,14 +27,17 @@ The platform is designed around the philosophy that aesthetic care starts with u
 * **Indexable content, in both languages**: the CareLens material used to live only inside a WebGL canvas, invisible to search. Each area now has a server-rendered page per language with `MedicalProcedure`, `FAQPage` and `BreadcrumbList` structured data — the FAQ markup is what produces expandable answers directly in a search result.
 
 ### 📊 Clinic OS Command Center (`/command-center`)
-Four views, built for a screen someone reads all day rather than for a screenshot:
+Seven views, built for a screen someone reads all day rather than for a screenshot:
 
 * **Today** — *In the room* and *Up next* at the top, today's list, and a **timeline of every published slot** so gaps are as visible as bookings. One tap to check a patient in, complete a visit, or record a no-show.
 * **Week** — the next seven open days with **utilisation against real published capacity**, so a quiet day at one branch isn't mistaken for a quiet week.
 * **Schedule** — filter by clinic and status, paginate, export to CSV (BOM-prefixed so Excel reads Arabic names correctly), print a day sheet.
 * **Insights** — clinic load, demand by consultation, attendance and a measured no-show rate.
+* **Requests** — verified data-subject requests with explicit fulfilment and erasure controls.
+* **Notifications** — provider readiness, delivery queue, retries and dead-letter visibility.
+* **Pilot** — one-branch parallel rollout, readiness sign-offs, emergency pause, weekly evidence, incidents and go/no-go.
 
-Plus: **patient history** on any row (matched on phone across formats, so `01501606307` and `+20 150 160 6307` are one person), **desk and phone bookings** so the day view isn't just website traffic, **live alerts** when a booking arrives while the screen is open, clinic notes, Google Maps links, and keyboard shortcuts (`/`, `R`, `N`, `1`–`4`).
+Plus: **patient history** on any row (matched on phone across formats, so `01501606307` and `+20 150 160 6307` are one person), **desk and phone bookings** so the day view isn't just website traffic, **live alerts** when a booking arrives while the screen is open, clinic notes, Google Maps links, and keyboard shortcuts (`/`, `R`, `N`, `1`–`7`).
 
 ---
 

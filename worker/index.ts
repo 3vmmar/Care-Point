@@ -14,6 +14,11 @@ import { sanitiseRequest } from "../lib/trusted-proxy";
 import { rejectCrossSite } from "../lib/csrf";
 import { reportError } from "../lib/observability";
 import { purgeExpiredAuditLog } from "../db/audit";
+import {
+  purgeExpiredSecurityEvents,
+  purgeExpiredStaffSessions,
+  purgeExpiredThrottles,
+} from "../db/staff";
 import { appSurface, enforceSurfaceBoundary } from "../lib/surface";
 import { purgeNotificationHistory, queueReminder } from "../db/notifications";
 import { processNotificationQueue } from "../lib/notification-worker";
@@ -237,6 +242,31 @@ const worker = {
             if (trimmed > 0) console.log(`[cron] trimmed ${trimmed} audit entries`);
           } catch (error) {
             await reportError(error, { where: "cron: audit retention" });
+          }
+
+          try {
+            // Sign-ins, refusals and role changes identify staff, so they are
+            // trimmed on the same schedule as the patient access log.
+            const trimmed = await purgeExpiredSecurityEvents();
+            if (trimmed > 0) console.log(`[cron] trimmed ${trimmed} security events`);
+          } catch (error) {
+            await reportError(error, { where: "cron: security event retention" });
+          }
+
+          try {
+            // Expired sessions and lapsed throttle counters are operational
+            // debris: useful while live, noise a month later.
+            const [sessions, throttles] = await Promise.all([
+              purgeExpiredStaffSessions(),
+              purgeExpiredThrottles(),
+            ]);
+            if (sessions > 0 || throttles > 0) {
+              console.log(
+                `[cron] trimmed ${sessions} expired session(s) and ${throttles} throttle counter(s)`,
+              );
+            }
+          } catch (error) {
+            await reportError(error, { where: "cron: auth housekeeping" });
           }
 
           try {

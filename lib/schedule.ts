@@ -19,13 +19,48 @@
 import {
   BRANCHES,
   CLINIC_TURNAROUND_MINUTES,
-  findBranch,
+  DEFAULT_APPOINTMENT_MINUTES,
   findService,
   serviceDuration,
   type Branch,
+  type Closure,
+  type Service,
   type Session,
 } from "./clinic.ts";
 import { isOpenDay, isSlotTime, weekdayIndex, type DateKey } from "./dates.ts";
+
+/**
+ * The timetable these functions should reason about.
+ *
+ * The rota and service durations now live in D1 (`db/catalogue.ts`), because a
+ * clinic that cannot change its own opening hours without a deploy is a clinic
+ * that will be running someone else's hours. This module stays pure: a caller
+ * hands it a resolved catalogue, and everything defaults to the constants in
+ * `lib/clinic.ts` when it does not — which keeps every existing call site, and
+ * every test, working against the same rules.
+ */
+export type ScheduleContext = {
+  services?: readonly Service[];
+  closures?: readonly Closure[];
+  turnaround?: number;
+};
+
+function resolveService(
+  id: string,
+  context: ScheduleContext,
+): Service | undefined {
+  if (!context.services) return findService(id);
+  return context.services.find((service) => service.id === id);
+}
+
+function resolveDuration(id: string, context: ScheduleContext): number {
+  if (!context.services) return serviceDuration(id);
+  return resolveService(id, context)?.durationMinutes ?? DEFAULT_APPOINTMENT_MINUTES;
+}
+
+function resolveTurnaround(context: ScheduleContext): number {
+  return context.turnaround ?? CLINIC_TURNAROUND_MINUTES;
+}
 
 /**
  * The resolution occupancy is tracked at.
@@ -58,15 +93,23 @@ export function toTime(minutes: number): string {
 /* -------------------------------------------------------------------------- */
 
 /** The sessions a branch runs on a given calendar day. */
-export function sessionsOn(branch: Branch, date: DateKey): Session[] {
-  if (!isOpenDay(date)) return [];
+export function sessionsOn(
+  branch: Branch,
+  date: DateKey,
+  context: ScheduleContext = {},
+): Session[] {
+  if (!isOpenDay(date, context.closures)) return [];
   const weekday = weekdayIndex(date);
   return branch.sessions.filter((session) => session.weekday === weekday);
 }
 
 /** Every practitioner consulting at a branch on a given day. */
-export function practitionersOn(branch: Branch, date: DateKey): string[] {
-  return Array.from(new Set(sessionsOn(branch, date).map((s) => s.practitioner)));
+export function practitionersOn(
+  branch: Branch,
+  date: DateKey,
+  context: ScheduleContext = {},
+): string[] {
+  return Array.from(new Set(sessionsOn(branch, date, context).map((s) => s.practitioner)));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -93,17 +136,18 @@ export function generateSlots(
   branch: Branch,
   date: DateKey,
   service: string,
-  turnaround: number = CLINIC_TURNAROUND_MINUTES,
+  context: ScheduleContext = {},
 ): Slot[] {
-  const category = findService(service)?.category;
+  const category = resolveService(service, context)?.category;
   if (!category) return [];
 
-  const duration = serviceDuration(service);
+  const turnaround = resolveTurnaround(context);
+  const duration = resolveDuration(service, context);
   const slots: Slot[] = [];
 
   // A dental appointment cannot be booked into the surgeon's session, and vice
   // versa — they are different people in different rooms.
-  for (const session of sessionsOn(branch, date).filter((s) =>
+  for (const session of sessionsOn(branch, date, context).filter((s) =>
     s.categories.includes(category),
   )) {
     const start = toMinutes(session.start);
@@ -149,10 +193,11 @@ export function isOfferedSlot(
   date: DateKey,
   service: string,
   time: string,
-  practitioner?: string,
+  options: { practitioner?: string } & ScheduleContext = {},
 ): boolean {
   if (!isSlotTime(time)) return false;
-  return generateSlots(branch, date, service).some(
+  const { practitioner, ...context } = options;
+  return generateSlots(branch, date, service, context).some(
     (slot) =>
       slot.time === time && (practitioner ? slot.practitioner === practitioner : true),
   );
@@ -218,10 +263,14 @@ export function dayCapacity(
   date: DateKey,
   service = "aesthetic",
   branchId?: string,
+  context: ScheduleContext & { branches?: readonly Branch[] } = {},
 ): number {
-  const branches = branchId ? [findBranch(branchId)].filter(Boolean) : BRANCHES;
-  return (branches as Branch[]).reduce(
-    (total, branch) => total + generateSlots(branch, date, service).length,
+  const all = context.branches ?? BRANCHES;
+  const branches = branchId
+    ? all.filter((branch) => branch.id === branchId)
+    : all;
+  return branches.reduce(
+    (total, branch) => total + generateSlots(branch, date, service, context).length,
     0,
   );
 }
@@ -233,13 +282,20 @@ export function dayCapacity(
 export type ScheduleProblem = { branch: string; message: string };
 
 /**
- * Checks the hand-edited schedule in `lib/clinic.ts` for the mistakes that are
- * easy to make and expensive to discover: a session that ends before it starts,
- * times off the grid, or two practitioners double-booked into one room.
+ * Checks a timetable for the mistakes that are easy to make and expensive to
+ * discover: a session that ends before it starts, times off the grid, or one
+ * practitioner in two rooms at once.
  *
- * Run as a test, so a bad edit fails CI rather than the clinic's Tuesday.
+ * Runs in three places, deliberately the same function each time. Against the
+ * constants as a CI test, so a bad edit to `lib/clinic.ts` fails the build.
+ * Against the *proposed* rota before a save lands, so the Clinic OS editor
+ * refuses a change rather than the clinic discovering it on a Tuesday. And
+ * against the live rota when the editor loads, so a row written before this
+ * existed is surfaced rather than waiting for two patients to arrive at once.
  */
-export function validateSchedule(branches: Branch[] = BRANCHES): ScheduleProblem[] {
+export function validateSchedule(
+  branches: readonly Branch[] = BRANCHES,
+): ScheduleProblem[] {
   const problems: ScheduleProblem[] = [];
 
   for (const branch of branches) {
@@ -311,9 +367,14 @@ export function validateSchedule(branches: Branch[] = BRANCHES): ScheduleProblem
           toMinutes(session.start) < other.end &&
           other.start < toMinutes(session.end)
         ) {
+          // Names both places, in a fixed order. Which one the validator reaches
+          // second depends on row order, so a message mentioning only one reads
+          // as though the clash is with the branch being edited — and an order
+          // that varies makes the same fault read as two different faults.
+          const [first, second] = [branch.id, other.branch].sort();
           problems.push({
             branch: branch.id,
-            message: `${session.practitioner} is also at ${other.branch} on ${dayName(session.weekday)} at the same time`,
+            message: `${session.practitioner} cannot be at ${first} and ${second} at the same time on ${dayName(session.weekday)}`,
           });
         }
       }

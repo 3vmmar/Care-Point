@@ -69,6 +69,8 @@ export type Appointment = {
   checkedInAt: string | null;
   cancelledAt: string | null;
   cancelledBy: string | null;
+  cancellationReason: string | null;
+  cancellationNote: string | null;
 };
 
 export type ConfirmedAppointment = Appointment & { manageToken: string | null };
@@ -81,7 +83,9 @@ const APPOINTMENT_COLUMNS = `id, status, branch, service,
         staff_note AS staffNote, language, source,
         created_at AS createdAt, confirmed_at AS confirmedAt,
         checked_in_at AS checkedInAt, cancelled_at AS cancelledAt,
-        cancelled_by AS cancelledBy`;
+        cancelled_by AS cancelledBy,
+        cancellation_reason AS cancellationReason,
+        cancellation_note AS cancellationNote`;
 
 function database() {
   if (!env.DB) throw new Error("The appointment database is not available.");
@@ -166,6 +170,8 @@ async function createSchema() {
     "reminder_queued_at TEXT",
     "purged_at TEXT",
     "practitioner TEXT",
+    "cancellation_reason TEXT",
+    "cancellation_note TEXT",
   ]) {
     try {
       await db.prepare(`ALTER TABLE appointments ADD COLUMN ${column}`).run();
@@ -353,16 +359,38 @@ function releaseCells(db: D1Database, appointmentId: string): D1PreparedStatemen
  * Set SEED_APPOINTMENT="0" to skip it entirely.
  */
 const SEED_ID = "a5f1c2d0-0000-4000-8000-000000000001";
+
+/**
+ * Deliberately synthetic.
+ *
+ * This previously carried a real person's name and a real-format Egyptian mobile
+ * number, committed to source. Reserved numbers (Ofcom's 07700 900xxx range is
+ * the usual convention; +20 100 000 0000 is unallocated here) and an obviously
+ * placeholder name mean that if this ever does reach a real database, nobody
+ * mistakes it for a patient and nobody's number is dialled.
+ */
 const SEED = {
   branch: "Maadi",
   service: "aesthetic",
-  patientName: "Ammar Ahmed",
-  patientPhone: "01501606307",
+  patientName: "SAMPLE — demonstration booking",
+  patientPhone: "+201000000000",
   language: "en",
 };
 
+/**
+ * Opt **in**, not opt out.
+ *
+ * The guard used to be `=== "0"`, which meant a production database with the
+ * variable simply unset had a fabricated confirmed appointment written into the
+ * clinic's real book on the first request that touched the schema — occupying a
+ * genuine slot, and constituting personal data processed with no lawful basis.
+ *
+ * Requiring an explicit "1" means forgetting to configure something now produces
+ * an empty calendar, which is recoverable, rather than a phantom patient, which
+ * is not.
+ */
 async function seedAppointments(db: D1Database) {
-  if (process.env.SEED_APPOINTMENT === "0") return;
+  if (process.env.SEED_APPOINTMENT !== "1") return;
 
   try {
     const existing = await db
@@ -481,6 +509,7 @@ export async function releaseExpiredHolds(): Promise<number> {
       .prepare("DELETE FROM appointments WHERE status = 'held' AND hold_expires_at < ?")
       .bind(timestamp),
   ]);
+  if ((appointments.meta.changes ?? 0) > 0) invalidateBookedIntervals();
   return appointments.meta.changes ?? 0;
 }
 
@@ -516,6 +545,17 @@ export type BookedInterval = {
   practitioner: string | null;
 };
 
+type BookedIntervalCacheEntry = {
+  expiresAt: number;
+  value: Promise<BookedInterval[]>;
+};
+
+const bookedIntervalCache = new Map<string, BookedIntervalCacheEntry>();
+
+function invalidateBookedIntervals() {
+  bookedIntervalCache.clear();
+}
+
 /**
  * Live appointments in a date range, with their length.
  *
@@ -531,8 +571,12 @@ export async function getBookedIntervals(
   await ensureBookingSchema();
   if (dates.length === 0) return [];
 
+  const key = `${branch}|${dates.join(",")}`;
+  const cached = bookedIntervalCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
   const placeholders = dates.map(() => "?").join(", ");
-  const result = await database()
+  const value = database()
     .prepare(
       `SELECT slot_date AS slotDate, slot_time AS slotTime,
               duration_minutes AS durationMinutes, practitioner
@@ -542,9 +586,19 @@ export async function getBookedIntervals(
             OR (status = 'held' AND hold_expires_at >= ?))`,
     )
     .bind(branch, ...dates, now())
-    .all<BookedInterval>();
-
-  return result.results ?? [];
+    .all<BookedInterval>()
+    .then((result) => result.results ?? [])
+    .catch((error) => {
+      bookedIntervalCache.delete(key);
+      throw error;
+    });
+  // Flash crowds ask for the same snapshot. Coalescing those reads prevents
+  // eighty identical D1 queries while the atomic hold remains authoritative.
+  // Mutations below clear this cache immediately. A different edge isolate can
+  // show a just-taken time for at most five seconds, but the atomic hold still
+  // rejects it; the trade keeps a flash crowd from serialising on D1 reads.
+  bookedIntervalCache.set(key, { expiresAt: Date.now() + 5_000, value });
+  return value;
 }
 
 /** Live holds attributed to one visitor, used to rate-limit the hold endpoint. */
@@ -634,6 +688,8 @@ export async function holdAppointment(input: {
     }),
   ]);
 
+  invalidateBookedIntervals();
+
   return { id, holdToken, expiresAt };
 }
 
@@ -661,7 +717,9 @@ export async function releaseHold(holdToken: string, fingerprint: string) {
       )
       .bind(holdToken, fingerprint),
   ]);
-  return (released.meta.changes ?? 0) > 0;
+  const changed = (released.meta.changes ?? 0) > 0;
+  if (changed) invalidateBookedIntervals();
+  return changed;
 }
 
 export async function confirmAppointment(
@@ -774,7 +832,7 @@ export async function getAppointmentByManageToken(token: string) {
     .first<Appointment>();
 }
 
-export async function cancelByManageToken(token: string) {
+export async function cancelByManageToken(token: string, reason?: string | null) {
   await ensureBookingSchema();
   await ensureNotificationSchema();
   const db = database();
@@ -795,11 +853,11 @@ export async function cancelByManageToken(token: string) {
       .prepare(
         `UPDATE appointments
          SET status = 'cancelled', cancelled_at = ?, cancelled_by = 'patient',
-             status_updated_at = ?
+             status_updated_at = ?, cancellation_reason = ?
          WHERE id = ? AND manage_token = ? AND status IN ('confirmed', 'checked_in')
            AND slot_date >= ?`,
       )
-      .bind(timestamp, timestamp, existing.id, token, clinicToday()),
+      .bind(timestamp, timestamp, reason ?? null, existing.id, token, clinicToday()),
     // A cancelled visit must hand its time straight back to the calendar.
     db
       .prepare(
@@ -822,7 +880,9 @@ export async function cancelByManageToken(token: string) {
       expectedStatusUpdatedAt: timestamp,
     }),
   ]);
-  return (cancelled.meta.changes ?? 0) > 0;
+  const changed = (cancelled.meta.changes ?? 0) > 0;
+  if (changed) invalidateBookedIntervals();
+  return changed;
 }
 
 export async function rescheduleByManageToken(input: {
@@ -886,6 +946,8 @@ export async function rescheduleByManageToken(input: {
       expectedStatusUpdatedAt: timestamp,
     }),
   ]);
+
+  invalidateBookedIntervals();
 
   return db
     .prepare(`SELECT ${APPOINTMENT_COLUMNS} FROM appointments WHERE id = ?`)
@@ -986,6 +1048,15 @@ export type DashboardSummary = {
   byBranch: Array<{ branch: string; total: number }>;
   byService: Array<{ service: string; total: number }>;
   byDay: Array<{ date: string; total: number }>;
+  /**
+   * Why the last thirty days of cancellations happened.
+   *
+   * The one number in this summary a practice can act on. "You lost 22
+   * appointments" prompts nothing; "eleven of them said the time no longer
+   * worked" prompts a look at the rota. `reason` is null for cancellations taken
+   * before a reason was ever asked for.
+   */
+  cancellationReasons: Array<{ reason: string | null; total: number }>;
   newestBookingAt: string | null;
 };
 
@@ -998,7 +1069,8 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
   const weekAgoIso = new Date(Date.now() - 7 * 86_400_000).toISOString();
   const monthAgo = addDays(today, -30);
 
-  const [totals, lifecycle, branchRows, serviceRows, dayRows] = await Promise.all([
+  const [totals, lifecycle, branchRows, serviceRows, dayRows, reasonRows] =
+    await Promise.all([
     db
       .prepare(
         `SELECT
@@ -1020,14 +1092,24 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
       }>(),
     db
       .prepare(
+        /**
+         * No-shows and completions are counted by *appointment* date: whether a
+         * visit happened is a fact about the day it was booked for.
+         *
+         * Cancellations are counted by *when they were cancelled*, which is a
+         * different question and the one the clinic actually asks. Windowing them
+         * by appointment date missed exactly the cancellations that matter most —
+         * a future slot just handed back, which is the one still worth refilling —
+         * and counted month-old cancellations of month-old appointments instead.
+         */
         `SELECT
-           SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
-           SUM(CASE WHEN status = 'no_show' THEN 1 ELSE 0 END) AS noShow,
-           SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed
+           SUM(CASE WHEN status = 'cancelled' AND cancelled_at >= ? THEN 1 ELSE 0 END) AS cancelled,
+           SUM(CASE WHEN status = 'no_show' AND slot_date >= ? AND slot_date <= ? THEN 1 ELSE 0 END) AS noShow,
+           SUM(CASE WHEN status = 'completed' AND slot_date >= ? AND slot_date <= ? THEN 1 ELSE 0 END) AS completed
          FROM appointments
-         WHERE slot_date >= ? AND slot_date <= ? AND status <> 'held'`,
+         WHERE status <> 'held'`,
       )
-      .bind(monthAgo, today)
+      .bind(`${monthAgo}T00:00:00.000Z`, monthAgo, today, monthAgo, today)
       .first<{ cancelled: number | null; noShow: number | null; completed: number | null }>(),
     db
       .prepare(
@@ -1053,6 +1135,16 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
       )
       .bind(today, addDays(today, 13))
       .all<{ date: string; total: number }>(),
+    db
+      .prepare(
+        // Same window as `cancelledLast30Days` above, so the panel's "N of M gave
+        // no reason" can never exceed the total it is quoting.
+        `SELECT cancellation_reason AS reason, COUNT(*) AS total FROM appointments
+         WHERE status = 'cancelled' AND cancelled_at >= ?
+         GROUP BY cancellation_reason ORDER BY total DESC`,
+      )
+      .bind(`${monthAgo}T00:00:00.000Z`)
+      .all<{ reason: string | null; total: number }>(),
   ]);
 
   const completed = lifecycle?.completed ?? 0;
@@ -1073,6 +1165,7 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     byBranch: branchRows.results ?? [],
     byService: serviceRows.results ?? [],
     byDay: dayRows.results ?? [],
+    cancellationReasons: reasonRows.results ?? [],
     newestBookingAt: totals?.newestBookingAt ?? null,
   };
 }
@@ -1147,6 +1240,10 @@ export async function updateAppointmentStatus(input: {
   id: string;
   status: StaffStatusAction;
   actor: string;
+  /** Only meaningful when cancelling; keyed to `cancellation_reasons`. */
+  cancellationReason?: string | null;
+  /** Staff-only free text. Never shown to the patient. */
+  cancellationNote?: string | null;
 }) {
   await ensureBookingSchema();
   await ensureNotificationSchema();
@@ -1172,7 +1269,9 @@ export async function updateAppointmentStatus(input: {
              status_updated_at = ?,
              checked_in_at = CASE WHEN ? THEN ? ELSE checked_in_at END,
              cancelled_at = CASE WHEN ? THEN ? ELSE cancelled_at END,
-             cancelled_by = CASE WHEN ? THEN ? ELSE cancelled_by END
+             cancelled_by = CASE WHEN ? THEN ? ELSE cancelled_by END,
+             cancellation_reason = CASE WHEN ? THEN ? ELSE cancellation_reason END,
+             cancellation_note = CASE WHEN ? THEN ? ELSE cancellation_note END
          WHERE id = ? AND status <> 'held' AND status <> ?`,
       )
       .bind(
@@ -1184,6 +1283,10 @@ export async function updateAppointmentStatus(input: {
         timestamp,
         isCancel ? 1 : 0,
         input.actor,
+        isCancel ? 1 : 0,
+        input.cancellationReason ?? null,
+        isCancel ? 1 : 0,
+        input.cancellationNote?.trim().slice(0, 500) || null,
         input.id,
         input.status,
       ),
@@ -1212,6 +1315,8 @@ export async function updateAppointmentStatus(input: {
   const [result] = await db.batch(statements);
 
   if (!(result.meta.changes ?? 0)) return null;
+
+  if (isCancel) invalidateBookedIntervals();
 
   return db
     .prepare(`SELECT ${APPOINTMENT_COLUMNS} FROM appointments WHERE id = ?`)
@@ -1315,6 +1420,8 @@ export async function createClinicAppointment(input: {
       expectedStatusUpdatedAt: timestamp,
     }),
   ]);
+
+  invalidateBookedIntervals();
 
   return db
     .prepare(`SELECT ${APPOINTMENT_COLUMNS} FROM appointments WHERE id = ?`)

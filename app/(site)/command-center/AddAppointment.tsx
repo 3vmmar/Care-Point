@@ -30,11 +30,21 @@ export default function AddAppointment({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  /**
+   * Open slots for the chosen clinic **and consultation type**.
+   *
+   * The service was previously left out of this request, so the form listed slots
+   * generated for the default 45-minute consultation whatever reception had
+   * selected. Booking a 60-minute one into a 45-minute slot was then refused by
+   * the server — safe, but it looked like a bug in the dashboard. Now that the
+   * clinic can edit durations, the two would diverge further with every change.
+   */
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/availability?branch=${encodeURIComponent(branch)}`, {
-      signal: controller.signal,
-    })
+    fetch(
+      `/api/availability?branch=${encodeURIComponent(branch)}&service=${encodeURIComponent(service)}`,
+      { signal: controller.signal },
+    )
       .then(async (response) => {
         if (!response.ok) throw new Error("unavailable");
         return (await response.json()) as { dates?: AvailabilityDay[] };
@@ -50,7 +60,7 @@ export default function AddAppointment({
         setError("Could not load open slots. Check the connection and try again.");
       });
     return () => controller.abort();
-  }, [branch]);
+  }, [branch, service]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

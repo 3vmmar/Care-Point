@@ -57,6 +57,41 @@
       "when": 1785514088769,
       "tag": "0007_yielding_maverick",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1785532285014,
+      "tag": "0008_windy_kronos",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1785536924988,
+      "tag": "0009_silky_yellow_claw",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1785541367184,
+      "tag": "0010_first_mattie_franklin",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1785547003693,
+      "tag": "0011_black_boom_boom",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1785549708070,
+      "tag": "0012_powerful_dragon_man",
+      "breakpoints": true
     }
   ]
 }

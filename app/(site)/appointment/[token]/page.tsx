@@ -84,6 +84,7 @@ export default async function AppointmentPage({
             token={token}
             language={language}
             branch={appointment.branch}
+            service={appointment.service}
             slotDate={appointment.slotDate}
             slotTime={appointment.slotTime}
           />

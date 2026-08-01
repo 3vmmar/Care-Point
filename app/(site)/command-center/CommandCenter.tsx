@@ -23,12 +23,16 @@ import {
   Plus,
   Printer,
   RefreshCw,
+  Radar,
   BellRing,
   Search,
+  ShieldCheck,
   UserX,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import "./command-center.css";
 import { BRANCHES, CLINIC_TIMEZONE, SERVICES, branchLabel, findBranch, serviceLabel } from "@/lib/clinic";
 import { addDays, formatShortDate, formatSlotTime } from "@/lib/dates";
 import AddAppointment from "./AddAppointment";
@@ -43,13 +47,67 @@ import {
   type Appointment,
   type AppointmentStatus,
   type CapacityDay,
+  type LiveCatalogue,
   type Summary,
 } from "./types";
 
-type View = "Today" | "Week" | "Schedule" | "Insights" | "Requests" | "Notifications";
+type View =
+  | "Today"
+  | "Week"
+  | "Schedule"
+  | "Insights"
+  | "Requests"
+  | "Notifications"
+  | "Hours"
+  | "Pilot";
+
+const ALL_VIEWS: View[] = [
+  "Today",
+  "Week",
+  "Schedule",
+  "Insights",
+  "Requests",
+  "Notifications",
+  "Hours",
+  "Pilot",
+];
+
+/**
+ * The permission each section's data actually needs.
+ *
+ * A read-only auditor opening "Today" would see an empty list and an error,
+ * because `/api/bookings` refuses them — so the section is not offered. The
+ * server refuses regardless; this only keeps the dashboard honest about what it
+ * can do.
+ */
+const VIEW_PERMISSIONS: Record<View, string> = {
+  Today: "patient:read",
+  Week: "patient:read",
+  Schedule: "patient:read",
+  Insights: "patient:read",
+  Requests: "dsr:read",
+  Notifications: "notifications:read",
+  // Everyone who works here needs to know when the clinic is open; only an owner
+  // or the doctor can change it, which the editor enforces separately.
+  Hours: "patient:read",
+  Pilot: "pilot:read",
+};
 
 const REFRESH_INTERVAL_MS = 20000;
 const PAGE_SIZE = 50;
+
+// The hours editor is opened a few times a month, not on every shift. Its
+// markup and stylesheet stay out of the dashboard's first paint.
+const ClinicHours = dynamic(() => import("./ClinicHours"), {
+  loading: () => <p className="pilot-loading">Loading the clinic timetable…</p>,
+});
+
+// Pilot operations are never needed on the patient surface or the dashboard's
+// first view. Keep its controls and CSS out of both critical paths.
+const PilotControl = dynamic(() => import("./PilotControl"), {
+  ssr: false,
+  loading: () => <p className="pilot-loading">Loading Pilot Control…</p>,
+});
 
 function greeting(hour: number) {
   if (hour < 12) return "Good morning";
@@ -57,18 +115,41 @@ function greeting(hour: number) {
   return "Good evening";
 }
 
-/** Escapes a value for CSV: quotes it and doubles any internal quote. */
-function csvCell(value: string | null | undefined) {
-  return `"${String(value ?? "").replace(/"/g, '""')}"`;
-}
-
-export default function CommandCenter({ staffName }: { staffName: string }) {
+export default function CommandCenter({
+  staffName,
+  roleSummary,
+  permissions,
+}: {
+  staffName: string;
+  roleSummary: string;
+  /**
+   * What this person may do. Used to hide controls that would only return 403.
+   *
+   * A UI affordance, never the boundary: every one of these is enforced again on
+   * the server, because a hidden button is still a reachable endpoint.
+   */
+  permissions: readonly string[];
+}) {
+  const allows = useCallback(
+    (permission: string) => permissions.includes(permission),
+    [permissions],
+  );
+  const views = useMemo(
+    () => ALL_VIEWS.filter((item) => allows(VIEW_PERMISSIONS[item])),
+    [allows],
+  );
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [total, setTotal] = useState(0);
   const [clinicDate, setClinicDate] = useState("");
   const [clinicTime, setClinicTime] = useState("");
   const [capacity, setCapacity] = useState<CapacityDay[]>([]);
+  /** The live rota, so every schedule the dashboard draws matches the booking page. */
+  const [catalogue, setCatalogue] = useState<LiveCatalogue | null>(null);
+  /** Reasons offered when staff cancel, so the answer can be counted later. */
+  const [cancellationReasons, setCancellationReasons] = useState<
+    Array<{ code: string; labelEn: string }>
+  >([]);
   const [arrivals, setArrivals] = useState<Appointment[]>([]);
   const [allowlistConfigured, setAllowlistConfigured] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -76,7 +157,11 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
   const [loadError, setLoadError] = useState("");
   const [loaded, setLoaded] = useState(false);
 
-  const [view, setView] = useState<View>("Today");
+  // An auditor has no patient views at all, so the landing section is the first
+  // one their role can actually load rather than a "Today" that 403s.
+  const [view, setView] = useState<View>(
+    () => ALL_VIEWS.find((item) => permissions.includes(VIEW_PERMISSIONS[item])) ?? "Today",
+  );
   const [query, setQuery] = useState("");
   const [serverQuery, setServerQuery] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
@@ -86,6 +171,7 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
+  const [exporting, setExporting] = useState(false);
   /** Outstanding data-subject requests, badged in the nav. */
   const [pendingRequests, setPendingRequests] = useState(0);
   const [notificationIssues, setNotificationIssues] = useState(0);
@@ -138,6 +224,8 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
         clinicToday?: string;
         clinicTime?: string;
         allowlistConfigured?: boolean;
+        catalogue?: LiveCatalogue;
+        cancellationReasons?: Array<{ code: string; labelEn: string }>;
       };
       const incoming = data.appointments ?? [];
 
@@ -162,6 +250,8 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
       setClinicDate(data.clinicToday ?? "");
       setClinicTime(data.clinicTime ?? "");
       setAllowlistConfigured(data.allowlistConfigured ?? true);
+      if (data.catalogue) setCatalogue(data.catalogue);
+      if (data.cancellationReasons) setCancellationReasons(data.cancellationReasons);
       setLastUpdated(new Date());
       setLoadError("");
     } catch (error) {
@@ -243,21 +333,28 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
         void refresh();
       } else if (event.key.toLowerCase() === "n") {
         event.preventDefault();
-        setAddOpen(true);
-      } else if (event.key >= "1" && event.key <= "6") {
-        setView(
-          (["Today", "Week", "Schedule", "Insights", "Requests", "Notifications"] as View[])[
-            Number(event.key) - 1
-          ],
-        );
+        if (allows("patient:write")) setAddOpen(true);
+      } else if (event.key >= "1" && event.key <= "7") {
+        // Numbered against the sections this role can see, so the shortcuts match
+        // the sidebar rather than a fixed list with gaps in it.
+        const target = views[Number(event.key) - 1];
+        if (target) setView(target);
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [refresh]);
+  }, [refresh, views, allows]);
 
   const act = useCallback(
-    async (id: string, body: { status?: AppointmentStatus; staffNote?: string }) => {
+    async (
+      id: string,
+      body: {
+        status?: AppointmentStatus;
+        staffNote?: string;
+        cancellationReason?: string;
+        cancellationNote?: string;
+      },
+    ) => {
       setPendingId(id);
       setActionError("");
       try {
@@ -312,42 +409,43 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
     return { current: inRoom, next: upcoming };
   }, [visible, clinicTime]);
 
-  function exportCsv() {
-    const header = [
-      "Date",
-      "Time",
-      "Patient",
-      "Phone",
-      "Email",
-      "Consultation",
-      "Clinic",
-      "Status",
-      "Source",
-      "Note",
-    ];
-    const rows = visible.map((item) =>
-      [
-        item.slotDate,
-        item.slotTime,
-        item.patientName,
-        item.patientPhone,
-        item.patientEmail,
-        serviceLabel(item.service),
-        branchLabel(item.branch),
-        STATUS_META[item.status]?.label ?? item.status,
-        item.source,
-        item.staffNote ?? item.patientNote,
-      ].map(csvCell),
-    );
-    const csv = [header.map(csvCell).join(","), ...rows.map((row) => row.join(","))].join("\r\n");
-    // A BOM makes Excel read the Arabic names correctly instead of as mojibake.
-    const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `care-point-${today ? clinicDate : "schedule"}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  /**
+   * Asks the server for the file.
+   *
+   * Built here once, from the rows already on screen — but that left no record of
+   * who had taken a copy of the register, and could not be refused to a role that
+   * should not have one. The server now produces it, checks `patient:export`, and
+   * writes an audit entry.
+   */
+  async function exportCsv() {
+    setExporting(true);
+    setActionError("");
+    try {
+      const params = new URLSearchParams();
+      if (clinicDate) params.set("from", clinicDate);
+      if (today && clinicDate) params.set("to", clinicDate);
+      else if (clinicDate) params.set("to", addDays(clinicDate, 13));
+      if (branchFilter) params.set("branch", branchFilter);
+      if (statusFilter) params.set("status", statusFilter);
+      if (serverQuery) params.set("q", serverQuery);
+
+      const response = await fetch(`/api/clinic/export?${params}`, { cache: "no-store" });
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { message?: string };
+        throw new Error(data.message ?? "That export was refused.");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `care-point-${today && clinicDate ? clinicDate : "schedule"}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "That export failed.");
+    } finally {
+      setExporting(false);
+    }
   }
 
   const todayCapacity = capacity.find((day) => day.date === clinicDate) ?? null;
@@ -369,7 +467,7 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
         </div>
 
         <nav aria-label="Dashboard sections">
-          {(["Today", "Week", "Schedule", "Insights", "Requests", "Notifications"] as View[]).map((item, index) => (
+          {views.map((item, index) => (
             <button
               key={item}
               className={view === item ? "active" : ""}
@@ -385,6 +483,8 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
               {item === "Insights" && <ChartNoAxesColumn size={18} />}
               {item === "Requests" && <ShieldAlert size={18} />}
               {item === "Notifications" && <BellRing size={18} />}
+              {item === "Hours" && <Clock3 size={18} />}
+              {item === "Pilot" && <Radar size={18} />}
               {item}
               {/* A pending data request carries a legal response deadline, so
                   it is surfaced in the nav rather than waiting to be found. */}
@@ -411,7 +511,7 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
             aria-label="Filter by clinic"
           >
             <option value="">All clinics</option>
-            {BRANCHES.map((branch) => (
+            {(catalogue?.branches ?? BRANCHES).map((branch) => (
               <option key={branch.id} value={branch.id}>
                 {branch.en}
               </option>
@@ -445,6 +545,10 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
               </small>
             </div>
           </div>
+          <a href="/command-center/security">
+            <ShieldCheck size={15} />
+            Security &amp; access
+          </a>
           <a href="https://drashrafmetwally.com">
             <ArrowLeft size={15} />
             Patient experience
@@ -475,10 +579,12 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
               />
               <kbd>/</kbd>
             </label>
-            <button className="ghost-button" onClick={() => setAddOpen(true)}>
-              <Plus size={16} />
-              Add appointment
-            </button>
+            {allows("patient:write") && (
+              <button className="ghost-button" onClick={() => setAddOpen(true)}>
+                <Plus size={16} />
+                Add appointment
+              </button>
+            )}
             <button
               className="icon-button"
               onClick={() => void refresh()}
@@ -487,7 +593,7 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
             >
               <RefreshCw className={refreshing ? "spin" : ""} size={17} />
             </button>
-            <div className="avatar" title={staffName}>
+            <div className="avatar" title={`${staffName} · ${roleSummary}`}>
               {initials(staffName)}
             </div>
           </div>
@@ -541,7 +647,7 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
           </div>
         )}
 
-        {view !== "Insights" && (
+        {view !== "Insights" && view !== "Pilot" && view !== "Hours" && (
           <section className="metric-grid" aria-label="Clinic metrics">
             <article>
               <div><span>TODAY</span><CalendarDays /></div>
@@ -614,10 +720,15 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
                     <Printer size={15} />
                     Print day sheet
                   </button>
-                  <button onClick={exportCsv} disabled={visible.length === 0}>
-                    <Download size={15} />
-                    Export CSV
-                  </button>
+                  {allows("patient:export") && (
+                    <button
+                      onClick={() => void exportCsv()}
+                      disabled={visible.length === 0 || exporting}
+                    >
+                      <Download size={15} />
+                      {exporting ? "Preparing…" : "Export CSV"}
+                    </button>
+                  )}
                 </div>
               </div>
               <AppointmentList
@@ -631,6 +742,7 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
                 pendingId={pendingId}
                 onAct={act}
                 clinicTime={clinicTime}
+                cancellationReasons={cancellationReasons}
                 showDate={false}
               />
             </section>
@@ -660,6 +772,7 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
                 branchFilter={branchFilter}
                 clinicDate={clinicDate}
                 clinicTime={clinicTime}
+                catalogue={catalogue}
                 onPick={(id) => {
                   setView("Today");
                   setExpanded(id);
@@ -678,10 +791,15 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
                 <h2>The week ahead</h2>
               </div>
               <div className="card-heading-actions">
-                <button onClick={exportCsv} disabled={visible.length === 0}>
-                  <Download size={15} />
-                  Export CSV
-                </button>
+                {allows("patient:export") && (
+                  <button
+                    onClick={() => void exportCsv()}
+                    disabled={visible.length === 0 || exporting}
+                  >
+                    <Download size={15} />
+                    {exporting ? "Preparing…" : "Export CSV"}
+                  </button>
+                )}
               </div>
             </div>
             <WeekView
@@ -720,10 +838,15 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
                     </option>
                   ))}
                 </select>
-                <button onClick={exportCsv} disabled={visible.length === 0}>
-                  <Download size={15} />
-                  Export CSV
-                </button>
+                {allows("patient:export") && (
+                  <button
+                    onClick={() => void exportCsv()}
+                    disabled={visible.length === 0 || exporting}
+                  >
+                    <Download size={15} />
+                    {exporting ? "Preparing…" : "Export CSV"}
+                  </button>
+                )}
               </div>
             </div>
             <AppointmentList
@@ -737,6 +860,7 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
               pendingId={pendingId}
               onAct={act}
               clinicTime={clinicTime}
+              cancellationReasons={cancellationReasons}
               showDate
             />
             {total > PAGE_SIZE && (
@@ -760,13 +884,23 @@ export default function CommandCenter({ staffName }: { staffName: string }) {
           </section>
         )}
 
-        {view === "Insights" && <Insights summary={summary} clinicDate={clinicDate} />}
+        {view === "Insights" && (
+          <Insights
+            summary={summary}
+            clinicDate={clinicDate}
+            cancellationReasons={cancellationReasons}
+          />
+        )}
+
+        {view === "Hours" && <ClinicHours />}
 
         {view === "Requests" && <DataRequests />}
 
         {view === "Notifications" && (
           <NotificationCenter onIssueCount={setNotificationIssues} />
         )}
+
+        {view === "Pilot" && <PilotControl />}
       </section>
 
       {addOpen && (
@@ -853,6 +987,7 @@ function AppointmentList({
   pendingId,
   onAct,
   clinicTime,
+  cancellationReasons,
   showDate,
 }: {
   appointments: Appointment[];
@@ -863,8 +998,17 @@ function AppointmentList({
   expanded: string | null;
   setExpanded: (id: string | null) => void;
   pendingId: string | null;
-  onAct: (id: string, body: { status?: AppointmentStatus; staffNote?: string }) => void;
+  onAct: (
+    id: string,
+    body: {
+      status?: AppointmentStatus;
+      staffNote?: string;
+      cancellationReason?: string;
+      cancellationNote?: string;
+    },
+  ) => void;
   clinicTime: string;
+  cancellationReasons: Array<{ code: string; labelEn: string }>;
   showDate: boolean;
 }) {
   if (!loaded) {
@@ -904,9 +1048,77 @@ function AppointmentList({
           pending={pendingId === item.id}
           onAct={onAct}
           clinicTime={clinicTime}
+          cancellationReasons={cancellationReasons}
           showDate={showDate}
         />
       ))}
+    </div>
+  );
+}
+
+/**
+ * Cancelling a visit, with the reason captured at the moment it is known.
+ *
+ * Two steps rather than one button: the first press reveals the reason, the
+ * second commits. That is deliberate — cancelling was previously a single click
+ * on a row that might not be the one reception meant, and this is the only
+ * irreversible-feeling action in the day view.
+ *
+ * The reason is optional. Reception is often told nothing, and forcing a choice
+ * would only teach them to always pick the first one, which is worse than null.
+ */
+function CancelVisit({
+  pending,
+  reasons,
+  onCancel,
+}: {
+  pending: boolean;
+  reasons: Array<{ code: string; labelEn: string }>;
+  onCancel: (reason: string | undefined) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+
+  if (!open) {
+    return (
+      <button className="danger" disabled={pending} onClick={() => setOpen(true)}>
+        <X size={15} />
+        Cancel visit
+      </button>
+    );
+  }
+
+  return (
+    <div className="cancel-visit">
+      {reasons.length > 0 && (
+        <select
+          value={reason}
+          aria-label="Reason for cancelling"
+          onChange={(event) => setReason(event.target.value)}
+        >
+          <option value="">Reason not given</option>
+          {reasons.map((item) => (
+            <option key={item.code} value={item.code}>
+              {item.labelEn}
+            </option>
+          ))}
+        </select>
+      )}
+      <button
+        className="danger"
+        disabled={pending}
+        onClick={() => {
+          onCancel(reason || undefined);
+          setOpen(false);
+          setReason("");
+        }}
+      >
+        <Check size={15} />
+        Confirm cancel
+      </button>
+      <button disabled={pending} onClick={() => setOpen(false)}>
+        Keep it
+      </button>
     </div>
   );
 }
@@ -918,14 +1130,24 @@ function AppointmentRow({
   pending,
   onAct,
   clinicTime,
+  cancellationReasons,
   showDate,
 }: {
   appointment: Appointment;
   expanded: boolean;
   onToggle: () => void;
   pending: boolean;
-  onAct: (id: string, body: { status?: AppointmentStatus; staffNote?: string }) => void;
+  onAct: (
+    id: string,
+    body: {
+      status?: AppointmentStatus;
+      staffNote?: string;
+      cancellationReason?: string;
+      cancellationNote?: string;
+    },
+  ) => void;
   clinicTime: string;
+  cancellationReasons: Array<{ code: string; labelEn: string }>;
   showDate: boolean;
 }) {
   const [note, setNote] = useState(appointment.staffNote ?? "");
@@ -1035,14 +1257,13 @@ function AppointmentRow({
               </button>
             )}
             {appointment.status !== "cancelled" && (
-              <button
-                className="danger"
-                disabled={pending}
-                onClick={() => onAct(appointment.id, { status: "cancelled" })}
-              >
-                <X size={15} />
-                Cancel visit
-              </button>
+              <CancelVisit
+                pending={pending}
+                reasons={cancellationReasons}
+                onCancel={(cancellationReason) =>
+                  onAct(appointment.id, { status: "cancelled", cancellationReason })
+                }
+              />
             )}
           </div>
 
@@ -1102,7 +1323,15 @@ function addMinutes(time: string, minutes: number) {
 
 /* -------------------------------------------------------------------------- */
 
-function Insights({ summary, clinicDate }: { summary: Summary | null; clinicDate: string }) {
+function Insights({
+  summary,
+  clinicDate,
+  cancellationReasons,
+}: {
+  summary: Summary | null;
+  clinicDate: string;
+  cancellationReasons: Array<{ code: string; labelEn: string }>;
+}) {
   if (!summary) {
     return (
       <div className="empty-state">
@@ -1116,6 +1345,26 @@ function Insights({ summary, clinicDate }: { summary: Summary | null; clinicDate
     1,
     summary.byService.reduce((sum, row) => sum + row.total, 0),
   );
+
+  /**
+   * Why the last thirty days of cancellations happened.
+   *
+   * Codes are turned into words here rather than stored as words, so renaming a
+   * reason does not orphan the history behind it. A code the clinic has since
+   * retired still shows as itself rather than vanishing from the total.
+   */
+  const reasonLabels = new Map(cancellationReasons.map((item) => [item.code, item.labelEn]));
+  const cancelledTotal = summary.cancellationReasons.reduce((sum, row) => sum + row.total, 0);
+  const unattributed = summary.cancellationReasons
+    .filter((row) => !row.reason)
+    .reduce((sum, row) => sum + row.total, 0);
+  const cancellationBreakdown = summary.cancellationReasons
+    .filter((row) => row.reason)
+    .map((row) => ({
+      key: row.reason as string,
+      label: reasonLabels.get(row.reason as string) ?? (row.reason as string),
+      total: row.total,
+    }));
 
   // A fortnight of clinic load, filled in so quiet days still occupy their slot
   // rather than collapsing the chart into a misleadingly busy line.
@@ -1162,6 +1411,33 @@ function Insights({ summary, clinicDate }: { summary: Summary | null; clinicDate
             ))}
           </div>
         )}
+      </article>
+
+      <article className="insight-panel">
+        <span>ATTRITION</span>
+        <h2>Why people cancelled</h2>
+        {cancelledTotal === 0 ? (
+          <p className="insight-empty">
+            No cancellations in the last 30 days.
+          </p>
+        ) : (
+          <div className="insight-bars">
+            {cancellationBreakdown.map((row) => (
+              <div key={row.key}>
+                <span>{row.label}</span>
+                <strong>{row.total}</strong>
+                <i>
+                  <b style={{ width: `${(row.total / cancelledTotal) * 100}%` }} />
+                </i>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="insight-empty" style={{ marginTop: 10 }}>
+          {unattributed > 0
+            ? `${unattributed} of ${cancelledTotal} gave no reason — including any cancelled before the clinic started asking.`
+            : "Every cancellation in this period carries a reason."}
+        </p>
       </article>
 
       <article className="insight-panel">

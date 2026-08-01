@@ -5,7 +5,8 @@ import {
   updateAppointmentStatus,
   type StaffStatusAction,
 } from "@/db/bookings";
-import { getClinicStaff } from "@/lib/auth";
+import { requireStaffPermission } from "@/lib/auth";
+import { isValidCancellationReason } from "@/db/catalogue";
 import { reportError } from "@/lib/observability";
 import { recordAccess } from "@/db/audit";
 import { clientFingerprint } from "@/lib/request";
@@ -32,20 +33,23 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const staff = await getClinicStaff();
-  if (!staff) {
-    return NextResponse.json(
-      { message: "Authentication required." },
-      { status: 401, headers: PRIVATE_HEADERS },
-    );
-  }
+  const gate = await requireStaffPermission("patient:write", {
+    clientHash: await clientFingerprint(request),
+  });
+  if (!gate.ok) return gate.response;
+  const staff = gate.staff;
 
   const { id } = await context.params;
   if (!id) {
     return NextResponse.json({ message: "Unknown appointment." }, { status: 400 });
   }
 
-  let body: { status?: unknown; staffNote?: unknown };
+  let body: {
+    status?: unknown;
+    staffNote?: unknown;
+    cancellationReason?: unknown;
+    cancellationNote?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
@@ -84,10 +88,18 @@ export async function PATCH(
       return NextResponse.json({ ok: true }, { headers: PRIVATE_HEADERS });
     }
 
+    const reason =
+      typeof body.cancellationReason === "string" ? body.cancellationReason.trim() : "";
     const appointment = await updateAppointmentStatus({
       id,
       status: body.status as StaffStatusAction,
       actor: staff.email,
+      // Validated against the staff list, so a hand-crafted request cannot invent
+      // a reason code that then pollutes the breakdown nobody can interpret.
+      cancellationReason:
+        reason && (await isValidCancellationReason(reason, "staff")) ? reason : null,
+      cancellationNote:
+        typeof body.cancellationNote === "string" ? body.cancellationNote : null,
     });
 
     if (!appointment) {

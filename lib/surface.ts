@@ -44,6 +44,16 @@ export function isStaffRequest(method: string, pathname: string): boolean {
     return true;
   }
   if (pathname === "/api/clinic" || pathname.startsWith("/api/clinic/")) return true;
+  /**
+   * Staff sign-in and password management.
+   *
+   * Counted as staff so a `patient`-surface deployment refuses them along with
+   * everything else. On a `combined` deployment — one site for patients and staff,
+   * which is how the practice asked for it — nothing here is refused and `/login`
+   * is simply a page on the website.
+   */
+  if (pathname === "/login" || pathname.startsWith("/login/")) return true;
+  if (pathname === "/api/staff" || pathname.startsWith("/api/staff/")) return true;
   if (pathname.startsWith("/api/bookings/")) return true;
   return pathname === "/api/bookings" && method.toUpperCase() === "GET";
 }

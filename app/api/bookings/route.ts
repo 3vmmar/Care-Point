@@ -6,8 +6,12 @@ import {
   listAppointments,
   type AppointmentStatus,
 } from "@/db/bookings";
-import { getClinicStaff, staffAllowlistConfigured } from "@/lib/auth";
-import { BRANCH_IDS } from "@/lib/clinic";
+import { requireStaffPermission, staffAllowlistConfigured } from "@/lib/auth";
+import {
+  getCatalogue,
+  listCancellationReasons,
+  type Catalogue,
+} from "@/db/catalogue";
 import { addDays, clinicTimeNow, clinicToday, isDateKey, isOpenDay } from "@/lib/dates";
 import { dayCapacity } from "@/lib/schedule";
 import { reportError } from "@/lib/observability";
@@ -35,22 +39,30 @@ const PRIVATE_HEADERS = { "Cache-Control": "no-store, private" };
  * Booked-vs-available for the next fortnight.
  *
  * The number of consultation slots a day holds is simply the length of the
- * branch's published slot list, so utilisation needs no extra table — and it
- * cannot drift out of date when the clinic changes its hours.
+ * branch's slot list, so utilisation needs no extra table — and it cannot drift
+ * out of date when the clinic changes its hours, because it is derived from the
+ * same live rota the booking page offers.
  */
 function buildCapacity(
   today: string,
   branchFilter: string | undefined,
   load: Array<{ date: string; branch: string; total: number }>,
+  catalogue: Catalogue,
 ) {
+  const context = {
+    branches: catalogue.branches,
+    services: catalogue.services,
+    closures: catalogue.closures,
+    turnaround: catalogue.turnaroundMinutes,
+  };
   return Array.from({ length: 14 }, (_, index) => {
     const date = addDays(today, index);
-    const open = isOpenDay(date);
+    const open = isOpenDay(date, catalogue.closures);
     const booked = load
       .filter((row) => row.date === date)
       .reduce((sum, row) => sum + row.total, 0);
-    // Capacity now varies by weekday, because the sessions do.
-    const total = open ? dayCapacity(date, "aesthetic", branchFilter) : 0;
+    // Capacity varies by weekday, because the sessions do.
+    const total = open ? dayCapacity(date, "aesthetic", branchFilter, context) : 0;
     return {
       date,
       open,
@@ -63,16 +75,16 @@ function buildCapacity(
 
 /**
  * Staff-only: this response contains patient names, phone numbers and email
- * addresses. It must never be reachable unauthenticated.
+ * addresses. It must never be reachable unauthenticated, and a role that has no
+ * business reading patient contact details — the read-only auditor — is refused
+ * here rather than being handed the list and asked not to look.
  */
 export async function GET(request: NextRequest) {
-  const staff = await getClinicStaff();
-  if (!staff) {
-    return NextResponse.json(
-      { message: "Authentication required." },
-      { status: 401, headers: PRIVATE_HEADERS },
-    );
-  }
+  const gate = await requireStaffPermission("patient:read", {
+    clientHash: await clientFingerprint(request),
+  });
+  if (!gate.ok) return gate.response;
+  const staff = gate.staff;
 
   const params = request.nextUrl.searchParams;
   const statusParam = params.get("status");
@@ -80,11 +92,13 @@ export async function GET(request: NextRequest) {
   const from = params.get("from");
   const to = params.get("to");
 
-  const branchFilter =
-    branchParam && BRANCH_IDS.includes(branchParam as never) ? branchParam : undefined;
-
   try {
     const today = clinicToday();
+    const catalogue = await getCatalogue();
+    const branchFilter = catalogue.branches.some((branch) => branch.id === branchParam)
+      ? (branchParam as string)
+      : undefined;
+
     const [list, summary, load] = await Promise.all([
       listAppointments({
         from: isDateKey(from) ? from : undefined,
@@ -137,10 +151,35 @@ export async function GET(request: NextRequest) {
         },
         // Capacity is derived from the published slot lists rather than stored,
         // so "how full are we" stays correct the moment opening times change.
-        capacity: buildCapacity(today, branchFilter, load),
+        capacity: buildCapacity(today, branchFilter, load, catalogue),
+        /**
+         * The live timetable, so the dashboard's branch and service pickers, its
+         * day timeline and its "add appointment" form all offer exactly what the
+         * booking API will accept.
+         */
+        catalogue: {
+          revision: catalogue.revision,
+          live: catalogue.live,
+          // The whole branch, so the dashboard's schedule views can pass these
+          // straight to the same `generateSlots` the server uses. Three rows of
+          // addresses is a trivial payload next to two divergent timetables.
+          branches: catalogue.branches,
+          services: catalogue.services,
+          closures: catalogue.closures,
+          turnaroundMinutes: catalogue.turnaroundMinutes,
+        },
+        /** Offered when staff cancel, so the reason is picked rather than typed. */
+        cancellationReasons: await listCancellationReasons("staff"),
         clinicToday: today,
         clinicTime: timeNow,
-        staff: { name: staff.fullName ?? staff.displayName, email: staff.email },
+        staff: {
+          name: staff.displayName,
+          email: staff.email,
+          roles: staff.roles,
+          // The dashboard hides what this person cannot do rather than offering
+          // buttons that return 403. The server still enforces every one of them.
+          permissions: staff.permissions,
+        },
         allowlistConfigured: staffAllowlistConfigured(),
       },
       { headers: PRIVATE_HEADERS },

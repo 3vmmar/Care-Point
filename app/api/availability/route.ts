@@ -5,20 +5,19 @@ import {
   holdAppointment,
   releaseHold,
 } from "@/db/bookings";
-import { generateSlots, overlaps } from "@/lib/schedule";
+import { generateSlots, overlaps, type ScheduleContext } from "@/lib/schedule";
 import {
   AVAILABILITY_WINDOW_DAYS,
-  BRANCH_IDS,
   HOLD_DURATION_MINUTES,
   SERVICE_IDS,
-  findBranch,
-  findClosure,
-  findService,
+  type Branch,
 } from "@/lib/clinic";
+import { getCatalogue, type Catalogue } from "@/db/catalogue";
 import { formatDayLabel, isSlotBookable, openDayKeys } from "@/lib/dates";
 import { reportError } from "@/lib/observability";
 import { clientFingerprint } from "@/lib/request";
 import { turnstileSiteKey, verifyTurnstile } from "@/lib/turnstile";
+import { getPilotPolicy } from "@/db/pilot";
 
 /** Holds a single visitor may keep open at once, to stop slot-exhaustion abuse. */
 const MAX_ACTIVE_HOLDS_PER_CLIENT = 3;
@@ -26,27 +25,110 @@ const MAX_ACTIVE_HOLDS_PER_CLIENT = 3;
 /** Availability changes the moment anyone holds a slot, so it is never cached. */
 const LIVE_HEADERS = { "Cache-Control": "no-store" };
 
+type ScheduledDay = {
+  date: string;
+  weekday: string;
+  day: string;
+  closure: string | null;
+  candidates: ReturnType<typeof generateSlots>;
+};
+
+const scheduleDayCache = new Map<string, ScheduledDay[]>();
+
+/** The scheduling rules this request should apply, drawn from the live rota. */
+function contextOf(catalogue: Catalogue): ScheduleContext {
+  return {
+    services: catalogue.services,
+    closures: catalogue.closures,
+    turnaround: catalogue.turnaroundMinutes,
+  };
+}
+
+/**
+ * Session generation and locale formatting are stable for a given timetable.
+ * Only occupancy and lead time are live, so a flash crowd should not repeat
+ * hundreds of identical Intl and schedule calculations on one Worker isolate.
+ *
+ * Keyed on the catalogue revision as well as the branch and service: without
+ * that, editing the rota in Clinic OS would keep serving yesterday's hours until
+ * the isolate happened to be recycled.
+ */
+function scheduledDays(
+  catalogue: Catalogue,
+  branch: Branch,
+  serviceId: string,
+  days: string[],
+  locale: string,
+  arabic: boolean,
+) {
+  const key = `${catalogue.revision}|${branch.id}|${serviceId}|${locale}|${days.join(",")}`;
+  const cached = scheduleDayCache.get(key);
+  if (cached) return cached;
+
+  const closureFor = (date: string) =>
+    catalogue.closures.find((closure) => closure.date === date);
+  const value = days.map((date) => {
+    const closure = closureFor(date);
+    return {
+      date,
+      ...formatDayLabel(date, locale),
+      closure: closure ? (arabic ? closure.ar : closure.en) : null,
+      candidates: generateSlots(branch, date, serviceId, contextOf(catalogue)),
+    };
+  });
+  // The key changes with the booking window and with every rota edit; cap old
+  // entries in a long-lived isolate instead of allowing an unbounded cache.
+  if (scheduleDayCache.size >= 32) scheduleDayCache.clear();
+  scheduleDayCache.set(key, value);
+  return value;
+}
+
 export async function GET(request: NextRequest) {
-  const branch =
-    findBranch(request.nextUrl.searchParams.get("branch")) ?? findBranch(BRANCH_IDS[0])!;
-  const service =
-    findService(request.nextUrl.searchParams.get("service")) ?? findService(SERVICE_IDS[0])!;
-  const arabic = request.nextUrl.searchParams.get("locale") === "ar";
-  const locale = arabic ? "ar-EG" : "en-GB";
   const now = new Date();
-  const days = openDayKeys(AVAILABILITY_WINDOW_DAYS, now);
 
   try {
-    const booked = await getBookedIntervals(branch.id, days);
+    // Policy, timetable and occupancy are independent, so they are fetched
+    // together. Keeping these serial added D1 round trips to every availability
+    // request and was visible in the burst p95.
+    const [pilot, catalogue] = await Promise.all([getPilotPolicy(), getCatalogue()]);
 
-    const dates = days.map((date) => {
+    const findLiveBranch = (id: string | null | undefined) =>
+      catalogue.branches.find((branch) => branch.id === id);
+    const requestedBranch =
+      findLiveBranch(request.nextUrl.searchParams.get("branch")) ?? catalogue.branches[0];
+    const service =
+      catalogue.services.find(
+        (item) => item.id === request.nextUrl.searchParams.get("service"),
+      ) ??
+      catalogue.services.find((item) => item.id === SERVICE_IDS[0]) ??
+      catalogue.services[0];
+    const arabic = request.nextUrl.searchParams.get("locale") === "ar";
+    const locale = arabic ? "ar-EG" : "en-GB";
+    // Open days depend on the live closure calendar, so they are derived after
+    // the catalogue rather than before it.
+    const days = openDayKeys(AVAILABILITY_WINDOW_DAYS, now, catalogue.closures);
+
+    const requestedBooked = await getBookedIntervals(requestedBranch.id, days);
+    const pilotBranch = pilot.restrictsBooking ? findLiveBranch(pilot.branchId) : null;
+    // During a bounded pilot, even a hand-crafted query is confined to the one
+    // branch reception has agreed to operate. The returned branch lets the UI
+    // correct an old selection without inventing an empty calendar.
+    const branch = pilotBranch ?? requestedBranch;
+    const booked = pilot.bookingPaused
+      ? []
+      : branch.id === requestedBranch.id
+        ? requestedBooked
+        : await getBookedIntervals(branch.id, days);
+
+    const dates = scheduledDays(catalogue, branch, service.id, days, locale, arabic).map((day) => {
+      const date = day.date;
       const onThisDay = booked.filter((item) => item.slotDate === date);
 
       // Slots are generated from the day's sessions and this service's
       // duration, then filtered against what is already booked. Overlap rather
       // than exact-time matching, because a 16:00 sixty-minute consultation
       // blocks 16:30 without ever occupying the string "16:30".
-      const free = generateSlots(branch, date, service.id).filter((slot) => {
+      const free = (pilot.bookingPaused ? [] : day.candidates).filter((slot) => {
         const clash = onThisDay.some(
           (taken) =>
             (!taken.practitioner || taken.practitioner === slot.practitioner) &&
@@ -62,8 +144,9 @@ export async function GET(request: NextRequest) {
 
       return {
         date,
-        ...formatDayLabel(date, locale),
-        closure: findClosure(date) ? (arabic ? findClosure(date)!.ar : findClosure(date)!.en) : null,
+        weekday: day.weekday,
+        day: day.day,
+        closure: day.closure,
         slots: Array.from(new Set(free.map((slot) => slot.time))),
         /** Times paired with who is consulting, for surfaces that show it. */
         slotDetail: free,
@@ -75,6 +158,11 @@ export async function GET(request: NextRequest) {
         branch: branch.id,
         service: service.id,
         holdMinutes: HOLD_DURATION_MINUTES,
+        pilot: { status: pilot.status, branchId: pilot.branchId },
+        availableBranchIds: pilot.restrictsBooking
+          ? [branch.id]
+          : catalogue.branches.map((item) => item.id),
+        bookingPaused: pilot.bookingPaused,
         // Public by design; lets the form render a widget only when one is configured.
         turnstileSiteKey: turnstileSiteKey(),
         generatedAt: now.toISOString(),
@@ -110,22 +198,55 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Invalid request." }, { status: 400 });
   }
 
-  const branch = findBranch(typeof body.branch === "string" ? body.branch : null);
-  const service = findService(typeof body.service === "string" ? body.service : null);
   const slotDate = typeof body.slotDate === "string" ? body.slotDate : "";
   const slotTime = typeof body.slotTime === "string" ? body.slotTime : "";
+
+  let pilot: Awaited<ReturnType<typeof getPilotPolicy>>;
+  let catalogue: Catalogue;
+  try {
+    [pilot, catalogue] = await Promise.all([getPilotPolicy(), getCatalogue()]);
+  } catch (error) {
+    await reportError(error, { where: "POST /api/availability pilot policy" });
+    return NextResponse.json(
+      { message: "Online booking is temporarily unavailable." },
+      { status: 503, headers: LIVE_HEADERS },
+    );
+  }
+
+  // Resolved against the live timetable, so a hold cannot be taken on a branch or
+  // a consultation type the clinic has since retired.
+  const branch = catalogue.branches.find(
+    (item) => item.id === (typeof body.branch === "string" ? body.branch : null),
+  );
+  const service = catalogue.services.find(
+    (item) => item.id === (typeof body.service === "string" ? body.service : null),
+  );
+  if (pilot.bookingPaused) {
+    return NextResponse.json(
+      { message: "Online booking is temporarily paused. Please call the clinic." },
+      { status: 503, headers: LIVE_HEADERS },
+    );
+  }
+  if (pilot.restrictsBooking && branch?.id !== pilot.branchId) {
+    return NextResponse.json(
+      { message: "That clinic is not accepting online pilot bookings." },
+      { status: 409, headers: LIVE_HEADERS },
+    );
+  }
 
   // The offered window is regenerated here rather than trusted from the client,
   // so a request cannot hold a slot on a closed day, a past day, a day far
   // outside the bookable range, or one that no longer meets the lead time.
   const now = new Date();
-  const offeredDays = openDayKeys(AVAILABILITY_WINDOW_DAYS, now);
+  const offeredDays = openDayKeys(AVAILABILITY_WINDOW_DAYS, now, catalogue.closures);
 
   // The offer is regenerated from the schedule rather than trusted, so a
   // request cannot hold a time the clinic does not actually run.
   const offered =
     branch && service
-      ? generateSlots(branch, slotDate, service.id).find((slot) => slot.time === slotTime)
+      ? generateSlots(branch, slotDate, service.id, contextOf(catalogue)).find(
+          (slot) => slot.time === slotTime,
+        )
       : undefined;
 
   if (

@@ -15,12 +15,22 @@ export default function ManageBooking({
   token,
   language,
   branch,
+  service,
   slotDate,
   slotTime,
 }: {
   token: string;
   language: Language;
   branch: string;
+  /**
+   * The consultation actually booked.
+   *
+   * Without it the calendar below is generated for the *default* service, so a
+   * 60-minute rhinoplasty is offered 45-minute spacing and a dental patient is
+   * offered the surgeon's sessions — which the server then rejects, one slot at a
+   * time, with no way for the patient to succeed.
+   */
+  service: string;
   slotDate: string;
   slotTime: string;
 }) {
@@ -33,12 +43,39 @@ export default function ManageBooking({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [outcome, setOutcome] = useState<"cancelled" | "moved" | null>(null);
+  /**
+   * Optional, and asked *while* cancelling rather than in a follow-up nobody
+   * answers. Never required: a patient who cannot cancel simply does not turn up,
+   * which costs the clinic the slot and the goodwill.
+   */
+  const [reasons, setReasons] = useState<
+    Array<{ code: string; labelEn: string; labelAr: string }>
+  >([]);
+  const [reason, setReason] = useState("");
+
+  useEffect(() => {
+    if (mode !== "confirmCancel" || reasons.length > 0) return;
+    const controller = new AbortController();
+    fetch(`/api/appointments/${token}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("unavailable");
+        return (await response.json()) as {
+          cancellationReasons?: Array<{ code: string; labelEn: string; labelAr: string }>;
+        };
+      })
+      .then((data) => setReasons(data.cancellationReasons ?? []))
+      .catch(() => {
+        // The reason is a nicety. If the list will not load, the patient must
+        // still be able to cancel.
+      });
+    return () => controller.abort();
+  }, [mode, token, reasons.length]);
 
   useEffect(() => {
     if (mode !== "reschedule") return;
     const controller = new AbortController();
     fetch(
-      `/api/availability?branch=${encodeURIComponent(branch)}&locale=${language}`,
+      `/api/availability?branch=${encodeURIComponent(branch)}&service=${encodeURIComponent(service)}&locale=${language}`,
       { signal: controller.signal },
     )
       .then(async (response) => {
@@ -55,7 +92,7 @@ export default function ManageBooking({
         setError(t.loadFailed);
       });
     return () => controller.abort();
-  }, [mode, branch, language, t.loadFailed]);
+  }, [mode, branch, service, language, t.loadFailed]);
 
   async function cancel() {
     setBusy(true);
@@ -63,10 +100,11 @@ export default function ManageBooking({
     try {
       const response = await fetch(`/api/appointments/${token}`, {
         method: "DELETE",
-        // Carries no body, but the header is still required: the CSRF guard
+        // The header is required whether or not there is a body: the CSRF guard
         // rejects any mutation that is not declared as JSON, which is what
         // stops a cross-site HTML form from reaching these endpoints.
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reason ? { reason } : {}),
       });
       const data = (await response.json()) as { message?: string };
       if (!response.ok) throw new Error(data.message);
@@ -148,6 +186,29 @@ export default function ManageBooking({
               ? "هل أنت متأكد من إلغاء هذا الموعد؟"
               : "Are you sure you want to cancel this appointment?"}
           </p>
+          {reasons.length > 0 && (
+            <div className="manage-reason">
+              <label htmlFor="cancel-reason">
+                {rtl
+                  ? "لماذا تلغي الموعد؟ (اختياري)"
+                  : "Why are you cancelling? (optional)"}
+              </label>
+              <select
+                id="cancel-reason"
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+              >
+                <option value="">
+                  {rtl ? "أفضل عدم القول" : "Prefer not to say"}
+                </option>
+                {reasons.map((item) => (
+                  <option key={item.code} value={item.code}>
+                    {rtl ? item.labelAr : item.labelEn}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="manage-buttons">
             <button className="manage-danger" onClick={() => void cancel()} disabled={busy}>
               {busy ? <Loader2 size={15} className="manage-spin" /> : <X size={15} />}

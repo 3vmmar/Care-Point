@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClinicAppointment } from "@/db/bookings";
-import { getClinicStaff } from "@/lib/auth";
-import { findBranch, findService } from "@/lib/clinic";
+import { requireStaffPermission } from "@/lib/auth";
+import { getCatalogue } from "@/db/catalogue";
 import { isDateKey, isOpenDay, isSlotTime } from "@/lib/dates";
 import { generateSlots } from "@/lib/schedule";
 import { reportError } from "@/lib/observability";
@@ -23,13 +23,11 @@ const PHONE_PATTERN = /^[+()\d\s-]{7,20}$/;
  * the slot uniqueness index.
  */
 export async function POST(request: NextRequest) {
-  const staff = await getClinicStaff();
-  if (!staff) {
-    return NextResponse.json(
-      { message: "Authentication required." },
-      { status: 401, headers: PRIVATE_HEADERS },
-    );
-  }
+  const gate = await requireStaffPermission("patient:write", {
+    clientHash: await clientFingerprint(request),
+  });
+  if (!gate.ok) return gate.response;
+  const staff = gate.staff;
 
   let body: Record<string, unknown>;
   try {
@@ -40,8 +38,17 @@ export async function POST(request: NextRequest) {
 
   const text = (key: string) => (typeof body[key] === "string" ? (body[key] as string).trim() : "");
 
-  const branch = findBranch(text("branch"));
-  const service = findService(text("service"));
+  // The live timetable, so a desk booking obeys the same hours the patient site
+  // offers. Reception and the website must never disagree about when the clinic
+  // is open.
+  const catalogue = await getCatalogue();
+  const context = {
+    services: catalogue.services,
+    closures: catalogue.closures,
+    turnaround: catalogue.turnaroundMinutes,
+  };
+  const branch = catalogue.branches.find((item) => item.id === text("branch"));
+  const service = catalogue.services.find((item) => item.id === text("service"));
   const slotDate = text("slotDate");
   const slotTime = text("slotTime");
   const patientName = text("patientName");
@@ -55,11 +62,13 @@ export async function POST(request: NextRequest) {
   if (!branch || !service) {
     return NextResponse.json({ message: "Choose a clinic and consultation type." }, { status: 400 });
   }
-  if (!isDateKey(slotDate) || !isOpenDay(slotDate)) {
+  if (!isDateKey(slotDate) || !isOpenDay(slotDate, catalogue.closures)) {
     return NextResponse.json({ message: "That is not a day the clinic opens." }, { status: 400 });
   }
   const offered = isSlotTime(slotTime)
-    ? generateSlots(branch, slotDate, service.id).find((slot) => slot.time === slotTime)
+    ? generateSlots(branch, slotDate, service.id, context).find(
+        (slot) => slot.time === slotTime,
+      )
     : undefined;
   if (!offered) {
     return NextResponse.json(

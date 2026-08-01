@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAppointmentById, patientHistory } from "@/db/bookings";
-import { getClinicStaff } from "@/lib/auth";
+import { requireStaffPermission } from "@/lib/auth";
 import { reportError } from "@/lib/observability";
 import { recordAccess } from "@/db/audit";
 import { clientFingerprint } from "@/lib/request";
@@ -18,13 +18,11 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const staff = await getClinicStaff();
-  if (!staff) {
-    return NextResponse.json(
-      { message: "Authentication required." },
-      { status: 401, headers: PRIVATE_HEADERS },
-    );
-  }
+  const gate = await requireStaffPermission("patient:read", {
+    clientHash: await clientFingerprint(request),
+  });
+  if (!gate.ok) return gate.response;
+  const staff = gate.staff;
 
   const { id } = await context.params;
 

@@ -9,6 +9,7 @@ test.describe.serial("HTTP route contracts", () => {
     ["audit", "/api/clinic/audit", 200],
     ["data request queue", "/api/clinic/data-requests", 200],
     ["notification operations", "/api/clinic/notifications", 200],
+    ["pilot control", "/api/clinic/pilot", 200],
     ["missing managed appointment", "/api/appointments/not-a-real-token", 404],
     ["missing calendar invite", "/api/appointments/not-a-real-token/calendar", 404],
     ["missing history", "/api/bookings/not-a-real-id/history", 404],
@@ -34,12 +35,95 @@ test.describe.serial("HTTP route contracts", () => {
       request.patch("/api/bookings/not-a-real-id", { data: { status: "checked_in" } }),
       request.post("/api/clinic/appointments", { data: {} }),
       request.post("/api/clinic/notifications", { data: { action: "unknown" } }),
+      request.patch("/api/clinic/pilot", { data: { action: "unknown" } }),
       request.post("/api/data-requests", { data: {} }),
     ];
     const responses = await Promise.all(cases);
     for (const response of responses) {
       expect([400, 404]).toContain(response.status());
       await expect(response.json()).resolves.toHaveProperty("message");
+    }
+  });
+
+  test("pilot mode bounds public booking to one branch and can pause new holds", async ({ request }) => {
+    const originalResponse = await request.get("/api/clinic/pilot");
+    expect(originalResponse.status()).toBe(200);
+    const original = (await originalResponse.json()) as {
+      settings: {
+        status: string;
+        branchId: string | null;
+        startDate: string | null;
+        endDate: string | null;
+        decision: string;
+        decisionNote: string | null;
+      };
+      checklist: Array<{ key: string; completed: boolean; note: string | null }>;
+    };
+    const branches = ["Maadi", "Mohandessin"];
+
+    try {
+      for (const item of original.checklist) {
+        const response = await request.patch("/api/clinic/pilot", {
+          data: { action: "checklist", key: item.key, completed: true, note: "Browser test" },
+        });
+        expect(response.status()).toBe(200);
+      }
+      const running = await request.patch("/api/clinic/pilot", {
+        data: {
+          action: "configure",
+          status: "running",
+          branchId: branches[1],
+          startDate: "2026-08-01",
+          endDate: "2026-08-29",
+          decision: "pending",
+        },
+      });
+      expect(running.status()).toBe(200);
+
+      const bounded = await request.get(`/api/availability?branch=${branches[0]}`);
+      expect(bounded.status()).toBe(200);
+      const boundedBody = (await bounded.json()) as {
+        branch: string;
+        availableBranchIds: string[];
+        pilot: { status: string; branchId: string };
+      };
+      expect(boundedBody.branch).toBe(branches[1]);
+      expect(boundedBody.availableBranchIds).toEqual([branches[1]]);
+      expect(boundedBody.pilot.status).toBe("running");
+
+      const wrongBranch = await request.post("/api/availability", {
+        data: { branch: branches[0], service: "aesthetic", slotDate: "2026-08-10", slotTime: "10:00" },
+      });
+      expect(wrongBranch.status()).toBe(409);
+
+      const paused = await request.patch("/api/clinic/pilot", {
+        data: {
+          action: "configure",
+          status: "paused",
+          branchId: branches[1],
+          startDate: "2026-08-01",
+          endDate: "2026-08-29",
+          decision: "pending",
+        },
+      });
+      expect(paused.status()).toBe(200);
+      const unavailable = await request.get("/api/availability");
+      const unavailableBody = (await unavailable.json()) as { bookingPaused: boolean };
+      expect(unavailableBody.bookingPaused).toBe(true);
+    } finally {
+      await request.patch("/api/clinic/pilot", {
+        data: { action: "configure", ...original.settings },
+      });
+      for (const item of original.checklist) {
+        await request.patch("/api/clinic/pilot", {
+          data: {
+            action: "checklist",
+            key: item.key,
+            completed: item.completed,
+            note: item.note,
+          },
+        });
+      }
     }
   });
 

@@ -127,9 +127,22 @@ export function weekdayIndex(key: DateKey): number {
   return middayUtc(key).getUTCDay();
 }
 
-/** True when the clinic trades on this day: not a closed weekday, not a closure. */
-export function isOpenDay(key: DateKey): boolean {
-  return !CLOSED_WEEKDAYS.includes(weekdayIndex(key)) && !isClosureDate(key);
+/**
+ * True when the clinic trades on this day: not a closed weekday, not a closure.
+ *
+ * `closures` overrides the static list in `lib/clinic.ts` — the clinic's real
+ * holiday calendar now lives in D1 so reception can add Eid without a deploy.
+ * Omitting it falls back to the constants, which keeps every existing caller and
+ * the pure tests working unchanged.
+ */
+export function isOpenDay(
+  key: DateKey,
+  closures?: readonly { date: string }[],
+): boolean {
+  if (CLOSED_WEEKDAYS.includes(weekdayIndex(key))) return false;
+  return closures
+    ? !closures.some((closure) => closure.date === key)
+    : !isClosureDate(key);
 }
 
 /**
@@ -139,14 +152,18 @@ export function isOpenDay(key: DateKey): boolean {
  * (`isSlotBookable`) rather than by discarding the whole day — a clinic that
  * opens until 20:30 should still be able to take an 18:00 booking at midday.
  */
-export function openDayKeys(count: number, now: Date = new Date()): DateKey[] {
+export function openDayKeys(
+  count: number,
+  now: Date = new Date(),
+  closures?: readonly { date: string }[],
+): DateKey[] {
   const days: DateKey[] = [];
   let cursor = clinicToday(now);
-  if (isOpenDay(cursor)) days.push(cursor);
+  if (isOpenDay(cursor, closures)) days.push(cursor);
   // Bounded so a misconfigured CLOSED_WEEKDAYS can never spin forever.
   for (let step = 0; step < count * 7 + 30 && days.length < count; step += 1) {
     cursor = addDays(cursor, 1);
-    if (isOpenDay(cursor)) days.push(cursor);
+    if (isOpenDay(cursor, closures)) days.push(cursor);
   }
   return days;
 }

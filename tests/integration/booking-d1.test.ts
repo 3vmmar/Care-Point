@@ -10,8 +10,19 @@ import {
   rescheduleByManageToken,
 } from "@/db/bookings";
 import { BRANCHES, SERVICES } from "@/lib/clinic";
-import { openDayKeys } from "@/lib/dates";
+import { addDays, clinicToday, openDayKeys } from "@/lib/dates";
 import { generateSlots } from "@/lib/schedule";
+import {
+  PILOT_CHECKLIST,
+  createPilotIncident,
+  createPilotReview,
+  evaluatePilot,
+  getPilotDashboard,
+  getPilotPolicy,
+  resolvePilotIncident,
+  updatePilotChecklist,
+  updatePilotSettings,
+} from "@/db/pilot";
 
 type OfferedSlot = {
   branch: string;
@@ -23,6 +34,10 @@ type OfferedSlot = {
 
 async function resetApplicationData() {
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM pilot_reviews"),
+    env.DB.prepare("DELETE FROM pilot_incidents"),
+    env.DB.prepare("DELETE FROM pilot_checklist"),
+    env.DB.prepare("DELETE FROM pilot_settings"),
     env.DB.prepare("DELETE FROM notification_attempts"),
     env.DB.prepare("DELETE FROM notification_jobs"),
     env.DB.prepare("DELETE FROM appointment_cells"),
@@ -64,6 +79,61 @@ describe.sequential("booking lifecycle against an isolated D1 database", () => {
     expect(names).toContain("appointment_cells");
     expect(names).toContain("notification_jobs");
     expect(names).toContain("notification_attempts");
+    expect(names).toContain("pilot_settings");
+    expect(names).toContain("pilot_checklist");
+    expect(names).toContain("pilot_incidents");
+    expect(names).toContain("pilot_reviews");
+  });
+
+  it("cannot start a pilot until every sign-off exists, then restricts and pauses booking", async () => {
+    const actor = "pilot.manager@example.test";
+    const branchId = BRANCHES[1].id;
+    const startDate = clinicToday();
+    const endDate = addDays(startDate, 28);
+
+    await expect(
+      updatePilotSettings({ status: "running", branchId, startDate, endDate, actor }),
+    ).rejects.toThrow(/complete every readiness/i);
+
+    await updatePilotSettings({ status: "setup", branchId, startDate, endDate, actor });
+    for (const item of PILOT_CHECKLIST) {
+      await updatePilotChecklist({ key: item.key, completed: true, actor });
+    }
+    await updatePilotSettings({ status: "running", branchId, startDate, endDate, actor });
+
+    expect(await getPilotPolicy()).toEqual({
+      status: "running",
+      branchId,
+      restrictsBooking: true,
+      bookingPaused: false,
+    });
+
+    await updatePilotSettings({ status: "paused", branchId, startDate, endDate, actor });
+    expect((await getPilotPolicy()).bookingPaused).toBe(true);
+  });
+
+  it("records incidents and freezes an immutable weekly pilot review", async () => {
+    const actor = "pilot.manager@example.test";
+    const incidentRows = await createPilotIncident({
+      summary: "Notification delivery exceeded the expected delay.",
+      severity: "critical",
+      actor,
+    });
+    const incident = incidentRows[0] as { id: string };
+
+    const dashboard = await getPilotDashboard();
+    expect(dashboard.metrics.criticalIncidents).toBe(1);
+    expect(evaluatePilot(dashboard.metrics, true).recommendation).toBe("stop");
+    expect(await resolvePilotIncident(incident.id, actor)).toBe(true);
+    expect(await resolvePilotIncident(incident.id, actor)).toBe(false);
+
+    const reviews = await createPilotReview({
+      recommendation: "investigate",
+      note: "Verify delivery providers before expanding the pilot.",
+      actor,
+    });
+    expect(reviews).toHaveLength(1);
+    expect((reviews[0] as { recommendation: string }).recommendation).toBe("investigate");
   });
 
   it("confirms idempotently, writes one channel fan-out, and releases cells on cancel", async () => {

@@ -4,7 +4,8 @@ import {
   getAppointmentByManageToken,
   rescheduleByManageToken,
 } from "@/db/bookings";
-import { AVAILABILITY_WINDOW_DAYS, findBranch } from "@/lib/clinic";
+import { AVAILABILITY_WINDOW_DAYS } from "@/lib/clinic";
+import { getCatalogue, isValidCancellationReason, listCancellationReasons } from "@/db/catalogue";
 import { isSlotBookable, openDayKeys } from "@/lib/dates";
 import { generateSlots } from "@/lib/schedule";
 import { reportError } from "@/lib/observability";
@@ -55,7 +56,12 @@ export async function GET(
     );
   }
   return NextResponse.json(
-    { appointment: summarise(appointment) },
+    {
+      appointment: summarise(appointment),
+      // Offered here so the manage page can ask *while* cancelling, rather than
+      // sending the patient a follow-up nobody answers.
+      cancellationReasons: await listCancellationReasons("patient"),
+    },
     { headers: PRIVATE_HEADERS },
   );
 }
@@ -84,13 +90,24 @@ export async function PATCH(
 
   const slotDate = typeof body.slotDate === "string" ? body.slotDate : "";
   const slotTime = typeof body.slotTime === "string" ? body.slotTime : "";
-  const branch = findBranch(existing.branch);
   const now = new Date();
+
+  // Against the live timetable: a patient moving their appointment must land on
+  // an hour the clinic actually keeps now, not the one it kept when they booked.
+  const catalogue = await getCatalogue();
+  const branch = catalogue.branches.find((item) => item.id === existing.branch);
+  const schedule = {
+    services: catalogue.services,
+    closures: catalogue.closures,
+    turnaround: catalogue.turnaroundMinutes,
+  };
 
   if (
     !branch ||
-    !openDayKeys(AVAILABILITY_WINDOW_DAYS, now).includes(slotDate) ||
-    !generateSlots(branch, slotDate, existing.service).some((s) => s.time === slotTime) ||
+    !openDayKeys(AVAILABILITY_WINDOW_DAYS, now, catalogue.closures).includes(slotDate) ||
+    !generateSlots(branch, slotDate, existing.service, schedule).some(
+      (s) => s.time === slotTime,
+    ) ||
     !isSlotBookable(slotDate, slotTime, now)
   ) {
     return NextResponse.json({ message: "Please choose a valid time." }, { status: 400 });
@@ -122,7 +139,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ token: string }> },
 ) {
   const { token } = await context.params;
@@ -134,7 +151,25 @@ export async function DELETE(
     );
   }
 
-  const cancelled = await cancelByManageToken(token);
+  /**
+   * An optional reason, validated against the list the patient was offered.
+   *
+   * Optional on purpose: a cancellation must never be blocked by a question. A
+   * patient who cannot cancel simply does not turn up, which is strictly worse for
+   * the clinic than a cancellation with no reason attached.
+   */
+  let reason: string | null = null;
+  try {
+    const body = (await request.json()) as { reason?: unknown };
+    const submitted = typeof body.reason === "string" ? body.reason.trim() : "";
+    if (submitted && (await isValidCancellationReason(submitted, "patient"))) {
+      reason = submitted;
+    }
+  } catch {
+    // No body at all is fine — this endpoint worked without one before.
+  }
+
+  const cancelled = await cancelByManageToken(token, reason);
   if (!cancelled) {
     return NextResponse.json(
       { message: "This booking has already been cancelled or has passed." },

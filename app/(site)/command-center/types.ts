@@ -1,3 +1,5 @@
+import type { Branch, Closure, Service } from "@/lib/clinic";
+
 export type AppointmentStatus =
   | "confirmed"
   | "checked_in"
@@ -35,7 +37,26 @@ export type CapacityDay = {
   percent: number;
 };
 
+/**
+ * The live timetable, as the dashboard receives it from `/api/bookings`.
+ *
+ * The rota, service durations and closures now live in D1 so the clinic can edit
+ * them. Anything on this surface that draws a schedule has to use this rather
+ * than the constants in `lib/clinic.ts`, or the dashboard shows the hours the
+ * code was deployed with while the booking page offers the ones the clinic set.
+ */
+export type LiveCatalogue = {
+  revision: string;
+  live: boolean;
+  branches: Branch[];
+  services: Service[];
+  closures: Closure[];
+  turnaroundMinutes: number;
+};
+
 export type Summary = {
+  /** Why the last thirty days of cancellations happened; null reason = not asked. */
+  cancellationReasons: Array<{ reason: string | null; total: number }>;
   today: number;
   todayRemaining: number;
   upcoming: number;

@@ -38,6 +38,7 @@ import JourneyDesigner from "./JourneyDesigner";
 import Modal from "./Modal";
 import Turnstile from "./Turnstile";
 import {
+  BRANCH_IDS,
   BRANCHES,
   CONTACT,
   branchOpenDays,
@@ -55,6 +56,53 @@ const TreatmentUniverse = dynamic(() => import("./TreatmentUniverse"), {
   ssr: false,
   loading: () => <div className="treatment-universe treatment-universe--loading" aria-hidden />,
 });
+
+const OPEN_BOOKING_EVENT = "carepoint:open-booking";
+
+/**
+ * Booking owns its own render boundary. The patient page is intentionally rich
+ * and large; keeping modal state in the page root made one tap reconcile the
+ * entire experience before the dialog could paint on a throttled phone.
+ */
+function BookingLauncher({ language }: { language: Language }) {
+  const [open, setOpen] = useState(false);
+  const [prepared, setPrepared] = useState(false);
+  const [generation, setGeneration] = useState(0);
+  useEffect(() => {
+    // Prepare the sizeable form after the hero has settled. A later tap then
+    // reveals existing DOM instead of constructing the whole form in the input
+    // event on a mid-range phone.
+    let prepare: number | undefined;
+    const prepareAfterLoad = () => {
+      prepare = window.setTimeout(() => setPrepared(true), 700);
+    };
+    if (document.readyState === "complete") prepareAfterLoad();
+    else window.addEventListener("load", prepareAfterLoad, { once: true });
+    const show = () => {
+      setPrepared(true);
+      setOpen(true);
+    };
+    window.addEventListener(OPEN_BOOKING_EVENT, show);
+    return () => {
+      if (prepare) window.clearTimeout(prepare);
+      window.removeEventListener("load", prepareAfterLoad);
+      window.removeEventListener(OPEN_BOOKING_EVENT, show);
+    };
+  }, []);
+  if (!prepared) return null;
+  return (
+    <BookingModal
+      key={generation}
+      language={language}
+      open={open}
+      onClose={() => {
+        setOpen(false);
+        // Reset completed or half-filled forms away from the close interaction.
+        window.setTimeout(() => setGeneration((value) => value + 1), 400);
+      }}
+    />
+  );
+}
 
 /**
  * Holds the CareLens chunk back until the section nears the viewport. Without
@@ -189,7 +237,6 @@ function NoorOrb({ small = false }: { small?: boolean }) {
 export default function CarePointExperience({ language }: { language: Language }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [noorOpen, setNoorOpen] = useState(false);
-  const [bookingOpen, setBookingOpen] = useState(false);
   const [introOpen, setIntroOpen] = useState(true);
   const [journeyDesignerOpen, setJourneyDesignerOpen] = useState(false);
   const [heroPassed, setHeroPassed] = useState(false);
@@ -488,9 +535,51 @@ export default function CarePointExperience({ language }: { language: Language }
   }, [introOpen, language]);
 
   const openBooking = useCallback(() => {
-    setBookingOpen(true);
+    window.dispatchEvent(new Event(OPEN_BOOKING_EVENT));
     setMobileOpen(false);
   }, []);
+
+  /**
+   * Deep link into booking from anywhere off the home page.
+   *
+   * Every treatment page's primary call to action pointed at `/#book`, and no
+   * element with that id has ever existed — so the main conversion path on eight
+   * search-landing pages scrolled to the top of the home page and did nothing.
+   * Those pages exist precisely to capture "rhinoplasty Maadi" traffic, which
+   * made this the most expensive broken link on the site.
+   *
+   * Handled here rather than by adding an anchor, because booking is a modal and
+   * there is nothing to scroll to.
+   *
+   * `?book=<service>` is accepted and currently only opens the modal — the
+   * consultation is *not* preselected yet, because the modal does not take an
+   * initial service. Wiring that is the obvious next step and is why each
+   * treatment already carries a `service` field.
+   */
+  useEffect(() => {
+    const open = () => {
+      const url = new URL(window.location.href);
+      const service = url.searchParams.get("book");
+      if (url.hash !== "#book" && !service) return;
+
+
+      window.dispatchEvent(new Event(OPEN_BOOKING_EVENT));
+
+      // Clear it so a refresh, or a back-navigation, does not reopen the modal
+      // over content the visitor has moved on to.
+      url.hash = "";
+      url.searchParams.delete("book");
+      window.history.replaceState(null, "", url.pathname + url.search);
+    };
+
+    // Deferred past the intro overlay, which otherwise sits on top of the modal.
+    const timer = window.setTimeout(open, introOpen ? 0 : 350);
+    window.addEventListener("hashchange", open);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("hashchange", open);
+    };
+  }, [introOpen]);
 
   const heroAvailability = !availabilityChecked
     ? t.heroAvailabilityLoading
@@ -894,6 +983,11 @@ export default function CarePointExperience({ language }: { language: Language }
           <a href="#locations">{t.directions}</a>
           <Link href={rtl ? "/ar/privacy" : "/privacy"}>{t.privacy}</Link>
           <Link href={rtl ? "/ar/terms" : "/terms"}>{t.terms}</Link>
+          {/* Deliberately last and unemphasised. Staff need to find it; patients
+              need never wonder whether it is for them. */}
+          <Link href="/login" className="footer-staff-link">
+            {t.staffSignIn}
+          </Link>
         </div>
       </footer>
 
@@ -926,9 +1020,7 @@ export default function CarePointExperience({ language }: { language: Language }
           }}
         />
       )}
-      {bookingOpen && (
-        <BookingModal language={language} onClose={() => setBookingOpen(false)} />
-      )}
+      <BookingLauncher language={language} />
       {journeyDesignerOpen && (
         <JourneyDesigner
           language={language}
@@ -1120,9 +1212,11 @@ function NoorPanel({
 
 function BookingModal({
   language,
+  open = true,
   onClose,
 }: {
   language: Language;
+  open?: boolean;
   onClose: () => void;
 }) {
   const t = copyFor(language);
@@ -1140,6 +1234,8 @@ function BookingModal({
   const [loadFailed, setLoadFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [turnstileSiteKey, setTurnstileSiteKey] = useState<string | null>(null);
+  const [availableBranchIds, setAvailableBranchIds] = useState<readonly string[]>(BRANCH_IDS);
+  const [bookingPaused, setBookingPaused] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -1172,13 +1268,21 @@ function BookingModal({
       .then(async (response) => {
         if (!response.ok) throw new Error("unavailable");
         return (await response.json()) as {
+          branch: string;
           dates: AvailabilityDay[];
           turnstileSiteKey?: string | null;
+          availableBranchIds?: string[];
+          bookingPaused?: boolean;
         };
       })
       .then((data) => {
+        if (data.branch && data.branch !== branch) {
+          setBranch(data.branch as typeof branch);
+        }
         setDays(data.dates ?? []);
         setTurnstileSiteKey(data.turnstileSiteKey ?? null);
+        setAvailableBranchIds(data.availableBranchIds ?? BRANCH_IDS);
+        setBookingPaused(Boolean(data.bookingPaused));
         // Land on the first day that actually has a free slot.
         setSelectedDate(
           (data.dates ?? []).find((day) => day.slots.length > 0)?.date ??
@@ -1324,7 +1428,7 @@ function BookingModal({
   const countdown = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`;
 
   return (
-    <Modal onClose={closeBooking} labelledBy="booking-modal-title">
+    <Modal onClose={closeBooking} labelledBy="booking-modal-title" active={open}>
       <section className="booking-modal" dir={rtl ? "rtl" : "ltr"}>
         <div className="booking-top">
           <div>
@@ -1380,7 +1484,7 @@ function BookingModal({
                     setBranch(event.target.value as typeof branch);
                   }}
                 >
-                  {BRANCHES.map((item) => (
+                  {BRANCHES.filter((item) => availableBranchIds.includes(item.id)).map((item) => (
                     <option key={item.id} value={item.id}>
                       {rtl ? item.ar : item.en}
                     </option>
@@ -1402,16 +1506,24 @@ function BookingModal({
               </a>
             )}
 
-            {loadFailed ? (
+            {loadFailed || bookingPaused ? (
               <div className="booking-unavailable">
-                <p>{t.loadFailed}</p>
+                <p>
+                  {bookingPaused
+                    ? rtl
+                      ? "الحجز الإلكتروني متوقف مؤقتًا. يرجى الاتصال بالعيادة."
+                      : "Online booking is temporarily paused. Please call the clinic."
+                    : t.loadFailed}
+                </p>
                 <div className="booking-unavailable-actions">
-                  <button
-                    className="button button--dark"
-                    onClick={() => setReloadKey((key) => key + 1)}
-                  >
-                    {t.tryAgain}
-                  </button>
+                  {!bookingPaused && (
+                    <button
+                      className="button button--dark"
+                      onClick={() => setReloadKey((key) => key + 1)}
+                    >
+                      {t.tryAgain}
+                    </button>
+                  )}
                   <a href={`tel:${CONTACT.phone}`}>{t.callTheClinic}</a>
                   <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer">
                     WhatsApp

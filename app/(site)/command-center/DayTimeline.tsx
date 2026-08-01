@@ -1,10 +1,10 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import { BRANCHES, findBranch, serviceLabel } from "@/lib/clinic";
+import { BRANCHES, serviceLabel, type Branch } from "@/lib/clinic";
 import { generateSlots } from "@/lib/schedule";
 import { formatSlotTime } from "@/lib/dates";
-import type { Appointment } from "./types";
+import type { Appointment, LiveCatalogue } from "./types";
 
 /**
  * The clinic day as a column of its actual consultation slots.
@@ -21,6 +21,7 @@ export default function DayTimeline({
   clinicTime,
   onPick,
   onAdd,
+  catalogue,
 }: {
   appointments: Appointment[];
   branchFilter: string;
@@ -28,16 +29,32 @@ export default function DayTimeline({
   clinicTime: string;
   onPick: (id: string) => void;
   onAdd: () => void;
+  /** Null until the first dashboard load returns. */
+  catalogue: LiveCatalogue | null;
 }) {
-  const branches = branchFilter
-    ? [findBranch(branchFilter)].filter(Boolean).map((b) => b!)
-    : BRANCHES;
+  /**
+   * Drawn from the live rota, not the constants.
+   *
+   * The clinic edits its hours in Clinic OS now, so a timeline built from
+   * `lib/clinic.ts` would show the timetable the code was deployed with while the
+   * booking page offered the one reception had just set. Falls back to the
+   * constants only before the first load has returned.
+   */
+  const all: Branch[] = catalogue?.branches ?? BRANCHES;
+  const branches = branchFilter ? all.filter((branch) => branch.id === branchFilter) : all;
+  const context = catalogue
+    ? {
+        services: catalogue.services,
+        closures: catalogue.closures,
+        turnaround: catalogue.turnaroundMinutes,
+      }
+    : {};
 
   // One row per distinct start time actually running today, generated from the
   // day's sessions. A branch that does not open today contributes nothing,
   // which is the point of moving off a fixed per-branch slot list.
   const openings = branches.flatMap((branch) =>
-    generateSlots(branch, clinicDate, "aesthetic").map((slot) => ({
+    generateSlots(branch, clinicDate, "aesthetic", context).map((slot) => ({
       branch,
       time: slot.time,
       practitioner: slot.practitioner,

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { checkDatabase } from "@/db/bookings";
 import { errorReportingConfigured } from "@/lib/observability";
-import { getClinicStaff, staffAllowlistConfigured } from "@/lib/auth";
+import { resolveStaffAccess, staffSecurityConfiguration } from "@/lib/auth";
 import {
   notificationConfiguration,
   notificationsConfigured,
@@ -29,12 +29,15 @@ export async function GET() {
   // Configuration gaps that would silently break the clinic rather than the
   // site: bookings nobody is told about, errors nobody sees, a dashboard
   // nobody can open.
+  const security = staffSecurityConfiguration();
   const configuration = {
     notifications: notificationsConfigured(),
     errorReporting: errorReportingConfigured(),
-    staffAllowlist: staffAllowlistConfigured(),
+    staffAllowlist: security.staffAllowlist,
     botProtection: turnstileConfigured(),
     proxyVerification: proxyVerificationConfigured(),
+    /** Staff MFA is switched on and both of its secrets are present. */
+    staffMfa: security.mfaRequired && security.mfaKey && security.sessionSecret,
   };
 
   const misconfigured = Object.values(configuration).filter((ok) => !ok).length;
@@ -43,7 +46,8 @@ export async function GET() {
   // The *breakdown* is a map of which defences are switched off, which is a
   // reconnaissance gift to anyone probing the site. An uptime monitor only
   // needs the verdict, so the detail is reserved for signed-in staff.
-  const staff = await getClinicStaff();
+  const access = await resolveStaffAccess();
+  const staff = access.ok;
   let notificationQueue: Awaited<ReturnType<typeof notificationQueueSummary>> | null = null;
   if (staff && database.ok) {
     try {

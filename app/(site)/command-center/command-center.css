@@ -44,10 +44,24 @@
   height: 100vh;
   background: var(--cc-dark);
   color: #fff;
-  padding: 24px 16px;
+  padding: 18px 16px;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  /**
+   * Tightened from 24px/22px when an eighth nav section and the security link
+   * arrived: at 720px — a real laptop height — the sidebar overflowed by 47px and
+   * the last link needed scrolling to reach. It now fits.
+   */
+  gap: 16px;
+  /**
+   * Scrolls rather than overflows.
+   *
+   * Without this, anything added to the sidebar past 100vh renders *below* the
+   * dark panel and onto the light page background — which is how a footer link
+   * silently became light grey on cream at 2.75:1. Content that leaves its own
+   * background takes its contrast guarantees with it.
+   */
+  overflow-y: auto;
 }
 
 .command-brand {
@@ -212,13 +226,47 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #938e88;
-  padding: 18px 8px 0;
+  /**
+   * #938e88 already passed at 5.29:1 on the dark panel; this is 7.8:1, which is
+   * simply easier to read at 12px. The AA failure that surfaced here was the
+   * overflow above, not this colour.
+   */
+  color: #b3aea7;
+  padding: 10px 8px 0;
   font-size: 12px;
 }
 
 .command-sidebar-bottom > a:hover {
   color: #fff;
+}
+
+/**
+ * Two-step cancellation.
+ *
+ * Cancelling used to be one click on a row that might not be the one reception
+ * meant. The reason picker doubles as the confirmation step, so asking why costs
+ * nothing extra and the destructive action gains a deliberate second press.
+ */
+.cancel-visit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cancel-visit select {
+  min-height: 40px;
+  padding: 5px 9px;
+  border: 1px solid var(--cc-line);
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  color: var(--cc-ink);
+}
+
+.cancel-visit select:focus-visible {
+  outline: 2px solid var(--cc-accent-deep);
+  outline-offset: 2px;
 }
 
 /* ==========================================================================

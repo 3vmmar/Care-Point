@@ -8,7 +8,7 @@ import {
   type DataRequestStatus,
 } from "@/db/dsr";
 import { recordAccess } from "@/db/audit";
-import { getClinicStaff } from "@/lib/auth";
+import { requireStaffPermission } from "@/lib/auth";
 import { reportError } from "@/lib/observability";
 import { clientFingerprint } from "@/lib/request";
 
@@ -17,13 +17,10 @@ const STATUSES: DataRequestStatus[] = ["pending", "fulfilled", "rejected"];
 
 /** The queue of outstanding data-subject requests. */
 export async function GET(request: NextRequest) {
-  const staff = await getClinicStaff();
-  if (!staff) {
-    return NextResponse.json(
-      { message: "Authentication required." },
-      { status: 401, headers: PRIVATE_HEADERS },
-    );
-  }
+  const gate = await requireStaffPermission("dsr:read", {
+    clientHash: await clientFingerprint(request),
+  });
+  if (!gate.ok) return gate.response;
 
   const statusParam = request.nextUrl.searchParams.get("status");
   const status = STATUSES.includes(statusParam as DataRequestStatus)
@@ -49,15 +46,17 @@ export async function GET(request: NextRequest) {
  * is the only irreversible operation in the system, and it must be the result
  * of a staff member deliberately confirming that they have verified who they
  * are speaking to.
+ *
+ * Held behind `dsr:fulfil`, which reception does not have. Anonymising a
+ * patient's history cannot be undone, and the person who verified the requester's
+ * identity out of band should be the person who acts on it.
  */
 export async function POST(request: NextRequest) {
-  const staff = await getClinicStaff();
-  if (!staff) {
-    return NextResponse.json(
-      { message: "Authentication required." },
-      { status: 401, headers: PRIVATE_HEADERS },
-    );
-  }
+  const gate = await requireStaffPermission("dsr:fulfil", {
+    clientHash: await clientFingerprint(request),
+  });
+  if (!gate.ok) return gate.response;
+  const staff = gate.staff;
 
   let body: {
     id?: unknown;

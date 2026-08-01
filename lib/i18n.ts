@@ -104,6 +104,7 @@ const en = {
 
   callClinic: "Call clinic",
   clinicOs: "Clinic OS",
+  staffSignIn: "Staff sign-in",
   privacy: "Privacy",
   terms: "Terms",
   footerLocations: "Maadi · Mohandessin · Fifth Settlement",
@@ -271,6 +272,7 @@ const ar: typeof en = {
 
   callClinic: "اتصل بالعيادة",
   clinicOs: "نظام العيادة",
+  staffSignIn: "دخول الفريق",
   privacy: "الخصوصية",
   terms: "الشروط",
   footerLocations: "المعادي · المهندسين · التجمع الخامس",
