@@ -14,7 +14,7 @@
     "build:clinic": "cross-env CAREPOINT_SURFACE=clinic WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build && npm run fix:fonts",
     "start": "cross-env WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "npm run test:unit && npm run test:integration",
-    "test:unit": "node --experimental-strip-types --test tests/dates.test.mts tests/clinic.test.mts tests/ics.test.mts tests/i18n.test.mts tests/booking-rules.test.mts tests/schedule.test.mts tests/observability.test.mts tests/dsr.test.mts tests/trusted-proxy.test.mts tests/csrf.test.mts tests/surface.test.mts tests/notifications.test.mts tests/pilot.test.mts tests/roles.test.mts tests/totp.test.mts tests/staff-session.test.mts tests/staff-gate.test.mts tests/password.test.mts",
+    "test:unit": "node --experimental-strip-types --test tests/dates.test.mts tests/clinic.test.mts tests/ics.test.mts tests/i18n.test.mts tests/booking-rules.test.mts tests/schedule.test.mts tests/observability.test.mts tests/dsr.test.mts tests/trusted-proxy.test.mts tests/csrf.test.mts tests/surface.test.mts tests/notifications.test.mts tests/pilot.test.mts tests/roles.test.mts tests/totp.test.mts tests/staff-session.test.mts tests/staff-gate.test.mts tests/password.test.mts tests/carelens-geometry.test.mts tests/anatomy.test.mts",
     "test:integration": "vitest run --config vitest.config.ts",
     "test:e2e": "playwright test",
     "test:load": "playwright test tests/e2e/load.spec.ts",

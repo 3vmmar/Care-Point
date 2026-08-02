@@ -75,7 +75,7 @@ Recommended order the user set:
 | :--- | :--- |
 | `npm run typecheck` | **PASS** |
 | `npm run lint` | **PASS** |
-| `npm run test:unit` | **PASS** — 258 tests (was 153) |
+| `npm run test:unit` | **PASS** — 279 tests (was 258; +21 for CareLens geometry and content) |
 | `npm run test:integration` | **PASS** — 119 tests, real D1 (was 8) |
 | `npm test` (unit + integration) | **PASS** |
 | `npm run build` · `build:patient` · `build:clinic` | **PASS** |
@@ -383,11 +383,24 @@ that did:
 
 **Confirmed and NOT fixed** — these need a decision or more time than one pass:
 
-- **Dentistry is bookable but invisible.** Three dental services, a practitioner
-  and rota sessions are live in the public booking form, and the word "dental"
-  appears nowhere in patient-facing copy — no page, no nav, no Arabic prose.
-  Either build the surface or gate the category out of the public form. Shipping
-  a bookable line of care the site never mentions is the worst of both.
+- **Dentistry is bookable and now partly visible — but still has no page.**
+  CareLens carries a fifth area, Dental, with its own tooth-level model, six
+  regions and bilingual copy, so the word finally appears in patient-facing
+  prose in both languages. What it still does not have is a treatment page:
+  `/treatments/*` has four entries and the CareLens footer nav links only those
+  four, so Dental is the one area a patient can explore and then not read more
+  about. That gap, and the old WordPress site's full dental page with eight
+  named services, are the remaining half of this item.
+  See `lib/anatomy.ts` and `lib/carelens-geometry.ts`.
+- **CareLens is a study model, and must not be described as anything more.**
+  Every vertex is generated in code — there is no glTF, no Draco decoder and no
+  asset pipeline, and the CSP forbids fetching one. A photoreal model with fat
+  pads, ligaments, vessels and nerves needs a licensed medical asset library
+  (Zygote, BioDigital and similar), which is a purchasing and licensing
+  decision, not an engineering one. The on-canvas label reads "ILLUSTRATIVE
+  STUDY MODEL" and the consultation map carries "illustrative, not diagnostic".
+  Do not let either wording drift: an accuracy claim is a claim the practice
+  makes to the Medical Syndicate, not one the renderer can support.
 - **Dermatology does not exist.** One mention in this file, describing it as
   future work. It is not started.
 - **Two colour token sets, and no tokens at all for spacing, radius, type or
@@ -395,6 +408,15 @@ that did:
   This is the single largest source of the "doesn't feel like one product"
   impression.
 - **Focus ring is 1.79:1 on the dark sidebar**, below the 3:1 non-text minimum.
+- **Clinic OS status pills fail contrast — and the E2E gate only catches it when
+  the table has rows.** `.status-pill--confirmed` measures 3.81:1 and
+  `--cancelled` 3.82:1 against 4.5:1, at 11px, in
+  `app/(site)/command-center/command-center.css`. 62 violations in one scan.
+  This was invisible while `npx playwright test` reported 84/84, because the
+  accessibility spec scans `/command-center` against whatever is in the local D1
+  — with an empty appointments table there are no pills to measure. Treat the
+  84/84 in §3 accordingly: it was a pass over less surface than it appeared.
+  Unrelated to CareLens; found while running that suite.
 - **GSAP, ScrollTrigger and Lenis are static imports** in the patient entry chunk
   — ~150 KB raw / 54 KB gzip that only runs when motion is *not* reduced.
 - **Client components parse the response body before checking `response.ok`**, so

@@ -1529,15 +1529,34 @@ section[id] {
 }
 
 .universe-tabs button:nth-child(even) { border-right: 0; }
-.universe-tabs button:nth-child(n+3) { border-bottom: 0; }
+.universe-tabs button:nth-child(n+5) { border-bottom: 0; }
+
+/**
+ * The odd tab out spans the row.
+ *
+ * Five areas in a two-column grid leaves one cell empty, and an empty cell in a
+ * bordered grid reads as a missing tab rather than as a layout. Letting the last
+ * odd child span both columns closes the block — and it happens to give Dental,
+ * the newest area, the widest target.
+ */
+.universe-tabs button:nth-child(odd):last-child {
+  grid-column: 1 / -1;
+  border-right: 0;
+}
+
 .universe-tabs button.active {
   color: white;
   background: var(--burgundy);
 }
 
+.universe-tabs button:not(.active):hover {
+  background: rgba(123, 38, 60, 0.06);
+}
+
 .universe-tabs button > span {
   color: #7b4050;
-  font-size: 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
   align-self: start;
 }
 
@@ -1594,43 +1613,182 @@ section[id] {
   font-weight: 400;
 }
 
+/**
+ * Body prose, at a size a body can read.
+ *
+ * This panel used to set its running text at 10px and its tags at 7px — below
+ * the point where most browsers will render legibly, and far below the ~11px
+ * this file uses for every other small label. An explorer whose whole purpose
+ * is to explain anatomy cannot set the explanation in type nobody can read.
+ */
 .universe-detail > p {
-  color: #6c665f;
-  font-size: 10px;
-  line-height: 1.85;
+  color: #5f5951;
+  font-size: 14px;
+  line-height: 1.7;
+  max-width: 52ch;
+}
+
+.universe-depth-hint {
+  margin-top: 10px;
+  color: #7b4050;
+  font-style: italic;
 }
 
 .universe-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
-  margin-top: 17px;
+  margin-top: 10px;
 }
 
 .universe-tags span {
   border: 1px solid rgba(35, 35, 32, 0.15);
-  padding: 8px 10px;
-  font-size: 7px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  padding: 6px 10px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #4b463f;
+}
+
+/* Bookable, and marked as such — these are an offer, the neighbouring tags are
+   description, and the two must not look identical. */
+.universe-tags--offer span {
+  border-color: rgba(123, 38, 60, 0.35);
+  background: rgba(123, 38, 60, 0.06);
+  color: var(--burgundy);
+  font-weight: 600;
+}
+
+/* ── Depth control, over the canvas ───────────────────────────────────────── */
+
+.universe-depth {
+  position: absolute;
+  left: 31px;
+  top: 31px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  max-width: calc(100% - 62px);
+}
+
+.site-shell[dir="rtl"] .universe-depth { left: auto; right: 31px; }
+
+.universe-depth-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-end: 4px;
+  color: var(--champagne);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+}
+
+.universe-depth button {
+  border: 1px solid rgba(201, 175, 134, 0.34);
+  /* Over a live 3D scene, so the plate has to carry its own contrast rather
+     than borrowing it from whatever happens to be behind it. */
+  background: rgba(14, 14, 13, 0.62);
+  backdrop-filter: blur(9px);
+  color: #ddd6ca;
+  padding: 7px 13px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 0.22s ease, color 0.22s ease, border-color 0.22s ease;
+}
+
+.universe-depth button:hover { color: #fff8ec; border-color: var(--champagne); }
+
+.universe-depth button.active {
+  background: var(--burgundy);
+  border-color: var(--burgundy-lift, #a84560);
+  color: #fff;
+}
+
+/* ── Region rail ──────────────────────────────────────────────────────────── */
+
+.universe-regions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 22px;
+}
+
+.universe-regions button {
+  border: 1px solid rgba(35, 35, 32, 0.18);
+  background: transparent;
+  padding: 9px 13px;
+  /* 40px keeps every region reachable with a thumb; the rail is the primary
+     control on a phone, where the canvas markers are hardest to hit. */
+  min-height: 40px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: #4b463f;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.universe-regions button:hover {
+  border-color: rgba(123, 38, 60, 0.5);
+  color: var(--burgundy);
+}
+
+.universe-regions button.active {
+  background: var(--charcoal);
+  border-color: var(--charcoal);
+  color: #fff;
+}
+
+.universe-region-card {
+  margin-top: 20px;
+  padding: 20px 22px;
+  border: 1px solid rgba(35, 35, 32, 0.13);
+  background: rgba(255, 255, 255, 0.55);
+  animation: universeDetail 0.35s ease both;
+}
+
+.universe-region-card h4 {
+  margin: 0 0 10px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 21px;
+  font-weight: 500;
+}
+
+.universe-region-card > p {
+  margin: 0;
+  color: #5f5951;
+  font-size: 13.5px;
+  line-height: 1.72;
+}
+
+.universe-region-meta {
+  margin-top: 16px;
+}
+
+.universe-region-meta > span {
+  color: #7b4050;
+  font-size: 10px;
+  letter-spacing: 0.16em;
 }
 
 .universe-actions {
   display: flex;
   gap: 15px;
-  margin-top: 32px;
+  margin-top: 28px;
 }
 
 .universe-actions button {
   min-height: 46px;
   border: 1px solid rgba(35, 35, 32, 0.17);
   background: transparent;
-  padding: 0 14px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  font-size: 8px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
   font-weight: 700;
 }
 
@@ -1795,49 +1953,44 @@ section[id] {
 }
 
 .deep-checks p {
-  min-height: 90px;
+  min-height: 74px;
   margin: 0;
-  padding: 17px;
-  color: #c4beba;
+  padding: 16px;
+  color: #cdc7c2;
   background: #211f1e;
   display: flex;
   align-items: flex-start;
   gap: 9px;
-  font-size: 9px;
+  font-size: 12.5px;
   line-height: 1.6;
 }
 
 .deep-checks svg { color: var(--rose); flex: 0 0 auto; }
 
-.recovery-rhythm {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  margin-top: 25px;
+/* Conversation topics, not an offer. Dimmer and outlined rather than filled, so
+   the difference from the bookable list is visible before the label is read. */
+.deep-checks--muted p {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  color: #a8a29c;
 }
 
-.recovery-rhythm article {
-  padding: 18px;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
-}
+.deep-checks--muted svg { color: var(--champagne); }
 
-.recovery-rhythm strong {
-  display: block;
-  color: var(--rose);
-  font-family: var(--font-display), serif;
-  font-size: 38px;
+.deep-dive-region {
+  margin: 16px 0 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 27px;
   font-weight: 400;
+  color: #f3efe9;
 }
 
-.recovery-rhythm small {
-  color: var(--champagne);
-  font-size: 6px;
-  letter-spacing: 0.13em;
-}
-
-.recovery-rhythm p {
-  color: #9d9791;
-  font-size: 8px;
-  line-height: 1.6;
+.deep-dive-copy {
+  margin: 14px 0 0;
+  max-width: 62ch;
+  color: #c4beba;
+  font-size: 14px;
+  line-height: 1.75;
 }
 
 .deep-dive-note {
@@ -1849,7 +2002,7 @@ section[id] {
 }
 
 .deep-dive-note svg { color: var(--champagne); flex: 0 0 auto; }
-.deep-dive-note p { margin: 0; font-size: 8px; line-height: 1.7; }
+.deep-dive-note p { margin: 0; font-size: 12px; line-height: 1.7; }
 
 .carelens-stage {
   display: grid;
@@ -3512,7 +3665,11 @@ footer p {
 
   .universe-tabs button,
   .universe-tabs button:nth-child(even),
-  .universe-tabs button:nth-child(n+3) {
+  .universe-tabs button:nth-child(n+5),
+  .universe-tabs button:nth-child(odd):last-child {
+    /* One column here, so the desktop row-span and its border exceptions have
+       to be undone or the last tab keeps a stale edge. */
+    grid-column: auto;
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
@@ -4022,6 +4179,25 @@ footer p {
     min-height: 76px;
   }
 
+  /* Two columns again at this width, so the fifth tab spans the row as it does
+     on desktop. The single-column rule above this breakpoint had to flatten it. */
+  .universe-tabs button:nth-child(odd):last-child {
+    grid-column: 1 / -1;
+  }
+
+  /* The depth control shares the canvas with the corner label; stacked on a
+     phone it would sit on top of it. Pulled in tight and left-aligned instead. */
+  .universe-depth {
+    left: 18px;
+    top: 18px;
+    gap: 5px;
+    max-width: calc(100% - 36px);
+  }
+
+  .site-shell[dir="rtl"] .universe-depth { left: auto; right: 18px; }
+
+  .universe-depth button { padding: 7px 10px; }
+
   .universe-detail {
     padding: 38px 22px;
   }
@@ -4052,14 +4228,8 @@ footer p {
     padding: 55px 22px;
   }
 
-  .deep-checks,
-  .recovery-rhythm {
+  .deep-checks {
     grid-template-columns: 1fr;
-  }
-
-  .recovery-rhythm article {
-    border-left: 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
   }
 
   .carelens-panel-content {

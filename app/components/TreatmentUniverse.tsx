@@ -5,6 +5,7 @@ import {
   ArrowRight,
   CalendarDays,
   Check,
+  Layers,
   Rotate3D,
   ScanLine,
   ShieldCheck,
@@ -12,115 +13,35 @@ import {
   X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Modal from "./Modal";
-import type { CareLensArea } from "./TreatmentCanvas";
+import {
+  AREAS,
+  LAYERS,
+  TOOTH_REGION,
+  findArea,
+  layerHint,
+  layersFor,
+  regionsVisibleAt,
+  type AreaId,
+  type LayerId,
+} from "@/lib/anatomy";
 
 type Language = "en" | "ar";
-type AreaId = CareLensArea;
 
 const TreatmentCanvas = dynamic(() => import("./TreatmentCanvas"), {
   ssr: false,
   loading: () => <div className="universe-canvas-placeholder" aria-hidden />,
 });
 
-const areas: Array<{
-  id: AreaId;
-  number: string;
-  title: string;
-  ar: string;
-  feeling: string;
-  arFeeling: string;
-  description: string;
-  arDescription: string;
-  options: string[];
-  consultation: string[];
-  recovery: Array<{ label: string; text: string }>;
-}> = [
-  {
-    id: "face",
-    number: "01",
-    title: "Face & neck",
-    ar: "الوجه والرقبة",
-    feeling: "I want to look fresher, without looking different.",
-    arFeeling: "أريد مظهراً أكثر حيوية بدون تغيير ملامحي.",
-    description:
-      "Explore the relationship between skin, volume, muscle support, and facial balance.",
-    arDescription: "استكشف العلاقة بين البشرة والحجم ودعم العضلات وتناسق الوجه.",
-    options: ["Facial rejuvenation", "Eyelid surgery", "Fat grafting"],
-    consultation: ["Facial proportions", "Skin and volume assessment", "Scar and recovery planning"],
-    recovery: [
-      { label: "Phase 01", text: "Protection and early healing" },
-      { label: "Phase 02", text: "Return to social rhythm" },
-      { label: "Phase 03", text: "Progressive refinement" },
-    ],
-  },
-  {
-    id: "nose",
-    number: "02",
-    title: "Nose & profile",
-    ar: "الأنف وتناسق الوجه",
-    feeling: "I want balance from every angle—and to breathe well.",
-    arFeeling: "أريد تناسقاً من كل زاوية وتنفساً أفضل.",
-    description:
-      "Profile, structure, skin, and breathing are considered as one connected system.",
-    arDescription: "يُناقش التناسق والتكوين والبشرة والتنفس كنظام واحد متكامل.",
-    options: ["Rhinoplasty", "Septorhinoplasty", "Profile balancing"],
-    consultation: ["Breathing and structure", "Profile relationships", "Long-term refinement"],
-    recovery: [
-      { label: "Phase 01", text: "Support, swelling, and rest" },
-      { label: "Phase 02", text: "Early return to routine" },
-      { label: "Phase 03", text: "Gradual definition" },
-    ],
-  },
-  {
-    id: "body",
-    number: "03",
-    title: "Body architecture",
-    ar: "هندسة القوام",
-    feeling: "My shape no longer reflects how I feel.",
-    arFeeling: "قوامي لم يعد يعكس إحساسي بنفسي.",
-    description:
-      "Proportion, skin quality, muscle support, and lifestyle shape the conversation.",
-    arDescription: "التناسق وجودة الجلد ودعم العضلات ونمط الحياة تشكل خطة الحوار.",
-    options: ["Tummy tuck", "Liposculpture", "Post-weight-loss care"],
-    consultation: ["Body proportions", "Skin and muscle support", "Mobility and lifestyle plan"],
-    recovery: [
-      { label: "Phase 01", text: "Rest and protected movement" },
-      { label: "Phase 02", text: "Progressive mobility" },
-      { label: "Phase 03", text: "Return to full rhythm" },
-    ],
-  },
-  {
-    id: "breast",
-    number: "04",
-    title: "Breast proportion",
-    ar: "تناسق الثدي",
-    feeling: "I want proportion, comfort, and confidence.",
-    arFeeling: "أبحث عن التناسق والراحة والثقة.",
-    description:
-      "A private conversation about size, position, symmetry, scars, and long-term goals.",
-    arDescription: "حوار بخصوصية حول الحجم والموضع والتماثل والندبات والأهداف طويلة المدى.",
-    options: ["Lift", "Reduction", "Augmentation"],
-    consultation: ["Proportion and symmetry", "Technique and scar placement", "Lifestyle and future plans"],
-    recovery: [
-      { label: "Phase 01", text: "Support and early comfort" },
-      { label: "Phase 02", text: "Gradual activity" },
-      { label: "Phase 03", text: "Settling and follow-up" },
-    ],
-  },
-];
-
 /**
  * The text controls arrive before the WebGL engine. This second viewport gate
- * keeps Three.js out of the 700px CareLens prefetch window until the actual
- * canvas is close enough to be seen.
+ * keeps Three.js out of the 700px CareLens prefetch window until the canvas is
+ * close enough to be seen.
  */
-function LazyTreatmentCanvas({ selected, rtl }: { selected: AreaId; rtl: boolean }) {
+function LazyTreatmentCanvas(props: React.ComponentProps<typeof TreatmentCanvas>) {
   const anchor = useRef<HTMLDivElement>(null);
-  const [ready, setReady] = useState(
-    () => typeof IntersectionObserver === "undefined",
-  );
+  const [ready, setReady] = useState(() => typeof IntersectionObserver === "undefined");
 
   useEffect(() => {
     const node = anchor.current;
@@ -140,11 +61,7 @@ function LazyTreatmentCanvas({ selected, rtl }: { selected: AreaId; rtl: boolean
 
   return (
     <div ref={anchor} className="universe-canvas-mount">
-      {ready ? (
-        <TreatmentCanvas selected={selected} rtl={rtl} />
-      ) : (
-        <div className="universe-canvas-placeholder" aria-hidden />
-      )}
+      {ready ? <TreatmentCanvas {...props} /> : <div className="universe-canvas-placeholder" aria-hidden />}
     </div>
   );
 }
@@ -159,49 +76,177 @@ export default function TreatmentUniverse({
   onAsk: () => void;
 }) {
   const rtl = language === "ar";
-  const [selected, setSelected] = useState<AreaId>("face");
+  const [areaId, setAreaId] = useState<AreaId>("face");
+  const [layer, setLayer] = useState<LayerId>("surface");
+  const [regionId, setRegionId] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const active = areas.find((area) => area.id === selected) ?? areas[0];
+  const [hasOrbited, setHasOrbited] = useState(false);
+
+  const area = findArea(areaId);
+  const available = useMemo(() => layersFor(area), [area]);
+  const visible = useMemo(() => regionsVisibleAt(area, layer), [area, layer]);
+
+  // The region rail is the keyboard path into the model, so a selection always
+  // has to exist and always has to be one of the regions currently on screen.
+  // Cutting to a deeper layer must never leave the panel describing something
+  // the viewer can no longer see.
+  const region = visible.find((candidate) => candidate.id === regionId) ?? visible[0] ?? null;
+
+  const selectArea = (next: AreaId) => {
+    setAreaId(next);
+    setLayer("surface");
+    setRegionId(null);
+    setHasOrbited(false);
+  };
+
+  const selectLayer = (next: LayerId) => {
+    setLayer(next);
+    // Cutting deeper should reveal what is newly available, not keep the panel
+    // on the skin region the viewer just looked past.
+    const deeper = area.regions.find((candidate) => candidate.layer === next);
+    if (deeper) setRegionId(deeper.id);
+  };
 
   return (
     <>
       <div className="treatment-universe">
         <div className="universe-canvas">
-          <LazyTreatmentCanvas selected={selected} rtl={rtl} />
+          <LazyTreatmentCanvas
+            area={areaId}
+            layer={layer}
+            framing={area.view}
+            regions={visible}
+            activeRegion={region?.id ?? null}
+            rtl={rtl}
+            onSelect={setRegionId}
+            /* Clicking a tooth opens whatever that tooth means at this
+               depth: its crown, its root, or the bone it is anchored in. */
+            onTooth={() => setRegionId(TOOTH_REGION[layer])}
+            onEngage={() => setHasOrbited(true)}
+          />
           <div className="universe-scan-line" aria-hidden />
           <div className="universe-corner universe-corner--one" aria-hidden />
           <div className="universe-corner universe-corner--two" aria-hidden />
+
           <div className="universe-canvas-label">
             <ScanLine size={15} />
-            <span>{rtl ? "نموذج الاستكشاف التفاعلي" : "INTERACTIVE DISCOVERY MODEL"}</span>
+            <span>{rtl ? "نموذج توضيحي للاستكشاف" : "ILLUSTRATIVE STUDY MODEL"}</span>
           </div>
-          <div className="universe-rotate">
-            <Rotate3D size={14} />
-            <span>{rtl ? "حرّك المؤشر" : "MOVE TO EXPLORE"}</span>
+
+          {/* The hint retires once it has been obeyed. A prompt that keeps
+              asking for something already done reads as an animation, not an
+              instruction. */}
+          {!hasOrbited && (
+            <div className="universe-rotate">
+              <Rotate3D size={14} />
+              <span>{rtl ? "اسحب للتدوير" : "DRAG TO ROTATE"}</span>
+            </div>
+          )}
+
+          <div className="universe-depth" role="group" aria-label={rtl ? "عمق العرض" : "View depth"}>
+            <span className="universe-depth-tag">
+              <Layers size={13} />
+              {rtl ? "العمق" : "DEPTH"}
+            </span>
+            {available.map((id) => {
+              const entry = LAYERS.find((candidate) => candidate.id === id)!;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className={layer === id ? "active" : ""}
+                  aria-pressed={layer === id}
+                  onClick={() => selectLayer(id)}
+                >
+                  {rtl ? entry.ar : entry.en}
+                </button>
+              );
+            })}
           </div>
         </div>
 
         <div className="universe-interface">
-          <div className="universe-tabs">
-            {areas.map((area) => (
+          {/**
+           * Buttons, not a tablist.
+           *
+           * An earlier version declared `role="tablist"` / `role="tab"`, which
+           * promises a contract this markup does not keep: no `aria-controls`,
+           * no `role="tabpanel"`, and no arrow-key navigation between tabs. A
+           * screen reader announces "tab, 1 of 5" and the user reaches for
+           * arrow keys that do nothing — worse than plain buttons, which behave
+           * exactly as announced. `aria-pressed` carries the selected state and
+           * matches the region rail below, so both controls work the same way.
+           */}
+          <div className="universe-tabs" role="group" aria-label={rtl ? "مناطق الرعاية" : "Care areas"}>
+            {AREAS.map((entry) => (
               <button
-                key={area.id}
-                className={selected === area.id ? "active" : ""}
-                onClick={() => setSelected(area.id)}
+                key={entry.id}
+                type="button"
+                aria-pressed={areaId === entry.id}
+                className={areaId === entry.id ? "active" : ""}
+                onClick={() => selectArea(entry.id)}
               >
-                <span>{area.number}</span>
-                <strong>{rtl ? area.ar : area.title}</strong>
+                <span>{entry.number}</span>
+                <strong>{rtl ? entry.ar : entry.en}</strong>
               </button>
             ))}
           </div>
 
-          <div className="universe-detail" key={selected}>
+          <div className="universe-detail" key={`${areaId}-${layer}`}>
             <span className="universe-signal"><i />{rtl ? "منطقة محددة" : "AREA SELECTED"}</span>
-            <h3>“{rtl ? active.arFeeling : active.feeling}”</h3>
-            <p>{rtl ? active.arDescription : active.description}</p>
-            <div className="universe-tags">
-              {active.options.map((option) => <span key={option}>{option}</span>)}
+            <h3>“{rtl ? area.arFeeling : area.feeling}”</h3>
+            <p>{rtl ? area.arDescription : area.description}</p>
+            <p className="universe-depth-hint">{layerHint(area, layer, rtl)}</p>
+
+            {/**
+             * The accessible path into the model.
+             *
+             * Every marker on the canvas is one of these buttons. The canvas is
+             * `aria-hidden` because it cannot describe itself, so this rail is
+             * not a convenience — it is the only way a keyboard or a screen
+             * reader reaches the same content.
+             */}
+            <div className="universe-regions" role="group" aria-label={rtl ? "المناطق التشريحية" : "Anatomical regions"}>
+              {visible.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  className={region?.id === entry.id ? "active" : ""}
+                  aria-pressed={region?.id === entry.id}
+                  onClick={() => setRegionId(entry.id)}
+                >
+                  {rtl ? entry.ar : entry.en}
+                </button>
+              ))}
             </div>
+
+            {region && (
+              <div className="universe-region-card" key={region.id}>
+                <h4>{rtl ? region.ar : region.en}</h4>
+                <p>{rtl ? region.arOverview : region.overview}</p>
+
+                <div className="universe-region-meta">
+                  <span>{rtl ? "التكوين" : "STRUCTURES"}</span>
+                  <div className="universe-tags">
+                    {(rtl ? region.arStructures : region.structures).map((item) => (
+                      <span key={item}>{item}</span>
+                    ))}
+                  </div>
+                </div>
+
+                {region.procedures.length > 0 && (
+                  <div className="universe-region-meta">
+                    <span>{rtl ? "متاح للحجز الآن" : "AVAILABLE TO BOOK"}</span>
+                    <div className="universe-tags universe-tags--offer">
+                      {(rtl ? region.arProcedures : region.procedures).map((item) => (
+                        <span key={item}>{item}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="universe-actions">
               <button className="universe-primary" onClick={() => setDetailOpen(true)}>
                 {rtl ? "افتح خريطة الاستشارة" : "Open consultation map"}
@@ -216,7 +261,7 @@ export default function TreatmentUniverse({
         </div>
       </div>
 
-      {detailOpen && (
+      {detailOpen && region && (
         <Modal
           onClose={() => setDetailOpen(false)}
           layerClassName="specialty-layer"
@@ -228,45 +273,79 @@ export default function TreatmentUniverse({
                 <ArrowLeft size={16} />
                 {rtl ? "العودة إلى كير لِنز" : "Back to CareLens"}
               </button>
-              <span>CARE MAP · {active.number}</span>
-              <button onClick={() => setDetailOpen(false)} aria-label="Close"><X /></button>
+              <span>CARE MAP · {area.number}</span>
+              <button onClick={() => setDetailOpen(false)} aria-label={rtl ? "إغلاق" : "Close"}><X /></button>
             </header>
+
             <div className="deep-dive-grid">
               <div className="deep-dive-intro">
                 <span>{rtl ? "خريطة استشارتك" : "YOUR CONSULTATION MAP"}</span>
-                <h2 id="care-map-title">{rtl ? active.ar : active.title}</h2>
-                <p>{rtl ? active.arDescription : active.description}</p>
+                <h2 id="care-map-title">{rtl ? area.ar : area.en}</h2>
+                <p>{rtl ? area.arDescription : area.description}</p>
                 <div className="deep-dive-orb" aria-hidden><i /><i /><i /></div>
               </div>
+
               <div className="deep-dive-content">
                 <div className="deep-dive-block">
-                  <span>01 · {rtl ? "ما سنناقشه" : "WHAT WE WILL EXPLORE"}</span>
+                  <span>01 · {rtl ? "المنطقة" : "THE REGION"}</span>
+                  <h3 className="deep-dive-region">{rtl ? region.ar : region.en}</h3>
+                  <p className="deep-dive-copy">{rtl ? region.arOverview : region.overview}</p>
+                </div>
+
+                <div className="deep-dive-block">
+                  <span>02 · {rtl ? "ما يشمله" : "STRUCTURES INVOLVED"}</span>
                   <div className="deep-checks">
-                    {active.consultation.map((item) => (
+                    {(rtl ? region.arStructures : region.structures).map((item) => (
                       <p key={item}><Check size={14} />{item}</p>
                     ))}
                   </div>
                 </div>
-                <div className="deep-dive-block">
-                  <span>02 · {rtl ? "إيقاع التعافي" : "RECOVERY RHYTHM"}</span>
-                  <div className="recovery-rhythm">
-                    {active.recovery.map((phase, index) => (
-                      <article key={phase.label}>
-                        <strong>0{index + 1}</strong>
-                        <small>{phase.label}</small>
-                        <p>{phase.text}</p>
-                      </article>
-                    ))}
+
+                {region.procedures.length > 0 && (
+                  <div className="deep-dive-block">
+                    <span>03 · {rtl ? "متاح للحجز الآن" : "AVAILABLE TO BOOK"}</span>
+                    <div className="deep-checks">
+                      {(rtl ? region.arProcedures : region.procedures).map((item) => (
+                        <p key={item}><Check size={14} />{item}</p>
+                      ))}
+                    </div>
                   </div>
+                )}
+
+                {/**
+                 * Kept separate from the bookable list on purpose.
+                 *
+                 * These are topics the surgeon raises, not services the booking
+                 * form can take. Merging the two lists would advertise
+                 * treatments the clinic does not offer — a dead end for the
+                 * patient, and an advertising problem under the Medical
+                 * Syndicate's rules.
+                 */}
+                {region.discussed && region.discussed.length > 0 && (
+                  <div className="deep-dive-block">
+                    <span>04 · {rtl ? "نناقشه في الاستشارة" : "DISCUSSED AT CONSULTATION"}</span>
+                    <div className="deep-checks deep-checks--muted">
+                      {(rtl ? region.arDiscussed ?? [] : region.discussed).map((item) => (
+                        <p key={item}><Check size={14} />{item}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="deep-dive-block">
+                  <span>05 · {rtl ? "إيقاع التعافي" : "RECOVERY RHYTHM"}</span>
+                  <p className="deep-dive-copy">{rtl ? region.arRecovery : region.recovery}</p>
                 </div>
+
                 <div className="deep-dive-note">
                   <ShieldCheck size={17} />
                   <p>
                     {rtl
-                      ? "كل خطة ومدة تعافٍ تختلف حسب الفحص والإجراء والصحة العامة."
-                      : "Every plan and recovery timeline is individual and depends on assessment, procedure, and overall health."}
+                      ? "هذا النموذج توضيحي وليس تشخيصياً. كل خطة ومدة تعافٍ تختلف حسب الفحص والإجراء والصحة العامة."
+                      : "This model is illustrative, not diagnostic. Every plan and recovery timeline is individual and depends on assessment, procedure, and overall health."}
                   </p>
                 </div>
+
                 <button
                   className="button button--burgundy button--large"
                   onClick={() => {
