@@ -230,18 +230,6 @@ test("the bust profile closes at both poles", () => {
   assert.ok(Math.abs(profile[0].y - CROWN_TOP) < 1e-9, "the crown is not at the expected height");
 });
 
-test("the avatar continues through the upper abdomen", () => {
-  const profile = buildProfile();
-  const base = Math.min(...profile.map((point) => point.y));
-  assert.ok(base <= -2.15, `upper-body model stops too high at y=${base.toFixed(2)}`);
-
-  // A waist has to narrow below the shoulder line. Without that change in
-  // silhouette, extending the old bust merely produces a long pedestal.
-  const shoulder = Math.max(...profile.filter((point) => point.y < -0.55 && point.y > -0.8).map((point) => point.x));
-  const waist = Math.max(...profile.filter((point) => point.y < -1.75).map((point) => point.x));
-  assert.ok(shoulder > waist, `shoulder radius ${shoulder.toFixed(2)} should exceed waist ${waist.toFixed(2)}`);
-});
-
 test("the inset shell stays inside the surface it is derived from", () => {
   const surface = buildProfile(0);
   const structure = buildProfile(0.035);

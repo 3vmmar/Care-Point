@@ -118,7 +118,7 @@ export const AREAS: Area[] = [
     arFeeling: "أريد مظهراً أكثر حيوية بدون تغيير ملامحي.",
     description: "Skin, volume, and the support underneath decide how rested a face reads.",
     arDescription: "البشرة والحجم والدعامة تحتها هي ما يجعل الوجه يبدو مرتاحاً.",
-    view: { azimuth: -0.32, elevation: 0.02, distance: 7.55, target: -0.18 },
+    view: { azimuth: -0.36, elevation: 0.06, distance: 6.4, target: 0.5 },
     model: "bust",
     regions: [
       {
@@ -321,7 +321,7 @@ export const AREAS: Area[] = [
     arFeeling: "قوامي لم يعد يعكس إحساسي بنفسي.",
     description: "Proportion, skin quality, and muscle support are assessed as one system.",
     arDescription: "التناسق وجودة الجلد ودعم العضلات تُقيَّم كنظام واحد.",
-    view: { azimuth: -0.18, elevation: -0.08, distance: 7.65, target: -0.22 },
+    view: { azimuth: -0.18, elevation: -0.1, distance: 7.4, target: 0.05 },
     model: "bust",
     regions: [
       {
@@ -413,7 +413,7 @@ export const AREAS: Area[] = [
     arFeeling: "أبحث عن التناسق والراحة والثقة.",
     description: "A private conversation about size, position, symmetry, scars, and time.",
     arDescription: "حوار بخصوصية حول الحجم والموضع والتماثل والأثر والزمن.",
-    view: { azimuth: -0.42, elevation: -0.03, distance: 7.45, target: -0.14 },
+    view: { azimuth: -0.5, elevation: -0.04, distance: 6.8, target: 0.24 },
     model: "bust",
     regions: [
       {

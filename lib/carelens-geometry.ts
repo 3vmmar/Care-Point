@@ -332,14 +332,9 @@ export function buildProfile(inset = 0): THREE.Vector2[] {
   // rather than the skirt of a vase.
   bezier([0.212, 0.1], [0.28, -0.14], [0.62, -0.26], [0.86, -0.4], 18);
   bezier([0.86, -0.4], [1.0, -0.47], [1.08, -0.56], [1.11, -0.7], 12);
-  // Carry the same continuous surface through the rib cage and waist. The
-  // explorer serves face, breast, and body care, so the avatar needs one shared
-  // head-to-abdomen silhouette rather than a bust floating above the panel.
-  bezier([1.11, -0.7], [1.08, -0.9], [0.9, -1.08], [0.78, -1.28], 16);
-  bezier([0.78, -1.28], [0.69, -1.5], [0.62, -1.82], [0.61, -2.04], 16);
   // Close the base. A lathe is an open surface; without this the camera sees
   // into the hollow underside and reads it as a modelling error.
-  bezier([0.61, -2.04], [0.56, -2.14], [0.28, -2.19], [0.0, -2.2], 10);
+  bezier([1.11, -0.7], [1.06, -0.79], [0.7, -0.84], [0.0, -0.85], 10);
 
   if (inset === 0) return points;
 
