@@ -25,7 +25,7 @@
  * problem for the clinic.
  */
 
-export type AreaId = "face" | "nose" | "body" | "breast" | "dental";
+export type AreaId = "face" | "nose" | "body" | "breast" | "dental" | "dermatology";
 
 /**
  * The three depths the model can show.
@@ -118,7 +118,7 @@ export const AREAS: Area[] = [
     arFeeling: "أريد مظهراً أكثر حيوية بدون تغيير ملامحي.",
     description: "Skin, volume, and the support underneath decide how rested a face reads.",
     arDescription: "البشرة والحجم والدعامة تحتها هي ما يجعل الوجه يبدو مرتاحاً.",
-    view: { azimuth: -0.36, elevation: 0.06, distance: 6.4, target: 0.5 },
+    view: { azimuth: -0.28, elevation: 0.02, distance: 7.5, target: -0.18 },
     model: "bust",
     regions: [
       {
@@ -161,12 +161,12 @@ export const AREAS: Area[] = [
       },
       {
         id: "midface",
-        en: "Cheek & midface",
+        en: "Mid Face",
         ar: "الخد ومنتصف الوجه",
         layer: "structure",
         at: [-0.36, 0.98, 0.3],
         overview:
-          "The midface loses volume before it loses skin. That is why a face can look thinner and older at the same time, and why replacing volume often reads better than tightening.",
+          "The mid face includes the cheeks and upper jaw area. Procedures here restore volume, lift soft tissues, and improve facial harmony.",
         arOverview:
           "منتصف الوجه يفقد حجمه قبل أن يفقد جلده. لذلك قد يبدو الوجه أنحف وأكبر سناً في نفس الوقت، ولذلك تعويض الحجم غالباً أفضل من الشد.",
         structures: ["Cheek fat", "Deep support layer", "Cheekbone", "Nose-to-mouth fold"],
@@ -321,7 +321,7 @@ export const AREAS: Area[] = [
     arFeeling: "قوامي لم يعد يعكس إحساسي بنفسي.",
     description: "Proportion, skin quality, and muscle support are assessed as one system.",
     arDescription: "التناسق وجودة الجلد ودعم العضلات تُقيَّم كنظام واحد.",
-    view: { azimuth: -0.18, elevation: -0.1, distance: 7.4, target: 0.05 },
+    view: { azimuth: -0.18, elevation: -0.08, distance: 7.6, target: -0.2 },
     model: "bust",
     regions: [
       {
@@ -413,7 +413,7 @@ export const AREAS: Area[] = [
     arFeeling: "أبحث عن التناسق والراحة والثقة.",
     description: "A private conversation about size, position, symmetry, scars, and time.",
     arDescription: "حوار بخصوصية حول الحجم والموضع والتماثل والأثر والزمن.",
-    view: { azimuth: -0.5, elevation: -0.04, distance: 6.8, target: 0.24 },
+    view: { azimuth: -0.4, elevation: -0.03, distance: 7.35, target: -0.12 },
     model: "bust",
     regions: [
       {
@@ -631,6 +631,72 @@ export const AREAS: Area[] = [
         arDiscussed: ["الصرير وتأثيره على الفينير", "هل يأتي التقويم أولاً"],
         recovery: "Bite adjustments are small and immediate. Alignment plans run over months.",
         arRecovery: "تعديلات الإطباق بسيطة وفورية. خطط التقويم تمتد لأشهر.",
+      },
+    ],
+  },
+  /* -- 06 · Dermatology -------------------------------------------------- */
+  {
+    id: "dermatology",
+    number: "06",
+    en: "Dermatology",
+    ar: "الأمراض الجلدية",
+    feeling: "I want healthier skin that still looks like my skin.",
+    arFeeling: "أريد بشرة أكثر صحة مع الحفاظ على مظهرها الطبيعي.",
+    description: "Tone, texture, hydration, and long-term skin health are assessed together.",
+    arDescription: "يُقيَّم لون البشرة وملمسها وترطيبها وصحتها على المدى الطويل معاً.",
+    view: { azimuth: -0.2, elevation: 0.03, distance: 7.45, target: -0.16 },
+    model: "bust",
+    regions: [
+      {
+        id: "complexion",
+        en: "Tone & clarity",
+        ar: "اللون والصفاء",
+        layer: "surface",
+        at: [0.25, 1.12, 0.37],
+        overview: "Uneven tone can come from pigment, redness, sun exposure, or inflammation. Identifying the cause comes before choosing a treatment.",
+        arOverview: "قد ينتج تفاوت اللون عن التصبغ أو الاحمرار أو التعرض للشمس أو الالتهاب. تحديد السبب يسبق اختيار العلاج.",
+        structures: ["Skin barrier", "Pigment cells", "Surface capillaries", "Sun-exposed skin"],
+        arStructures: ["حاجز البشرة", "الخلايا الصبغية", "الشعيرات السطحية", "البشرة المعرضة للشمس"],
+        procedures: ["Non-surgical aesthetics"],
+        arProcedures: ["تجميل بدون جراحة"],
+        discussed: ["Pigmentation assessment", "Redness and sensitivity", "Daily sun protection"],
+        arDiscussed: ["تقييم التصبغ", "الاحمرار والحساسية", "الحماية اليومية من الشمس"],
+        recovery: "Most skin plans are staged. Sensitivity and sun avoidance vary with the treatment selected.",
+        arRecovery: "تُنفَّذ معظم خطط البشرة على مراحل. تختلف الحساسية ومدة تجنب الشمس حسب العلاج المختار.",
+      },
+      {
+        id: "texture",
+        en: "Texture & pores",
+        ar: "الملمس والمسام",
+        layer: "surface",
+        at: [-0.28, 1.03, 0.38],
+        overview: "Texture reflects the skin barrier, oil balance, collagen support, and previous inflammation. It improves through a plan, not a single product.",
+        arOverview: "يعكس ملمس البشرة حاجز الجلد وتوازن الدهون ودعم الكولاجين والالتهاب السابق. يتحسن بخطة متكاملة لا بمنتج واحد.",
+        structures: ["Skin barrier", "Oil glands", "Pore openings", "Collagen layer"],
+        arStructures: ["حاجز البشرة", "الغدد الدهنية", "فتحات المسام", "طبقة الكولاجين"],
+        procedures: ["Non-surgical aesthetics"],
+        arProcedures: ["تجميل بدون جراحة"],
+        discussed: ["Home skin routine", "Resurfacing options", "Acne control first"],
+        arDiscussed: ["روتين العناية المنزلي", "خيارات تجديد السطح", "السيطرة على حب الشباب أولاً"],
+        recovery: "Gentle plans have little downtime; resurfacing may need several days of redness and careful aftercare.",
+        arRecovery: "الخطط اللطيفة لا تحتاج عادة إلى فترة تعافٍ، بينما قد يتطلب تجديد السطح عدة أيام من الاحمرار والعناية الدقيقة.",
+      },
+      {
+        id: "scars-skin",
+        en: "Scars & marks",
+        ar: "الندبات والآثار",
+        layer: "structure",
+        at: [0.34, 0.83, 0.31],
+        overview: "A scar is a change in structure, not only colour. Its depth, tethering, pigment, and age determine which combination of treatments may help.",
+        arOverview: "الندبة تغير في بنية الجلد وليست في اللون فقط. يحدد عمقها وارتباطها ولونها وعمرها مجموعة العلاجات المناسبة.",
+        structures: ["Epidermis", "Collagen fibres", "Scar tethering", "Underlying fat"],
+        arStructures: ["البشرة", "ألياف الكولاجين", "ارتباط الندبة", "الدهون تحت الجلد"],
+        procedures: ["Non-surgical aesthetics"],
+        arProcedures: ["تجميل بدون جراحة"],
+        discussed: ["Scar type and age", "Combination treatment", "Realistic improvement goals"],
+        arDiscussed: ["نوع الندبة وعمرها", "العلاج المركب", "أهداف التحسن الواقعية"],
+        recovery: "Scar treatment is gradual and usually needs a series. Progress is measured in months rather than days.",
+        arRecovery: "علاج الندبات تدريجي ويحتاج غالباً إلى سلسلة جلسات. يُقاس التحسن بالأشهر لا بالأيام.",
       },
     ],
   },

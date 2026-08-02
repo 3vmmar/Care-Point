@@ -41,12 +41,12 @@ async function openCareLens(page: Page) {
   return page.locator(".treatment-universe");
 }
 
-test("the explorer offers five areas, ending with Dental", async ({ page }) => {
+test("the explorer offers five patient-facing areas, ending with Dermatology", async ({ page }) => {
   const universe = await openCareLens(page);
   const tabs = universe.getByRole("group", { name: /care areas/i }).getByRole("button");
 
   await expect(tabs).toHaveCount(5);
-  await expect(tabs.nth(4)).toContainText("Dental");
+  await expect(tabs.nth(4)).toContainText("Dermatology");
 });
 
 test("the 3D scene mounts once it is scrolled into view", async ({ page }) => {
@@ -73,35 +73,19 @@ test("the 3D scene mounts once it is scrolled into view", async ({ page }) => {
   expect(live.lost).toBe(false);
 });
 
-test("Dental exposes all three depths and its own vocabulary", async ({ page }) => {
+test("the anatomy rail exposes the complete seven-layer model", async ({ page }) => {
   const universe = await openCareLens(page);
-  await universe.getByRole("button", { name: /dental/i }).click();
-
-  const depth = universe.getByRole("group", { name: /view depth/i });
-  await expect(depth.getByRole("button")).toHaveCount(3);
-
-  // The default hints describe a body. If Dental ever falls back to them it
-  // tells a patient their teeth are "the shape you see in a mirror".
-  const hint = universe.locator(".universe-depth-hint");
-  await expect(hint).toContainText(/enamel/i);
-  await expect(hint).not.toContainText(/mirror/i);
+  const layers = universe.getByRole("group", { name: /anatomy layers/i });
+  await expect(layers.getByRole("button")).toHaveCount(7);
+  await expect(layers.getByRole("button", { name: "Skin", exact: true })).toHaveAttribute("aria-pressed", "true");
 });
 
-test("cutting deeper reveals regions that were not there before", async ({ page }) => {
+test("switching anatomy layer updates both the model state and the controls", async ({ page }) => {
   const universe = await openCareLens(page);
-  await universe.getByRole("button", { name: /dental/i }).click();
-
-  const regions = universe.getByRole("group", { name: /anatomical regions/i }).getByRole("button");
-  const atSurface = await regions.allInnerTexts();
-
-  await universe.getByRole("button", { name: "Skeleton", exact: true }).click();
-  const atSkeleton = await regions.allInnerTexts();
-
-  expect(atSkeleton.length).toBeGreaterThan(atSurface.length);
-  expect(atSkeleton).toContain("Implants");
-  // Surface regions stay. Losing the outline of what you were just looking at
-  // is disorienting, so depth adds rather than replaces.
-  expect(atSkeleton).toEqual(expect.arrayContaining(atSurface));
+  const rail = universe.getByRole("group", { name: /anatomy layers/i });
+  await rail.getByRole("button", { name: "Skeleton", exact: true }).click();
+  await expect(rail.getByRole("button", { name: "Skeleton", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(universe.locator(".universe-model-status strong")).toHaveText("Skeleton");
 });
 
 test("every region is reachable and described without the canvas", async ({ page }) => {
@@ -143,10 +127,10 @@ test("every region is reachable and described without the canvas", async ({ page
   const label = (await last.innerText()).trim();
   await last.click();
 
-  const card = universe.locator(".universe-region-card");
-  await expect(card.locator("h4")).toHaveText(label);
-  await expect(card.locator("p").first()).not.toBeEmpty();
-  await expect(card).toContainText(/STRUCTURES/i);
+  const heading = universe.locator(".universe-heading");
+  await expect(heading.locator("h3")).toHaveText(label);
+  await expect(heading.locator("p")).not.toBeEmpty();
+  await expect(universe.locator(".universe-structures")).toContainText(/Structures/i);
 });
 
 test("the region rail is operable from the keyboard", async ({ page }) => {
@@ -160,7 +144,7 @@ test("the region rail is operable from the keyboard", async ({ page }) => {
   await expect(second).toBeFocused();
   await page.keyboard.press("Enter");
 
-  await expect(universe.locator(".universe-region-card h4")).toHaveText(label);
+  await expect(universe.locator(".universe-heading h3")).toHaveText(label);
   await expect(second).toHaveAttribute("aria-pressed", "true");
 });
 
@@ -182,5 +166,5 @@ test("switching area re-frames rather than stranding the camera", async ({ page 
   await expect(universe.locator(".universe-rotate")).toHaveCount(0);
 
   await universe.getByRole("button", { name: /dental/i }).click();
-  await expect(universe.locator(".universe-region-card h4")).toHaveText("Smile design");
+  await expect(universe.locator(".universe-heading h3")).toHaveText("Smile design");
 });

@@ -52,6 +52,7 @@ import {
  */
 
 export type CareLensArea = AreaId;
+export type AnatomyTissue = "skin" | "muscles" | "fat" | "vessels" | "ligaments" | "nerves" | "skeleton";
 
 /* ══ Lighting ══════════════════════════════════════════════════════════════ */
 
@@ -374,9 +375,10 @@ function DentalArch({
 }
 
 function Bust({
-  layer, reducedMotion, environment,
+  layer, tissue, reducedMotion, environment,
 }: {
   layer: LayerId;
+  tissue: AnatomyTissue;
   reducedMotion: boolean;
   environment: THREE.Texture | null;
 }) {
@@ -396,11 +398,19 @@ function Bust({
 
   const cranium = useMemo(() => buildCranium(), []);
 
+  const accents = useMemo(() => ({
+    chest: new THREE.SphereGeometry(1, 64, 40),
+    arm: new THREE.SphereGeometry(1, 48, 32),
+    hair: new THREE.SphereGeometry(1, 64, 40, 0, Math.PI * 2, 0, Math.PI * 0.6),
+    bun: new THREE.SphereGeometry(1, 48, 32),
+  }), []);
+
   useEffect(() => () => {
     surface.dispose();
     structure.dispose();
     cranium.dispose();
-  }, [surface, structure, cranium]);
+    Object.values(accents).forEach((geometry) => geometry.dispose());
+  }, [surface, structure, cranium, accents]);
 
   // Front-to-back flattening. A perfectly round bust reads as a chess piece; a
   // shallower one reads as a body without needing any actual anatomy.
@@ -409,6 +419,16 @@ function Bust({
     [],
   );
   const shell = SHELL_OPACITY[layer];
+  const tissueStyle: Record<AnatomyTissue, { color: string; sheen: string }> = {
+    skin: { color: "#b77f69", sheen: "#d7a18c" },
+    muscles: { color: "#a34f54", sheen: "#d5827d" },
+    fat: { color: "#d2a76f", sheen: "#f0cf99" },
+    vessels: { color: "#8b4054", sheen: "#c4687e" },
+    ligaments: { color: "#b8a27f", sheen: "#dfcca5" },
+    nerves: { color: "#c5a94d", sheen: "#f0d975" },
+    skeleton: { color: "#d8ccb6", sheen: "#eee2ca" },
+  };
+  const activeTissue = tissueStyle[tissue];
 
   return (
     <group>
@@ -418,18 +438,116 @@ function Bust({
         reducedMotion={reducedMotion}
         scale={flatten}
       >
-        {/**
-         * Porcelain, not skin. Skin tones were the old scene's mistake: they
-         * invite the eye to look for a face, and then find a cone where the
-         * nose should be.
-         */}
         <meshPhysicalMaterial
-          color="#e9e2d8" roughness={0.42} metalness={0}
-          clearcoat={1} clearcoatRoughness={0.14} reflectivity={0.5}
-          envMap={environment} envMapIntensity={1.15}
+          color="#b77f69" roughness={0.54} metalness={0}
+          clearcoat={0.35} clearcoatRoughness={0.48} reflectivity={0.42}
+          sheen={0.28} sheenColor="#d7a18c"
+          envMap={environment} envMapIntensity={0.92}
           transparent depthWrite={layer === "surface"}
         />
       </FadingMesh>
+
+      {/* Secondary forms turn the continuous silhouette into a recognisable
+          upper torso without splitting the primary skin shell. They share the
+          exact same material response, so the joins read as soft anatomy rather
+          than separate primitives under the studio lighting. */}
+      {[
+        { key: "left-chest", position: [-0.39, -0.76, 0.64], scale: [0.43, 0.32, 0.31] },
+        { key: "right-chest", position: [0.39, -0.76, 0.64], scale: [0.43, 0.32, 0.31] },
+      ].map((part) => (
+        <FadingMesh
+          key={part.key}
+          geometry={accents.chest}
+          opacity={shell.surface}
+          reducedMotion={reducedMotion}
+          position={part.position}
+          scale={part.scale}
+        >
+          <meshPhysicalMaterial
+            color="#b77f69" roughness={0.56} metalness={0}
+            clearcoat={0.3} clearcoatRoughness={0.5}
+            sheen={0.25} sheenColor="#d7a18c"
+            envMap={environment} envMapIntensity={0.88}
+            transparent depthWrite={layer === "surface"}
+          />
+        </FadingMesh>
+      ))}
+
+      {[
+        { key: "left-arm", position: [-1.02, -1.05, -0.02], rotation: [0, 0, -0.13] },
+        { key: "right-arm", position: [1.02, -1.05, -0.02], rotation: [0, 0, 0.13] },
+      ].map((part) => (
+        <FadingMesh
+          key={part.key}
+          geometry={accents.arm}
+          opacity={shell.surface}
+          reducedMotion={reducedMotion}
+          position={part.position}
+          rotation={part.rotation}
+          scale={[0.23, 0.82, 0.28]}
+        >
+          <meshPhysicalMaterial
+            color="#b77f69" roughness={0.57} metalness={0}
+            clearcoat={0.28} clearcoatRoughness={0.52}
+            sheen={0.24} sheenColor="#d7a18c"
+            envMap={environment} envMapIntensity={0.84}
+            transparent depthWrite={layer === "surface"}
+          />
+        </FadingMesh>
+      ))}
+
+      <FadingMesh
+        geometry={accents.hair}
+        opacity={shell.surface}
+        reducedMotion={reducedMotion}
+        position={[0, 1.26, -0.04]}
+        scale={[0.54, 0.58, 0.43]}
+      >
+        <meshPhysicalMaterial
+          color="#2a201c" roughness={0.72} metalness={0}
+          sheen={0.78} sheenColor="#6c5147"
+          envMap={environment} envMapIntensity={0.45}
+          transparent depthWrite={layer === "surface"}
+        />
+      </FadingMesh>
+
+      <FadingMesh
+        geometry={accents.bun}
+        opacity={shell.surface}
+        reducedMotion={reducedMotion}
+        position={[0.18, 1.56, -0.31]}
+        scale={[0.25, 0.22, 0.2]}
+      >
+        <meshPhysicalMaterial
+          color="#241b18" roughness={0.75} metalness={0}
+          sheen={0.7} sheenColor="#684c43"
+          envMap={environment} envMapIntensity={0.42}
+          transparent depthWrite={layer === "surface"}
+        />
+      </FadingMesh>
+
+      {layer === "surface" && (
+        <>
+          <mesh position={[0, 1.06, 0.39]} rotation={[Math.PI / 2, 0, 0]} scale={[0.1, 0.18, 0.1]}>
+            <coneGeometry args={[1, 1, 32]} />
+            <meshPhysicalMaterial color="#b9826c" roughness={0.58} envMap={environment} envMapIntensity={0.82} />
+          </mesh>
+          {[-0.17, 0.17].map((x) => (
+            <mesh key={x} position={[x, 1.17, 0.382]} scale={[0.075, 0.035, 0.018]}>
+              <sphereGeometry args={[1, 32, 18]} />
+              <meshPhysicalMaterial color="#3b2d28" roughness={0.38} envMap={environment} envMapIntensity={0.7} />
+            </mesh>
+          ))}
+          <mesh position={[0, 0.92, 0.382]} scale={[0.13, 0.025, 0.018]}>
+            <sphereGeometry args={[1, 32, 16]} />
+            <meshPhysicalMaterial color="#8d4f4c" roughness={0.5} envMap={environment} envMapIntensity={0.55} />
+          </mesh>
+          <mesh position={[0, -1.76, 0.455]}>
+            <torusGeometry args={[0.035, 0.009, 10, 32]} />
+            <meshBasicMaterial color="#7b5448" transparent opacity={0.72} />
+          </mesh>
+        </>
+      )}
 
       <FadingMesh
         geometry={structure}
@@ -442,8 +560,8 @@ function Bust({
          * two never read as the same material seen twice.
          */}
         <meshPhysicalMaterial
-          color="#b8837f" roughness={0.82} metalness={0}
-          sheen={0.4} sheenColor="#8d4f52"
+          color={activeTissue.color} roughness={0.76} metalness={0}
+          sheen={0.42} sheenColor={activeTissue.sheen}
           envMap={environment} envMapIntensity={0.55}
           transparent depthWrite={layer === "structure"}
         />
@@ -730,11 +848,12 @@ function CameraRig({
 /* ══ Scene ═════════════════════════════════════════════════════════════════ */
 
 function Scene({
-  area, layer, framing, regions, activeRegion, activeTooth, reducedMotion,
+  area, layer, tissue, framing, regions, activeRegion, activeTooth, reducedMotion,
   onSelect, onTooth, onEngage,
 }: {
   area: AreaId;
   layer: LayerId;
+  tissue: AnatomyTissue;
   framing: Framing;
   regions: Region[];
   activeRegion: string | null;
@@ -756,7 +875,7 @@ function Scene({
       <directionalLight position={[3.2, 4.4, 3.6]} intensity={1.5} color="#fff4e6" />
       <directionalLight position={[-3.6, 0.6, -2.4]} intensity={0.9} color="#b46978" />
 
-      <ContactShadow y={dental ? -0.72 : -0.88} size={dental ? 3.6 : 5.4} />
+      <ContactShadow y={dental ? -0.72 : -2.22} size={dental ? 3.6 : 5.4} />
 
       {dental ? (
         <DentalArch
@@ -767,7 +886,7 @@ function Scene({
           onTooth={(key) => onTooth(key)}
         />
       ) : (
-        <Bust layer={layer} reducedMotion={reducedMotion} environment={environment} />
+        <Bust layer={layer} tissue={tissue} reducedMotion={reducedMotion} environment={environment} />
       )}
 
       {regions.map((region) => (
@@ -802,10 +921,11 @@ class CanvasBoundary extends Component<
 }
 
 export default function TreatmentCanvas({
-  area, layer, framing, regions, activeRegion, rtl, onSelect, onTooth, onEngage,
+  area, layer, tissue, framing, regions, activeRegion, rtl, onSelect, onTooth, onEngage,
 }: {
   area: AreaId;
   layer: LayerId;
+  tissue: AnatomyTissue;
   framing: Framing;
   regions: Region[];
   activeRegion: string | null;
@@ -900,6 +1020,7 @@ export default function TreatmentCanvas({
         <Scene
           area={area}
           layer={layer}
+          tissue={tissue}
           framing={framing}
           regions={regions}
           activeRegion={activeRegion}
