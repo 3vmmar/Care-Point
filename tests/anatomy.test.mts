@@ -22,11 +22,11 @@ const bookable = new Set(SERVICES.map((service) => service.en));
 const bookableAr = new Set(SERVICES.map((service) => service.ar));
 
 test("every area is complete in both languages", () => {
-  assert.equal(AREAS.length, 6, "the clinical content includes Dermatology");
+  assert.equal(AREAS.length, 5, "four original areas plus Dental");
 
   const ids = AREAS.map((area) => area.id);
   assert.equal(new Set(ids).size, ids.length, "area ids must be unique");
-  assert.deepEqual(ids, ["face", "nose", "body", "breast", "dental", "dermatology"]);
+  assert.deepEqual(ids, ["face", "nose", "body", "breast", "dental"]);
 
   AREAS.forEach((area, index) => {
     assert.equal(area.number, `0${index + 1}`, `${area.id} is numbered out of order`);
