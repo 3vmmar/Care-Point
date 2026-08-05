@@ -53,6 +53,7 @@ export type Appointment = {
   id: string;
   status: AppointmentStatus;
   branch: string;
+  practitioner: string | null;
   service: string;
   slotDate: string;
   slotTime: string;
@@ -75,7 +76,7 @@ export type Appointment = {
 
 export type ConfirmedAppointment = Appointment & { manageToken: string | null };
 
-const APPOINTMENT_COLUMNS = `id, status, branch, service,
+const APPOINTMENT_COLUMNS = `id, status, branch, practitioner, service,
         slot_date AS slotDate, slot_time AS slotTime,
         duration_minutes AS durationMinutes,
         patient_name AS patientName, patient_phone AS patientPhone,
@@ -776,6 +777,7 @@ export async function confirmAppointment(
       eventKey: `booking.confirmed:${candidate.id}:${timestamp}`,
       context: {
         branch: candidate.branch,
+        practitioner: candidate.practitioner,
         service: candidate.service,
         slotDate: candidate.slotDate,
         slotTime: candidate.slotTime,
@@ -840,12 +842,19 @@ export async function cancelByManageToken(token: string, reason?: string | null)
 
   const existing = await db
     .prepare(
-      `SELECT id, branch, service, slot_date AS slotDate, slot_time AS slotTime
+      `SELECT id, branch, practitioner, service, slot_date AS slotDate, slot_time AS slotTime
        FROM appointments WHERE manage_token = ?
          AND status IN ('confirmed', 'checked_in') AND slot_date >= ?`,
     )
     .bind(token, clinicToday())
-    .first<{ id: string; branch: string; service: string; slotDate: string; slotTime: string }>();
+    .first<{
+      id: string;
+      branch: string;
+      practitioner: string | null;
+      service: string;
+      slotDate: string;
+      slotTime: string;
+    }>();
   if (!existing) return false;
 
   const [cancelled] = await db.batch([
@@ -872,6 +881,7 @@ export async function cancelByManageToken(token: string, reason?: string | null)
       eventKey: `booking.cancelled:${existing.id}:${timestamp}`,
       context: {
         branch: existing.branch,
+        practitioner: existing.practitioner,
         service: existing.service,
         slotDate: existing.slotDate,
         slotTime: existing.slotTime,
@@ -939,6 +949,7 @@ export async function rescheduleByManageToken(input: {
       eventKey: `booking.rescheduled:${existing.id}:${timestamp}`,
       context: {
         branch: existing.branch,
+        practitioner,
         slotDate: input.slotDate,
         slotTime: input.slotTime,
       },
@@ -1061,13 +1072,18 @@ export type DashboardSummary = {
 };
 
 /** Real counts for the clinic dashboard — no estimates, no seeded values. */
-export async function getDashboardSummary(): Promise<DashboardSummary> {
+export async function getDashboardSummary(
+  input: { branch?: string; today?: DateKey } = {},
+): Promise<DashboardSummary> {
   await ensureBookingSchema();
   const db = database();
-  const today = clinicToday();
+  const today = input.today ?? clinicToday();
   const weekAhead = addDays(today, 7);
   const weekAgoIso = new Date(Date.now() - 7 * 86_400_000).toISOString();
   const monthAgo = addDays(today, -30);
+  const branchClause = input.branch ? " AND branch = ?" : "";
+  const withBranch = (...bindings: string[]) =>
+    input.branch ? [...bindings, input.branch] : bindings;
 
   const [totals, lifecycle, branchRows, serviceRows, dayRows, reasonRows] =
     await Promise.all([
@@ -1080,9 +1096,9 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
            SUM(CASE WHEN confirmed_at >= ? THEN 1 ELSE 0 END) AS bookedLast7Days,
            MAX(confirmed_at) AS newestBookingAt
          FROM appointments
-         WHERE status IN ('confirmed', 'checked_in', 'completed')`,
+         WHERE status IN ('confirmed', 'checked_in', 'completed')${branchClause}`,
       )
-      .bind(today, today, today, weekAhead, weekAgoIso)
+      .bind(...withBranch(today, today, today, weekAhead, weekAgoIso))
       .first<{
         today: number | null;
         upcoming: number | null;
@@ -1107,43 +1123,51 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
            SUM(CASE WHEN status = 'no_show' AND slot_date >= ? AND slot_date <= ? THEN 1 ELSE 0 END) AS noShow,
            SUM(CASE WHEN status = 'completed' AND slot_date >= ? AND slot_date <= ? THEN 1 ELSE 0 END) AS completed
          FROM appointments
-         WHERE status <> 'held'`,
+         WHERE status <> 'held'${branchClause}`,
       )
-      .bind(`${monthAgo}T00:00:00.000Z`, monthAgo, today, monthAgo, today)
+      .bind(
+        ...withBranch(
+          `${monthAgo}T00:00:00.000Z`,
+          monthAgo,
+          today,
+          monthAgo,
+          today,
+        ),
+      )
       .first<{ cancelled: number | null; noShow: number | null; completed: number | null }>(),
     db
       .prepare(
         `SELECT branch, COUNT(*) AS total FROM appointments
-         WHERE status IN ('confirmed', 'checked_in') AND slot_date >= ?
+         WHERE status IN ('confirmed', 'checked_in') AND slot_date >= ?${branchClause}
          GROUP BY branch ORDER BY total DESC`,
       )
-      .bind(today)
+      .bind(...withBranch(today))
       .all<{ branch: string; total: number }>(),
     db
       .prepare(
         `SELECT service, COUNT(*) AS total FROM appointments
-         WHERE status IN ('confirmed', 'checked_in', 'completed') AND slot_date >= ?
+         WHERE status IN ('confirmed', 'checked_in', 'completed') AND slot_date >= ?${branchClause}
          GROUP BY service ORDER BY total DESC`,
       )
-      .bind(monthAgo)
+      .bind(...withBranch(monthAgo))
       .all<{ service: string; total: number }>(),
     db
       .prepare(
         `SELECT slot_date AS date, COUNT(*) AS total FROM appointments
-         WHERE status IN ('confirmed', 'checked_in') AND slot_date >= ? AND slot_date <= ?
+         WHERE status IN ('confirmed', 'checked_in') AND slot_date >= ? AND slot_date <= ?${branchClause}
          GROUP BY slot_date ORDER BY slot_date ASC`,
       )
-      .bind(today, addDays(today, 13))
+      .bind(...withBranch(today, addDays(today, 13)))
       .all<{ date: string; total: number }>(),
     db
       .prepare(
         // Same window as `cancelledLast30Days` above, so the panel's "N of M gave
         // no reason" can never exceed the total it is quoting.
         `SELECT cancellation_reason AS reason, COUNT(*) AS total FROM appointments
-         WHERE status = 'cancelled' AND cancelled_at >= ?
+         WHERE status = 'cancelled' AND cancelled_at >= ?${branchClause}
          GROUP BY cancellation_reason ORDER BY total DESC`,
       )
-      .bind(`${monthAgo}T00:00:00.000Z`)
+      .bind(...withBranch(`${monthAgo}T00:00:00.000Z`))
       .all<{ reason: string | null; total: number }>(),
   ]);
 
@@ -1254,11 +1278,18 @@ export async function updateAppointmentStatus(input: {
 
   const existing = await db
     .prepare(
-      `SELECT id, branch, service, slot_date AS slotDate, slot_time AS slotTime
+      `SELECT id, branch, practitioner, service, slot_date AS slotDate, slot_time AS slotTime
        FROM appointments WHERE id = ? AND status <> 'held'`,
     )
     .bind(input.id)
-    .first<{ id: string; branch: string; service: string; slotDate: string; slotTime: string }>();
+    .first<{
+      id: string;
+      branch: string;
+      practitioner: string | null;
+      service: string;
+      slotDate: string;
+      slotTime: string;
+    }>();
   if (!existing) return null;
 
   const statements: D1PreparedStatement[] = [
@@ -1302,6 +1333,7 @@ export async function updateAppointmentStatus(input: {
         eventKey: `booking.cancelled:${input.id}:${timestamp}`,
         context: {
           branch: existing.branch,
+          practitioner: existing.practitioner,
           service: existing.service,
           slotDate: existing.slotDate,
           slotTime: existing.slotTime,
@@ -1412,6 +1444,7 @@ export async function createClinicAppointment(input: {
       eventKey: `booking.confirmed:${id}:${timestamp}`,
       context: {
         branch: input.branch,
+        practitioner,
         service: input.service,
         slotDate: input.slotDate,
         slotTime: input.slotTime,

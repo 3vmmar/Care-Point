@@ -50,6 +50,7 @@ export type AppointmentNotificationSubject = {
   id: string;
   branch: string;
   service: string;
+  practitioner: string | null;
   slotDate: string;
   slotTime: string;
   patientName: string | null;
@@ -299,7 +300,8 @@ export async function loadNotificationSubject(job: NotificationJob) {
   if (job.subjectType === "appointment") {
     return db
       .prepare(
-        `SELECT id, branch, service, slot_date AS slotDate, slot_time AS slotTime,
+        `SELECT id, branch, service, practitioner,
+          slot_date AS slotDate, slot_time AS slotTime,
           patient_name AS patientName, patient_phone AS patientPhone,
           patient_email AS patientEmail, patient_note AS patientNote,
           language, manage_token AS manageToken

@@ -6,12 +6,14 @@ import {
   BRANCH_IDS,
   CLINIC_CLOSURES,
   PII_RETENTION_DAYS,
+  REPORTING_CATEGORIES,
   SERVICES,
   SERVICE_IDS,
   branchLabel,
   findBranch,
   findService,
   isClosureDate,
+  reportingCategoryForService,
   serviceDuration,
   serviceLabel,
 } from "../lib/clinic.ts";
@@ -87,6 +89,35 @@ test("every consultation declares a usable duration", () => {
   }
   // An unknown id must not produce a zero-length appointment.
   assert.ok(serviceDuration("not-a-service") >= 15);
+});
+
+test("reporting categories are explicit and never guessed from display copy", () => {
+  assert.equal(reportingCategoryForService("dental-check"), "dental");
+  assert.equal(reportingCategoryForService("dental-cosmetic"), "dental");
+  assert.equal(reportingCategoryForService("face"), "face");
+  assert.equal(reportingCategoryForService("nose"), "face");
+  assert.equal(reportingCategoryForService("skin"), "face");
+  assert.equal(reportingCategoryForService("breast"), "breast");
+  assert.equal(reportingCategoryForService("body"), "body");
+  // A broad consultation must stay visible as Other rather than being silently
+  // attributed to whichever category happens to be most common.
+  assert.equal(reportingCategoryForService("aesthetic"), "other");
+  assert.equal(reportingCategoryForService("future-service"), "other");
+  /**
+   * Hair & scalp was withdrawn before launch, and the reporting category went
+   * with it. A booking taken against the old service still has to count toward
+   * the clinic's totals, so those ids report as Other rather than being dropped
+   * — an appointment that silently stops existing is worse than one filed under
+   * a general heading.
+   */
+  assert.equal(reportingCategoryForService("hair"), "other");
+  assert.equal(reportingCategoryForService("hair-transplant"), "other");
+  assert.equal(reportingCategoryForService("scalp"), "other");
+  // Widened to string on purpose: comparing the union directly is a type error
+  // now that "hair" is gone, and an assertion the compiler deletes is not a
+  // guard against anyone adding the category back.
+  const categoryIds: readonly string[] = REPORTING_CATEGORIES.map((category) => category.id);
+  assert.ok(!categoryIds.includes("hair"), "the Hair reporting category should no longer exist");
 });
 
 test("labels fall back to the raw identifier rather than rendering blank", () => {

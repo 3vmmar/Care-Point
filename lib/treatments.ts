@@ -35,6 +35,16 @@ export type Treatment = {
   /** Consultation this page books into, so the CTA lands pre-selected. */
   service: string;
   number: string;
+  /**
+   * Omitted for Dr. Ashraf's own surgical consultations. A named provider keeps
+   * another line of care — currently Dentistry — from being presented as a
+   * personal service of the plastic surgeon in page copy or structured data.
+   */
+  provider?: {
+    kind: "dental";
+    en: string;
+    ar: string;
+  };
   en: TreatmentCopy;
   ar: TreatmentCopy;
 };
@@ -368,6 +378,120 @@ export const TREATMENTS: Treatment[] = [
         {
           q: "هل يمكنني اصطحاب أحد معي للاستشارة؟",
           a: "بالطبع. كثير من المرضى يفضلون ذلك، وغالباً ما يجعل الحوار أفضل.",
+        },
+      ],
+    },
+  },
+  {
+    slug: "dental-care",
+    service: "dental-check",
+    number: "05",
+    provider: {
+      kind: "dental",
+      en: "Care Point dental team",
+      ar: "فريق كير بوينت لطب الأسنان",
+    },
+    en: {
+      title: "Dental care & smile design",
+      metaTitle: "Dental Care & Smile Design in Cairo",
+      metaDescription:
+        "Dental consultations, professional cleaning, whitening, veneers and implant assessment with the Care Point dental team across three Cairo clinics.",
+      feeling: "I want a healthy smile that still feels like mine.",
+      intro:
+        "A durable smile starts with health, function and proportion — not a shade chart. The dental team assesses the teeth, gums, bite and supporting bone together before discussing cleaning, whitening, veneers or implants. The right first appointment is an assessment; any treatment plan follows the findings.",
+      exploreTitle: "What the dental consultation covers",
+      explore: [
+        "Teeth, gums and bite health",
+        "Your goals for colour, shape and proportion",
+        "X-rays or further imaging when clinically indicated",
+        "A staged plan, including alternatives and maintenance",
+      ],
+      recoveryTitle: "How care is usually planned",
+      recovery: [
+        {
+          label: "Assessment",
+          text: "A clinical examination and a clear record of the concern before any procedure is proposed",
+        },
+        {
+          label: "Foundation",
+          text: "Cleaning or gum care first when the supporting tissues need attention",
+        },
+        {
+          label: "Treatment & review",
+          text: "Procedure-specific care and follow-up based on healing, function and the agreed plan",
+        },
+      ],
+      optionsTitle: "Services available to book",
+      options: [
+        "Dental consultation & cleaning",
+        "Veneers & whitening",
+        "Dental implants",
+      ],
+      faqTitle: "Common dental questions",
+      faq: [
+        {
+          q: "Which appointment should I choose first?",
+          a: "Choose Dental consultation & cleaning if you are unsure. It gives the dental team a chance to examine your teeth, gums and bite before recommending a cosmetic or implant pathway.",
+        },
+        {
+          q: "Will veneers look natural?",
+          a: "That depends on proportion, surface texture, colour and how much healthy tooth structure can be preserved. A consultation should explain whether whitening, alignment, bonding or no treatment is a better fit before veneers are considered.",
+        },
+        {
+          q: "Can an implant be completed in one visit?",
+          a: "Implant care is usually staged. Bone and gum health, imaging, healing time and the final restoration all affect the sequence, so an examination is needed before a timeline can be discussed.",
+        },
+      ],
+    },
+    ar: {
+      title: "العناية بالأسنان وتصميم الابتسامة",
+      metaTitle: "العناية بالأسنان وتصميم الابتسامة في القاهرة",
+      metaDescription:
+        "استشارات الأسنان والتنظيف الاحترافي والتبييض والفينير وتقييم زراعة الأسنان مع فريق كير بوينت لطب الأسنان في ثلاثة فروع بالقاهرة.",
+      feeling: "أريد ابتسامة صحية تشبهني وتناسب ملامحي.",
+      intro:
+        "تبدأ الابتسامة التي تدوم بصحة الفم والوظيفة والتناسق، لا بدرجة اللون فقط. يقيّم فريق الأسنان الأسنان واللثة والإطباق والعظم الداعم معاً قبل مناقشة التنظيف أو التبييض أو الفينير أو الزراعة. الخطوة الأولى الصحيحة هي التقييم، وتأتي خطة العلاج بعد نتائج الفحص.",
+      exploreTitle: "ما تشمله استشارة الأسنان",
+      explore: [
+        "صحة الأسنان واللثة والإطباق",
+        "أهدافك للون والشكل والتناسق",
+        "الأشعة أو التصوير الإضافي عند الحاجة الطبية",
+        "خطة مرحلية تشمل البدائل والعناية طويلة المدى",
+      ],
+      recoveryTitle: "كيف تُخطط الرعاية عادة",
+      recovery: [
+        {
+          label: "التقييم",
+          text: "فحص سريري وتوثيق واضح للمشكلة قبل اقتراح أي إجراء",
+        },
+        {
+          label: "الأساس الصحي",
+          text: "البدء بالتنظيف أو علاج اللثة عندما تحتاج الأنسجة الداعمة إلى عناية",
+        },
+        {
+          label: "العلاج والمراجعة",
+          text: "رعاية ومتابعة تناسب الإجراء حسب الالتئام والوظيفة والخطة المتفق عليها",
+        },
+      ],
+      optionsTitle: "خدمات متاحة للحجز",
+      options: [
+        "استشارة وتنظيف الأسنان",
+        "الفينير وتبييض الأسنان",
+        "زراعة الأسنان",
+      ],
+      faqTitle: "أسئلة شائعة عن الأسنان",
+      faq: [
+        {
+          q: "أي موعد أختار أولاً؟",
+          a: "اختر استشارة وتنظيف الأسنان إذا لم تكن متأكداً. يتيح ذلك لفريق الأسنان فحص الأسنان واللثة والإطباق قبل اقتراح مسار تجميلي أو زراعة.",
+        },
+        {
+          q: "هل سيبدو الفينير طبيعياً؟",
+          a: "يعتمد ذلك على التناسق وملمس السطح واللون ومقدار بنية السن السليمة التي يمكن الحفاظ عليها. يجب أن توضّح الاستشارة ما إذا كان التبييض أو التقويم أو الترميم التجميلي أو عدم التدخل أنسب قبل التفكير في الفينير.",
+        },
+        {
+          q: "هل يمكن إكمال زراعة السن في زيارة واحدة؟",
+          a: "تتم رعاية الزراعة على مراحل عادة. تؤثر صحة العظم واللثة والتصوير ووقت الالتئام والتركيبة النهائية في التسلسل، لذلك يلزم الفحص قبل مناقشة المدة المتوقعة.",
         },
       ],
     },

@@ -17,11 +17,12 @@
  *   WHATSAPP_WEBHOOK_URL Clinic-owned WhatsApp Business gateway.
  */
 
-import { CONTACT, DOCTOR, findBranch, serviceLabel } from "./clinic";
-import { formatFullDate, formatSlotTime } from "./dates";
-import type { NotificationChannel, NotificationKind } from "@/lib/notification-policy";
+import { CONTACT, findBranch, serviceLabel } from "./clinic.ts";
+import { appointmentPractitioner } from "./appointment-presentation.ts";
+import { formatFullDate, formatSlotTime } from "./dates.ts";
+import type { NotificationChannel, NotificationKind } from "./notification-policy.ts";
 
-export type { NotificationKind } from "@/lib/notification-policy";
+export type { NotificationKind } from "./notification-policy.ts";
 
 export type NotificationPayload = {
   kind: NotificationKind;
@@ -29,6 +30,7 @@ export type NotificationPayload = {
     id: string;
     branch: string;
     service: string;
+    practitioner?: string | null;
     slotDate: string;
     slotTime: string;
     patientName: string | null;
@@ -68,18 +70,34 @@ function env(name: string): string | undefined {
   return value && value.trim() ? value.trim() : undefined;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /** Human-readable summary reused by every transport. */
 export function describeAppointment(payload: NotificationPayload) {
   const { appointment } = payload;
   const locale = appointment.language === "ar" ? "ar" : "en";
   const branch = findBranch(appointment.branch);
   const intlLocale = locale === "ar" ? "ar-EG" : "en-GB";
+  const practitioner = appointmentPractitioner(
+    appointment.service,
+    appointment.practitioner,
+  );
 
   return {
     locale,
     headline: HEADLINE[payload.kind][locale],
     service: serviceLabel(appointment.service, locale),
-    doctor: locale === "ar" ? DOCTOR.nameAr : DOCTOR.nameEn,
+    // `doctor` is retained for existing webhook and WhatsApp integrations.
+    // Its value now reflects the practitioner actually stored on the visit.
+    doctor: practitioner,
+    practitioner,
     branchName: branch ? (locale === "ar" ? branch.ar : branch.en) : appointment.branch,
     address: branch ? (locale === "ar" ? branch.addressAr : branch.addressEn) : "",
     mapUrl: branch?.mapUrl ?? "",
@@ -107,7 +125,7 @@ function patientEmailBody(payload: NotificationPayload): string {
         <tr><td style="padding:14px 16px;font-size:13px;color:#746f68">${label.where}</td>
             <td style="padding:14px 16px;font-size:14px">${detail.branchName}<br><span style="color:#746f68;font-size:12px">${detail.address}</span></td></tr>
         <tr><td style="padding:14px 16px;font-size:13px;color:#746f68">${detail.service}</td>
-            <td style="padding:14px 16px;font-size:14px">${detail.doctor}</td></tr>
+            <td style="padding:14px 16px;font-size:14px">${escapeHtml(detail.practitioner)}</td></tr>
       </table>
       <p style="margin:24px 0 0;font-size:13px">
         ${detail.mapUrl ? `<a href="${detail.mapUrl}" style="color:#7b263c">${label.directions} →</a><br><br>` : ""}
@@ -128,6 +146,7 @@ function clinicAlertText(payload: NotificationPayload): string {
     `${appointment.patientName ?? "—"} · ${appointment.patientPhone ?? "—"}`,
     appointment.patientEmail ? `Email: ${appointment.patientEmail}` : "",
     `Consultation: ${detail.service}`,
+    payload.kind === "data.request" ? "" : `Practitioner: ${detail.practitioner}`,
     appointment.patientNote ? `Note: ${appointment.patientNote}` : "",
     `Ref: ${appointment.id.slice(0, 8).toUpperCase()}`,
   ]
@@ -136,15 +155,24 @@ function clinicAlertText(payload: NotificationPayload): string {
 }
 
 export class NotificationDeliveryError extends Error {
+  readonly provider: string;
+  readonly code: string;
+  readonly retryable: boolean;
+  readonly statusCode?: number;
+
   constructor(
     message: string,
-    readonly provider: string,
-    readonly code: string,
-    readonly retryable: boolean,
-    readonly statusCode?: number,
+    provider: string,
+    code: string,
+    retryable: boolean,
+    statusCode?: number,
   ) {
     super(message);
     this.name = "NotificationDeliveryError";
+    this.provider = provider;
+    this.code = code;
+    this.retryable = retryable;
+    this.statusCode = statusCode;
   }
 }
 

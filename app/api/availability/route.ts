@@ -163,6 +163,15 @@ export async function GET(request: NextRequest) {
           ? [branch.id]
           : catalogue.branches.map((item) => item.id),
         bookingPaused: pilot.bookingPaused,
+        // Public booking surfaces consume the same active catalogue as the
+        // server. This prevents a service disabled in Clinic OS from lingering
+        // in the patient form, and keeps Dental labels, durations and branches
+        // synchronized without a deployment.
+        catalogue: {
+          revision: catalogue.revision,
+          branches: catalogue.branches,
+          services: catalogue.services,
+        },
         // Public by design; lets the form render a widget only when one is configured.
         turnstileSiteKey: turnstileSiteKey(),
         generatedAt: now.toISOString(),

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import RevealOnScroll from "./RevealOnScroll";
 import { ArrowRight, CalendarDays, Check, MapPin, Navigation, ShieldCheck } from "lucide-react";
 import { BRANCHES, CONTACT, DOCTOR, WHATSAPP_URL } from "@/lib/clinic";
 import { copyFor, LOCALE_PATH, otherLanguage, type Language } from "@/lib/i18n";
@@ -7,10 +8,12 @@ import { treatmentCopy, treatmentPath, TREATMENTS, type Treatment } from "@/lib/
 /**
  * A single treatment page, rendered on the server in one language.
  *
- * Deliberately a server component with no client JavaScript: this is a page
- * whose whole job is to be readable by a crawler and to load instantly on a
- * phone over mobile data. The booking call to action is a link into the main
- * experience rather than an embedded modal.
+ * Deliberately a server component: this page's whole job is to be readable by
+ * a crawler and to load instantly on a phone over mobile data. The one client
+ * island is `RevealOnScroll` — a 1 KB IntersectionObserver for the section
+ * choreography, which hides nothing until it has actually mounted. The booking
+ * call to action is a link into the main experience rather than an embedded
+ * modal.
  */
 export default function TreatmentPage({
   treatment,
@@ -24,9 +27,18 @@ export default function TreatmentPage({
   const rtl = language === "ar";
   const home = LOCALE_PATH[language];
   const alt = otherLanguage(language);
+  const providerName = treatment.provider
+    ? rtl
+      ? treatment.provider.ar
+      : treatment.provider.en
+    : rtl
+      ? DOCTOR.nameAr
+      : DOCTOR.nameEn;
+  const providerCredentials = treatment.provider ? null : DOCTOR.credentials;
 
   return (
     <main className="treatment-page" dir={rtl ? "rtl" : "ltr"}>
+      <RevealOnScroll />
       <header className="treatment-header">
         <Link className="treatment-back" href={home}>
           {rtl ? "→" : "←"} {t.brandName}
@@ -56,11 +68,12 @@ export default function TreatmentPage({
         </div>
         <p className="treatment-credential">
           <ShieldCheck size={16} />
-          {rtl ? DOCTOR.nameAr : DOCTOR.nameEn} · {DOCTOR.credentials}
+          {providerName}
+          {providerCredentials ? ` · ${providerCredentials}` : null}
         </p>
       </article>
 
-      <section className="treatment-section">
+      <section className="treatment-section" data-reveal>
         <h2>{c.exploreTitle}</h2>
         <ul className="treatment-checks">
           {c.explore.map((item) => (
@@ -72,7 +85,7 @@ export default function TreatmentPage({
         </ul>
       </section>
 
-      <section className="treatment-section">
+      <section className="treatment-section" data-reveal>
         <h2>{c.optionsTitle}</h2>
         <div className="treatment-tags">
           {c.options.map((option) => (
@@ -81,7 +94,7 @@ export default function TreatmentPage({
         </div>
       </section>
 
-      <section className="treatment-section">
+      <section className="treatment-section" data-reveal>
         <h2>{c.recoveryTitle}</h2>
         <div className="treatment-phases">
           {c.recovery.map((phase, index) => (
@@ -100,7 +113,7 @@ export default function TreatmentPage({
         </p>
       </section>
 
-      <section className="treatment-section">
+      <section className="treatment-section" data-reveal>
         <h2>{c.faqTitle}</h2>
         <div className="treatment-faq">
           {c.faq.map((item) => (
@@ -112,7 +125,7 @@ export default function TreatmentPage({
         </div>
       </section>
 
-      <section className="treatment-section">
+      <section className="treatment-section" data-reveal>
         <h2>{t.locationsTitle}</h2>
         <div className="treatment-clinics">
           {BRANCHES.map((branch) => (
@@ -133,7 +146,7 @@ export default function TreatmentPage({
         </div>
       </section>
 
-      <section className="treatment-cta">
+      <section className="treatment-cta" data-reveal>
         <h2>{t.finalTitle}</h2>
         <div className="treatment-actions">
           <Link className="button button--burgundy button--large" href={`${home}?book=${treatment.service}#book`}>
@@ -146,7 +159,7 @@ export default function TreatmentPage({
         </div>
       </section>
 
-      <nav className="treatment-more" aria-label={rtl ? "استشارات أخرى" : "Other consultations"}>
+      <nav className="treatment-more" data-reveal aria-label={rtl ? "استشارات أخرى" : "Other consultations"}>
         <span>{rtl ? "استشارات أخرى" : "OTHER CONSULTATIONS"}</span>
         <div>
           {TREATMENTS.filter((item) => item.slug !== treatment.slug).map((item) => (

@@ -8,12 +8,17 @@
  *
  * ## What this model deliberately does not claim
  *
- * The geometry in `TreatmentCanvas` is generated in code: lathed shells, an
+ * The geometry in `TreatmentCanvas` is generated in code: a lofted figure and an
  * arch of parametric teeth. It is a **study model** — accurate enough to point
  * at, and explicitly not a diagnostic or anatomically exact rendering. Nothing
  * in this file should describe it as one. The Egyptian Medical Syndicate
  * governs how medical services may be advertised, and an accuracy claim is a
  * claim the practice makes, not a claim the renderer can support.
+ *
+ * The figure is also faceless, which changes what a marker means on the head.
+ * A region such as "Eyes & eyelids" names the anatomy the consultation covers
+ * and points at where it sits on the cranial form; it does not point at a
+ * rendered eye, because there is deliberately no eye to render.
  *
  * ## Procedures must be bookable
  *
@@ -26,6 +31,30 @@
  */
 
 export type AreaId = "face" | "nose" | "body" | "breast" | "dental";
+
+/**
+ * Stable model-space landmarks shared by the avatar and its annotations.
+ *
+ * A marker is stored relative to one of these landmarks rather than as a page
+ * coordinate or an arbitrary point in the scene. The renderer mounts both the
+ * anatomy and the marker beneath the same model root, so orbiting or reframing
+ * cannot separate a label from the body part it describes.
+ *
+ * The heights are the named levels of the standing figure in
+ * `lib/carelens-geometry.ts`, whose origin sits at its own mid-height. A marker
+ * is therefore an offset from an anatomical level rather than from the floor,
+ * which is what keeps the two files in step.
+ */
+export type AnatomyAnchorId = "head" | "neck" | "chest" | "torso" | "dental";
+
+export const ANATOMY_ANCHORS: Record<AnatomyAnchorId, readonly [number, number, number]> = {
+  head: [0, 2.62, 0],
+  neck: [0, 1.95, 0],
+  chest: [0, 1.4, 0],
+  torso: [0, 0.96, 0],
+  /** The Dental area renders the arch alone, centred on its own origin. */
+  dental: [0, 0, 0],
+};
 
 /**
  * The three depths the model can show.
@@ -66,8 +95,14 @@ export type Region = {
   ar: string;
   /** Shallowest layer at which this region is visible. */
   layer: LayerId;
-  /** Anchor point on the model, in the canvas's own units. */
+  /** Named anatomical landmark this marker is mounted beneath. */
+  anchor: AnatomyAnchorId;
+  /** Position relative to `anchor`, in the avatar's model-space units. */
   at: [number, number, number];
+  /** Render a second, symmetric anchor for paired anatomy. */
+  mirrorX?: boolean;
+  /** Optional closer camera distance for small regions such as eyelids. */
+  cameraDistance?: number;
   overview: string;
   arOverview: string;
   /** Anatomy involved. Plain names, not Latin. */
@@ -92,10 +127,19 @@ export type Area = {
   arFeeling: string;
   description: string;
   arDescription: string;
-  /** Camera framing for this area. */
+  /**
+   * Camera framing for this area.
+   *
+   * `target` is a height on the body's own axis, so `distance` is measured to the
+   * axis and not to the anatomy — surface anatomy sits up to 0.4 nearer the
+   * camera than that. Subtract the depth of what is being framed before reasoning
+   * about how much of the frame it will fill, or every area comes out tighter
+   * than intended. Region framings do not share the problem: those aim at a
+   * marker, which is already on the surface.
+   */
   view: { azimuth: number; elevation: number; distance: number; target: number };
   /** Which model the canvas builds for this area. */
-  model: "bust" | "arch";
+  model: "figure" | "arch";
   /**
    * Area-specific wording for the depth control.
    *
@@ -106,6 +150,16 @@ export type Area = {
   layerHints?: Partial<Record<LayerId, { en: string; ar: string }>>;
   regions: Region[];
 };
+
+/** Resolve a region's landmark-relative position into avatar model space. */
+export function regionWorldPosition(region: Region): [number, number, number] {
+  const origin = ANATOMY_ANCHORS[region.anchor];
+  return [
+    origin[0] + region.at[0],
+    origin[1] + region.at[1],
+    origin[2] + region.at[2],
+  ];
+}
 
 export const AREAS: Area[] = [
   /* ── 01 · Face & neck ─────────────────────────────────────────────────── */
@@ -118,15 +172,17 @@ export const AREAS: Area[] = [
     arFeeling: "أريد مظهراً أكثر حيوية بدون تغيير ملامحي.",
     description: "Skin, volume, and the support underneath decide how rested a face reads.",
     arDescription: "البشرة والحجم والدعامة تحتها هي ما يجعل الوجه يبدو مرتاحاً.",
-    view: { azimuth: -0.36, elevation: 0.06, distance: 6.4, target: 0.5 },
-    model: "bust",
+    view: { azimuth: -0.36, elevation: 0.05, distance: 2.78, target: 2.43 },
+    model: "figure",
     regions: [
       {
         id: "brow",
         en: "Brow & forehead",
         ar: "الجبهة والحاجب",
         layer: "surface",
-        at: [0.0, 1.3, 0.4],
+        anchor: "head",
+        at: [0.0, 0.06, 0.319],
+        cameraDistance: 1.75,
         overview:
           "The brow sets the expression a face wears at rest. As support loosens the outer brow descends first, which reads as tiredness even when nothing else has changed.",
         arOverview:
@@ -142,10 +198,13 @@ export const AREAS: Area[] = [
       },
       {
         id: "eyelid",
-        en: "Eyelids",
+        en: "Eyes & eyelids",
         ar: "الجفون",
         layer: "surface",
-        at: [-0.21, 1.17, 0.4],
+        anchor: "head",
+        at: [-0.105, -0.015, 0.294],
+        mirrorX: true,
+        cameraDistance: 1.65,
         overview:
           "Eyelid skin is the thinnest on the body, so it shows change earliest. Upper lids gain loose skin; lower lids more often change in volume than in skin.",
         arOverview:
@@ -164,7 +223,9 @@ export const AREAS: Area[] = [
         en: "Cheek & midface",
         ar: "الخد ومنتصف الوجه",
         layer: "structure",
-        at: [-0.36, 0.98, 0.3],
+        anchor: "head",
+        at: [-0.165, -0.12, 0.27],
+        cameraDistance: 1.8,
         overview:
           "The midface loses volume before it loses skin. That is why a face can look thinner and older at the same time, and why replacing volume often reads better than tightening.",
         arOverview:
@@ -183,7 +244,10 @@ export const AREAS: Area[] = [
         en: "Jawline",
         ar: "خط الفك",
         layer: "structure",
-        at: [-0.3, 0.74, 0.26],
+        anchor: "head",
+        at: [-0.135, -0.33, 0.238],
+        mirrorX: true,
+        cameraDistance: 1.8,
         overview:
           "A defined jawline depends on three things at once: the bone under it, the fat over it, and how tight the skin sits between them. Only some of that is skin.",
         arOverview:
@@ -198,11 +262,77 @@ export const AREAS: Area[] = [
         arRecovery: "رباط داعم في الأيام الأولى. يستمر تحسّن الوضوح لعدة أشهر.",
       },
       {
+        id: "lips",
+        en: "Lips & mouth",
+        ar: "الشفاه والفم",
+        layer: "surface",
+        anchor: "head",
+        at: [0.0, -0.285, 0.297],
+        cameraDistance: 1.65,
+        overview:
+          "Lip balance comes from shape, support, movement, and the relationship with the teeth. Assessment at rest and while smiling matters more than volume alone.",
+        arOverview:
+          "تناسق الشفاه يعتمد على الشكل والدعامة والحركة وعلاقتها بالأسنان. التقييم في وضع الراحة وأثناء الابتسام أهم من الحجم وحده.",
+        structures: ["Upper and lower lip", "Lip border", "Mouth muscle", "Dental support"],
+        arStructures: ["الشفة العليا والسفلى", "حافة الشفاه", "عضلة الفم", "دعامة الأسنان"],
+        procedures: ["Non-surgical aesthetics", "Face & neck consultation"],
+        arProcedures: ["تجميل بدون جراحة", "استشارة الوجه والرقبة"],
+        discussed: ["Lip proportion", "Movement at rest and smiling", "Dental support before volume"],
+        arDiscussed: ["تناسب الشفاه", "الحركة في الراحة والابتسام", "دعم الأسنان قبل زيادة الحجم"],
+        recovery: "Temporary swelling is expected after injectable treatment. The final plan depends on movement, symmetry, and examination.",
+        arRecovery: "يُتوقع تورم مؤقت بعد الحقن. تعتمد الخطة النهائية على الحركة والتماثل والفحص.",
+      },
+      {
+        id: "chin",
+        en: "Chin",
+        ar: "الذقن",
+        layer: "structure",
+        anchor: "head",
+        at: [0.0, -0.375, 0.269],
+        cameraDistance: 1.7,
+        overview:
+          "Chin projection affects the apparent size of the nose and the definition of the jaw. It is assessed in profile and from the front before any isolated change is considered.",
+        arOverview:
+          "بروز الذقن يؤثر على الحجم الظاهر للأنف وعلى وضوح الفك. يُقيَّم من الجانب والأمام قبل التفكير في أي تغيير منفصل.",
+        structures: ["Chin bone", "Chin muscle", "Soft-tissue pad", "Lower-lip relationship"],
+        arStructures: ["عظم الذقن", "عضلة الذقن", "وسادة الأنسجة الرخوة", "العلاقة بالشفة السفلية"],
+        procedures: ["Face & neck consultation", "Non-surgical aesthetics"],
+        arProcedures: ["استشارة الوجه والرقبة", "تجميل بدون جراحة"],
+        discussed: ["Profile balance", "Bone and soft-tissue contribution", "Jawline continuity"],
+        arDiscussed: ["توازن الملامح الجانبية", "دور العظم والأنسجة الرخوة", "استمرارية خط الفك"],
+        recovery: "Recovery varies by whether the plan involves soft tissue or bone. The consultation separates those routes clearly.",
+        arRecovery: "تختلف فترة التعافي حسب ما إذا كانت الخطة تشمل الأنسجة الرخوة أو العظم. توضح الاستشارة الفرق بين المسارين.",
+      },
+      {
+        id: "ears",
+        en: "Ears",
+        ar: "الأذنان",
+        layer: "surface",
+        anchor: "head",
+        at: [-0.256, -0.12, 0.0],
+        mirrorX: true,
+        cameraDistance: 1.9,
+        overview:
+          "Ear position is read against the brow, nose, jaw, and skull. Both sides are assessed because small differences are normal and affect what a balanced correction means.",
+        arOverview:
+          "يُقاس موضع الأذن بالنسبة للحاجب والأنف والفك والجمجمة. تُقيَّم الجهتان لأن الفروق البسيطة طبيعية وتؤثر على معنى التصحيح المتوازن.",
+        structures: ["Outer ear cartilage", "Ear fold", "Earlobe", "Attachment to the scalp"],
+        arStructures: ["غضروف الأذن الخارجية", "ثنية الأذن", "شحمة الأذن", "اتصالها بفروة الرأس"],
+        procedures: ["Face & neck consultation"],
+        arProcedures: ["استشارة الوجه والرقبة"],
+        discussed: ["Ear position and symmetry", "Cartilage shape", "Scar placement behind the ear"],
+        arDiscussed: ["موضع الأذن وتماثلها", "شكل الغضروف", "موضع الأثر خلف الأذن"],
+        recovery: "A light headband may be used early. Swelling settles before the cartilage reaches its stable shape.",
+        arRecovery: "قد يُستخدم رباط خفيف للرأس مبكراً. يهدأ التورم قبل أن يصل الغضروف إلى شكله المستقر.",
+      },
+      {
         id: "neck",
         en: "Neck",
         ar: "الرقبة",
         layer: "surface",
-        at: [0.0, 0.44, 0.22],
+        anchor: "neck",
+        at: [0.0, 0.0, 0.208],
+        cameraDistance: 2.1,
         overview:
           "The neck is often what makes an otherwise rested face look older. Bands, fullness under the chin, and loose skin are three different problems with three different answers.",
         arOverview:
@@ -229,15 +359,17 @@ export const AREAS: Area[] = [
     arFeeling: "أريد تناسقاً من كل زاوية وتنفساً أفضل.",
     description: "Shape and breathing share the same structure, so they are planned together.",
     arDescription: "الشكل والتنفس يشتركان في نفس التكوين، لذلك يُخطط لهما معاً.",
-    view: { azimuth: 0.66, elevation: 0.02, distance: 5.6, target: 0.62 },
-    model: "bust",
+    view: { azimuth: 0.62, elevation: 0.02, distance: 2.0, target: 2.49 },
+    model: "figure",
     regions: [
       {
         id: "dorsum",
         en: "Bridge",
         ar: "جسر الأنف",
         layer: "surface",
-        at: [0.0, 1.12, 0.44],
+        anchor: "head",
+        at: [0.0, -0.12, 0.333],
+        cameraDistance: 1.6,
         overview:
           "The bridge is bone at the top and cartilage below it. A bump is usually the join between the two, which is why the profile changes shape rather than simply reducing.",
         arOverview:
@@ -256,7 +388,9 @@ export const AREAS: Area[] = [
         en: "Tip",
         ar: "أرنبة الأنف",
         layer: "structure",
-        at: [0.0, 1.0, 0.5],
+        anchor: "head",
+        at: [0.0, -0.19, 0.344],
+        cameraDistance: 1.55,
         overview:
           "The tip is supported by paired cartilages, not bone. It is the hardest part to change predictably, because thick skin hides refinement and thin skin shows everything.",
         arOverview:
@@ -275,7 +409,9 @@ export const AREAS: Area[] = [
         en: "Septum & airway",
         ar: "الحاجز الأنفي والتنفس",
         layer: "skeleton",
-        at: [0.0, 1.06, 0.36],
+        anchor: "head",
+        at: [0.0, -0.22, 0.338],
+        cameraDistance: 1.6,
         overview:
           "The septum is the wall down the middle. When it is bent it narrows one side, and straightening it is a breathing operation that happens to change the outside too.",
         arOverview:
@@ -294,7 +430,10 @@ export const AREAS: Area[] = [
         en: "Nostrils & base",
         ar: "فتحتا الأنف والقاعدة",
         layer: "surface",
-        at: [-0.12, 0.96, 0.44],
+        anchor: "head",
+        at: [-0.048, -0.212, 0.323],
+        mirrorX: true,
+        cameraDistance: 1.55,
         overview:
           "Base width is measured against the eyes, not in isolation. Narrowing it leaves a scar in the crease at the side of the nostril, which is placed to hide but never disappears.",
         arOverview:
@@ -321,15 +460,26 @@ export const AREAS: Area[] = [
     arFeeling: "قوامي لم يعد يعكس إحساسي بنفسي.",
     description: "Proportion, skin quality, and muscle support are assessed as one system.",
     arDescription: "التناسق وجودة الجلد ودعم العضلات تُقيَّم كنظام واحد.",
-    view: { azimuth: -0.18, elevation: -0.1, distance: 7.4, target: 0.05 },
-    model: "bust",
+    /**
+     * The one framing that shows the whole standing figure.
+     *
+     * Every other area opens on the part of the body it discusses, which is
+     * correct for them and would leave a patient never seeing that the model is
+     * a whole person. This area is about proportion — "shoulder width, rib
+     * shape, and pelvis position" — so head-to-toe is the honest framing for it,
+     * and selecting any region inside it then travels in.
+     */
+    view: { azimuth: -0.18, elevation: -0.02, distance: 14.6, target: 0.0 },
+    model: "figure",
     regions: [
       {
         id: "abdomen",
         en: "Abdominal wall",
         ar: "جدار البطن",
         layer: "structure",
-        at: [0.0, -0.34, 0.5],
+        anchor: "torso",
+        at: [0.0, -0.06, 0.283],
+        cameraDistance: 2.1,
         overview:
           "Three separate things make an abdomen look full: fat above the muscle, fat under it, and muscle that has stretched apart. Only the first responds to weight loss.",
         arOverview:
@@ -348,7 +498,10 @@ export const AREAS: Area[] = [
         en: "Waist & flanks",
         ar: "الخصر والجانبان",
         layer: "surface",
-        at: [0.52, -0.3, 0.3],
+        anchor: "torso",
+        at: [0.38, 0.04, 0.143],
+        mirrorX: true,
+        cameraDistance: 2.3,
         overview:
           "The waist is read as a ratio, not a measurement. Removing fat from one place changes how every neighbouring area looks, which is why contouring is planned across the whole trunk.",
         arOverview:
@@ -367,7 +520,9 @@ export const AREAS: Area[] = [
         en: "Frame & posture",
         ar: "الهيكل والقوام",
         layer: "skeleton",
-        at: [0.0, -0.05, 0.24],
+        anchor: "chest",
+        at: [0.0, 0.18, 0.333],
+        cameraDistance: 3.4,
         overview:
           "Shoulder width, rib shape, and pelvis position are fixed. They set what proportion is achievable, and an honest plan starts by saying which parts of the frame will not change.",
         arOverview:
@@ -386,7 +541,9 @@ export const AREAS: Area[] = [
         en: "After weight loss",
         ar: "بعد إنقاص الوزن",
         layer: "surface",
-        at: [-0.5, -0.2, 0.36],
+        anchor: "torso",
+        at: [-0.3, 0.02, 0.215],
+        cameraDistance: 2.3,
         overview:
           "Skin that has been stretched for years does not fully retract. After major weight loss the question stops being fat and becomes where to place the scars that remove skin.",
         arOverview:
@@ -413,15 +570,18 @@ export const AREAS: Area[] = [
     arFeeling: "أبحث عن التناسق والراحة والثقة.",
     description: "A private conversation about size, position, symmetry, scars, and time.",
     arDescription: "حوار بخصوصية حول الحجم والموضع والتماثل والأثر والزمن.",
-    view: { azimuth: -0.5, elevation: -0.04, distance: 6.8, target: 0.24 },
-    model: "bust",
+    view: { azimuth: -0.3, elevation: -0.04, distance: 2.1, target: 1.42 },
+    model: "figure",
     regions: [
       {
         id: "position",
         en: "Position & symmetry",
         ar: "الموضع والتماثل",
         layer: "surface",
-        at: [-0.34, -0.14, 0.42],
+        anchor: "chest",
+        at: [-0.235, 0.02, 0.411],
+        mirrorX: true,
+        cameraDistance: 1.75,
         overview:
           "Almost nobody is symmetrical, and the difference is usually known before the consultation. Naming it early makes the plan honest, because surgery reduces a difference rather than erasing it.",
         arOverview:
@@ -440,7 +600,10 @@ export const AREAS: Area[] = [
         en: "Volume & proportion",
         ar: "الحجم والتناسق",
         layer: "structure",
-        at: [-0.3, -0.28, 0.44],
+        anchor: "chest",
+        at: [-0.235, -0.045, 0.414],
+        mirrorX: true,
+        cameraDistance: 1.7,
         overview:
           "Volume is chosen against your frame — chest width, shoulder line, and height — not from a number. Two people who ask for the same size rarely suit the same result.",
         arOverview:
@@ -459,7 +622,9 @@ export const AREAS: Area[] = [
         en: "Chest support",
         ar: "دعامة الصدر",
         layer: "skeleton",
-        at: [0.0, -0.26, 0.34],
+        anchor: "chest",
+        at: [0.0, 0.06, 0.344],
+        cameraDistance: 2.0,
         overview:
           "The chest muscle and rib cage underneath decide what sits where. When an implant is placed under the muscle it is better covered, but it moves when the muscle does.",
         arOverview:
@@ -478,7 +643,10 @@ export const AREAS: Area[] = [
         en: "Scars",
         ar: "الأثر الجراحي",
         layer: "surface",
-        at: [-0.2, -0.4, 0.4],
+        anchor: "chest",
+        at: [-0.235, -0.132, 0.377],
+        mirrorX: true,
+        cameraDistance: 1.7,
         overview:
           "Every option here trades scar length against how much shape can change. That trade is the decision, and it is better made by you than assumed by a surgeon.",
         arOverview:
@@ -505,7 +673,7 @@ export const AREAS: Area[] = [
     arFeeling: "أريد ابتسامة تشبهني، لكن أفضل.",
     description: "Teeth, gums, and bone are one structure. A smile is planned across all three.",
     arDescription: "الأسنان واللثة والعظم تكوين واحد. الابتسامة يُخطط لها عبر الثلاثة معاً.",
-    view: { azimuth: 0.28, elevation: 0.19, distance: 6.9, target: 0.0 },
+    view: { azimuth: 0.28, elevation: 0.19, distance: 5.5, target: 0.0 },
     model: "arch",
     layerHints: {
       surface: {
@@ -523,6 +691,7 @@ export const AREAS: Area[] = [
         en: "Smile design",
         ar: "تصميم الابتسامة",
         layer: "surface",
+        anchor: "dental",
         at: [0.0, 0.04, 0.95],
         overview:
           "A smile is judged by proportion, not by whiteness. The width of the front teeth against each other, and the line they follow against the lower lip, do most of the work.",
@@ -542,6 +711,7 @@ export const AREAS: Area[] = [
         en: "Tooth crown",
         ar: "تاج السن",
         layer: "surface",
+        anchor: "dental",
         at: [-0.29, 0.075, 0.86],
         overview:
           "The crown is the part you see: hard enamel over softer dentine. Veneers cover the front of it; a crown replaces the whole visible surface when too little tooth is left.",
@@ -561,6 +731,7 @@ export const AREAS: Area[] = [
         en: "Root & nerve",
         ar: "الجذر والعصب",
         layer: "structure",
+        anchor: "dental",
         at: [0.29, -0.22, 0.79],
         overview:
           "Below the gum, each tooth is anchored by one or more roots with a living nerve inside. Pain that wakes you at night usually means that nerve, not the surface.",
@@ -580,6 +751,7 @@ export const AREAS: Area[] = [
         en: "Gums",
         ar: "اللثة",
         layer: "structure",
+        anchor: "dental",
         at: [-0.20, 0.21, 0.89],
         overview:
           "Gum health decides how long everything else lasts. It also frames the smile: a tooth can be the right shape and still look wrong if the gum line above it is uneven.",
@@ -599,6 +771,7 @@ export const AREAS: Area[] = [
         en: "Implants",
         ar: "الزراعة",
         layer: "skeleton",
+        anchor: "dental",
         at: [0.55, -0.26, 0.55],
         overview:
           "An implant replaces the root, not the tooth. A post is placed in the jaw bone, left to join with it over months, and only then does the visible tooth go on top.",
@@ -618,6 +791,7 @@ export const AREAS: Area[] = [
         en: "Jaw & bite",
         ar: "الفك والإطباق",
         layer: "skeleton",
+        anchor: "dental",
         at: [0.0, -0.26, 0.82],
         overview:
           "The upper and lower jaws have to meet evenly, or one tooth takes the load meant for several. A bite that is off will break cosmetic work no matter how well it is made.",

@@ -8,7 +8,8 @@
 
 // Explicit extensions so the Node test runner's type stripping, which uses real
 // ESM resolution, can load this module directly.
-import { CONTACT, DOCTOR, findBranch, serviceLabel } from "./clinic.ts";
+import { CONTACT, findBranch, serviceLabel } from "./clinic.ts";
+import { appointmentPractitioner } from "./appointment-presentation.ts";
 import { addMinutesToSlot, clinicInstant, type DateKey } from "./dates.ts";
 
 export type CalendarEvent = {
@@ -18,6 +19,7 @@ export type CalendarEvent = {
   slotDate: DateKey;
   slotTime: string;
   durationMinutes: number;
+  practitioner?: string | null;
   language?: string;
   manageUrl?: string;
 };
@@ -61,7 +63,7 @@ export function buildAppointmentIcs(event: CalendarEvent): string {
     addMinutesToSlot(event.slotTime, event.durationMinutes),
   );
 
-  const doctorName = locale === "ar" ? DOCTOR.nameAr : DOCTOR.nameEn;
+  const practitioner = appointmentPractitioner(event.service, event.practitioner);
   const branchName = branch ? (locale === "ar" ? branch.ar : branch.en) : event.branch;
   const address = branch
     ? locale === "ar"
@@ -70,7 +72,7 @@ export function buildAppointmentIcs(event: CalendarEvent): string {
     : branchName;
 
   const description = [
-    `${serviceLabel(event.service, locale)} — ${doctorName}`,
+    `${serviceLabel(event.service, locale)} — ${practitioner}`,
     branch ? `${locale === "ar" ? "الاتجاهات" : "Directions"}: ${branch.mapUrl}` : "",
     `${locale === "ar" ? "العيادة" : "Clinic"}: ${CONTACT.phoneDisplay}`,
     event.manageUrl
@@ -91,7 +93,7 @@ export function buildAppointmentIcs(event: CalendarEvent): string {
     `DTSTAMP:${icsStamp(new Date())}`,
     `DTSTART:${icsStamp(start)}`,
     `DTEND:${icsStamp(end)}`,
-    `SUMMARY:${escapeText(`${serviceLabel(event.service, locale)} · ${doctorName}`)}`,
+    `SUMMARY:${escapeText(`${serviceLabel(event.service, locale)} · ${practitioner}`)}`,
     `LOCATION:${escapeText(`${branchName} — ${address}`)}`,
     `DESCRIPTION:${escapeText(description)}`,
     "STATUS:CONFIRMED",

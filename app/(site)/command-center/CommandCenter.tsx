@@ -33,7 +33,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import "./command-center.css";
-import { BRANCHES, CLINIC_TIMEZONE, SERVICES, branchLabel, findBranch, serviceLabel } from "@/lib/clinic";
+import { BRANCHES, CLINIC_TIMEZONE, branchLabel, findBranch, serviceLabel } from "@/lib/clinic";
 import { addDays, formatShortDate, formatSlotTime } from "@/lib/dates";
 import AddAppointment from "./AddAppointment";
 import DataRequests from "./DataRequests";
@@ -107,6 +107,12 @@ const ClinicHours = dynamic(() => import("./ClinicHours"), {
 const PilotControl = dynamic(() => import("./PilotControl"), {
   ssr: false,
   loading: () => <p className="pilot-loading">Loading Pilot Control…</p>,
+});
+
+// Historical cohorts perform deliberately heavier aggregate reads than the day
+// view. Load both the interface and its API request only when Insights is opened.
+const Insights = dynamic(() => import("./Insights"), {
+  loading: () => <p className="pilot-loading">Preparing clinic insights…</p>,
 });
 
 function greeting(hour: number) {
@@ -387,6 +393,7 @@ export default function CommandCenter({
         item.patientName,
         item.patientPhone,
         item.patientEmail,
+        item.practitioner,
         serviceLabel(item.service),
         branchLabel(item.branch),
         item.slotDate,
@@ -886,9 +893,8 @@ export default function CommandCenter({
 
         {view === "Insights" && (
           <Insights
-            summary={summary}
-            clinicDate={clinicDate}
-            cancellationReasons={cancellationReasons}
+            branchFilter={branchFilter}
+            catalogue={catalogue}
           />
         )}
 
@@ -905,6 +911,7 @@ export default function CommandCenter({
 
       {addOpen && (
         <AddAppointment
+          catalogue={catalogue}
           onClose={() => setAddOpen(false)}
           onCreated={() => {
             setAddOpen(false);
@@ -939,7 +946,9 @@ function FocusCard({
           <strong className="focus-time">{formatSlotTime(appointment.slotTime)}</strong>
           <h3>{appointment.patientName ?? "Unnamed"}</h3>
           <p>
-            {serviceLabel(appointment.service)} · {branchLabel(appointment.branch)}
+            {serviceLabel(appointment.service)}
+            {appointment.practitioner ? ` · ${appointment.practitioner}` : ""}
+            {` · ${branchLabel(appointment.branch)}`}
           </p>
           <div className="focus-actions">
             {appointment.patientPhone && (
@@ -1186,6 +1195,7 @@ function AppointmentRow({
         <div>
           <strong>{serviceLabel(appointment.service)}</strong>
           <small>
+            {appointment.practitioner ? `${appointment.practitioner} · ` : ""}
             {appointment.language === "ar" ? "Arabic" : "English"}
             {appointment.source !== "website" && ` · ${appointment.source.replace("_", " ")}`}
           </small>
@@ -1319,194 +1329,4 @@ function addMinutes(time: string, minutes: number) {
   const [hour, minute] = time.split(":").map(Number);
   const total = (hour || 0) * 60 + (minute || 0) + minutes;
   return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-}
-
-/* -------------------------------------------------------------------------- */
-
-function Insights({
-  summary,
-  clinicDate,
-  cancellationReasons,
-}: {
-  summary: Summary | null;
-  clinicDate: string;
-  cancellationReasons: Array<{ code: string; labelEn: string }>;
-}) {
-  if (!summary) {
-    return (
-      <div className="empty-state">
-        <p>Loading insights…</p>
-      </div>
-    );
-  }
-
-  const peakDay = Math.max(1, ...summary.byDay.map((day) => day.total));
-  const serviceTotal = Math.max(
-    1,
-    summary.byService.reduce((sum, row) => sum + row.total, 0),
-  );
-
-  /**
-   * Why the last thirty days of cancellations happened.
-   *
-   * Codes are turned into words here rather than stored as words, so renaming a
-   * reason does not orphan the history behind it. A code the clinic has since
-   * retired still shows as itself rather than vanishing from the total.
-   */
-  const reasonLabels = new Map(cancellationReasons.map((item) => [item.code, item.labelEn]));
-  const cancelledTotal = summary.cancellationReasons.reduce((sum, row) => sum + row.total, 0);
-  const unattributed = summary.cancellationReasons
-    .filter((row) => !row.reason)
-    .reduce((sum, row) => sum + row.total, 0);
-  const cancellationBreakdown = summary.cancellationReasons
-    .filter((row) => row.reason)
-    .map((row) => ({
-      key: row.reason as string,
-      label: reasonLabels.get(row.reason as string) ?? (row.reason as string),
-      total: row.total,
-    }));
-
-  // A fortnight of clinic load, filled in so quiet days still occupy their slot
-  // rather than collapsing the chart into a misleadingly busy line.
-  const fortnight = Array.from({ length: 14 }, (_, index) => {
-    const date = clinicDate ? addDays(clinicDate, index) : "";
-    return {
-      key: date || `pending-${index}`,
-      date,
-      total: summary.byDay.find((day) => day.date === date)?.total ?? 0,
-    };
-  });
-
-  return (
-    <section className="insight-grid">
-      <article className="insight-panel insight-panel--wide">
-        <span>CLINIC LOAD</span>
-        <h2>Next 14 days</h2>
-        <div className="load-chart" role="img" aria-label="Appointments per day for the next fortnight">
-          {fortnight.map((day) => (
-            <div key={day.key} className="load-column">
-              <i style={{ height: `${(day.total / peakDay) * 100}%` }} data-empty={day.total === 0} />
-              <strong>{day.total || ""}</strong>
-              <small>{day.date ? formatShortDate(day.date).split(" ")[0] : ""}</small>
-            </div>
-          ))}
-        </div>
-      </article>
-
-      <article className="insight-panel">
-        <span>DEMAND</span>
-        <h2>By consultation</h2>
-        {summary.byService.length === 0 ? (
-          <p className="insight-empty">No completed or upcoming consultations in the last 30 days yet.</p>
-        ) : (
-          <div className="insight-bars">
-            {summary.byService.map((row) => (
-              <div key={row.service}>
-                <span>{serviceLabel(row.service)}</span>
-                <strong>{row.total}</strong>
-                <i>
-                  <b style={{ width: `${(row.total / serviceTotal) * 100}%` }} />
-                </i>
-              </div>
-            ))}
-          </div>
-        )}
-      </article>
-
-      <article className="insight-panel">
-        <span>ATTRITION</span>
-        <h2>Why people cancelled</h2>
-        {cancelledTotal === 0 ? (
-          <p className="insight-empty">
-            No cancellations in the last 30 days.
-          </p>
-        ) : (
-          <div className="insight-bars">
-            {cancellationBreakdown.map((row) => (
-              <div key={row.key}>
-                <span>{row.label}</span>
-                <strong>{row.total}</strong>
-                <i>
-                  <b style={{ width: `${(row.total / cancelledTotal) * 100}%` }} />
-                </i>
-              </div>
-            ))}
-          </div>
-        )}
-        <p className="insight-empty" style={{ marginTop: 10 }}>
-          {unattributed > 0
-            ? `${unattributed} of ${cancelledTotal} gave no reason — including any cancelled before the clinic started asking.`
-            : "Every cancellation in this period carries a reason."}
-        </p>
-      </article>
-
-      <article className="insight-panel">
-        <span>LOCATIONS</span>
-        <h2>Upcoming by clinic</h2>
-        <div className="branch-list">
-          {BRANCHES.map((branch) => {
-            const total = summary.byBranch.find((row) => row.branch === branch.id)?.total ?? 0;
-            return (
-              <div key={branch.id}>
-                <div>
-                  <strong>{branch.en}</strong>
-                  <small>{branch.addressEn}</small>
-                </div>
-                <span className="branch-count">{total}</span>
-                <a href={branch.mapUrl} target="_blank" rel="noopener noreferrer" title="Open in Google Maps">
-                  <Navigation size={14} />
-                </a>
-              </div>
-            );
-          })}
-        </div>
-      </article>
-
-      <article className="insight-panel">
-        <span>LAST 30 DAYS</span>
-        <h2>Attendance</h2>
-        <div className="attendance-grid">
-          <div>
-            <strong>{summary.completedLast30Days}</strong>
-            <small>Completed</small>
-          </div>
-          <div>
-            <strong>{summary.noShowLast30Days}</strong>
-            <small>No-shows</small>
-          </div>
-          <div>
-            <strong>{summary.cancelledLast30Days}</strong>
-            <small>Cancelled</small>
-          </div>
-          <div>
-            <strong>
-              {summary.noShowRate}
-              <small>%</small>
-            </strong>
-            <small>No-show rate</small>
-          </div>
-        </div>
-        <p className="insight-footnote">
-          Figures come from appointment outcomes recorded on this dashboard. Marking
-          visits complete or missed is what keeps them accurate.
-        </p>
-      </article>
-
-      <article className="insight-panel insight-panel--wide">
-        <span>CONSULTATION MIX</span>
-        <h2>What the clinic is being asked for</h2>
-        <div className="mix-row">
-          {SERVICES.map((service) => {
-            const total = summary.byService.find((row) => row.service === service.id)?.total ?? 0;
-            return (
-              <div key={service.id}>
-                <strong>{total}</strong>
-                <small>{service.en}</small>
-              </div>
-            );
-          })}
-        </div>
-      </article>
-    </section>
-  );
 }

@@ -16,7 +16,7 @@ const en = {
   brandRole: "PLASTIC SURGERY",
   homeLabel: "Dr. Ashraf Metwally home",
 
-  nav: ["Expertise", "CareLens", "Journey", "Locations"],
+  nav: ["Expertise", "CareLens", "Dental", "Journey", "Locations"],
   book: "Reserve a visit",
   languageSwitch: "Switch to Arabic",
   languageShort: "عربي",
@@ -78,6 +78,7 @@ const en = {
     "NOOR helps you explore options, understand preparation and recovery, and reach the right consultation — in Arabic or English.",
   noorPrompts: [
     "What is rhinoplasty recovery like?",
+    "Which dental visit should I choose?",
     "Show me the next appointment",
     "How should I prepare?",
   ],
@@ -135,6 +136,8 @@ const en = {
     booking:
       "I can show live availability in Maadi, Mohandessin, or Fifth Settlement now. Select “View times” and I’ll take you there.",
     nose: "In a rhinoplasty consultation, Dr. Ashraf considers facial balance, breathing, skin thickness, and expectations together. Early swelling and bruising commonly ease over the first weeks, while refinement continues longer. Your exact plan requires an in-person assessment.",
+    dental:
+      "For a new concern or if you are unsure where to begin, choose Dental consultation & cleaning. The Care Point dental team can assess your teeth, gums, bite and supporting bone first, then explain whether cleaning, whitening, veneers, implant assessment or another route is appropriate. This guidance is educational; only an examination can determine a plan.",
     recovery:
       "Recovery depends on the procedure, your health, and your daily routine. Before scheduling, we’ll clarify time away from work, wound care, follow-up, movement, and when to contact the clinic.",
     cost: "Cost is confirmed after assessment because it depends on the plan, facility, anaesthesia, and follow-up. I can reserve a consultation so you receive a clear, itemised proposal.",
@@ -191,7 +194,7 @@ const ar: typeof en = {
   brandRole: "جراحات التجميل",
   homeLabel: "الصفحة الرئيسية د. أشرف متولي",
 
-  nav: ["الخبرات", "كير لِنز", "رحلتك", "الفروع"],
+  nav: ["الخبرات", "كير لِنز", "الأسنان", "رحلتك", "الفروع"],
   book: "احجز زيارتك",
   languageSwitch: "التبديل إلى الإنجليزية",
   languageShort: "EN",
@@ -249,7 +252,7 @@ const ar: typeof en = {
   noorTitle: "اسأل، افهم، ثم قرر.",
   noorBody:
     "نور تساعدك على استكشاف الخيارات، فهم الاستعداد والتعافي، والوصول للاستشارة المناسبة — بالعربية أو الإنجليزية.",
-  noorPrompts: ["ماذا أتوقع بعد تجميل الأنف؟", "ما أقرب موعد؟", "كيف أستعد للاستشارة؟"],
+  noorPrompts: ["ماذا أتوقع بعد تجميل الأنف؟", "أي موعد أسنان أختار؟", "ما أقرب موعد؟", "كيف أستعد للاستشارة؟"],
   aiDisclaimer: "معلومات تثقيفية فقط — وليست تشخيصاً طبياً.",
 
   journeyKicker: "رحلة رعايتك",
@@ -302,6 +305,8 @@ const ar: typeof en = {
     booking:
       "أستطيع عرض المواعيد المتاحة الآن في المعادي أو المهندسين أو التجمع. اضغط «عرض المواعيد» وسأكمل معك.",
     nose: "في استشارة تجميل الأنف، يقيّم د. أشرف التناسق والتنفس وسُمك الجلد والتوقعات معاً. يختلف التعافي من شخص لآخر، لكن التورم والكدمات الأولية غالباً تتحسن تدريجياً خلال الأسابيع الأولى. القرار النهائي يحتاج كشفاً طبياً.",
+    dental:
+      "إذا كانت المشكلة جديدة أو لم تكن متأكداً من نقطة البداية، فاختر استشارة وتنظيف الأسنان. يستطيع فريق كير بوينت لطب الأسنان تقييم الأسنان واللثة والإطباق والعظم الداعم أولاً، ثم شرح ما إذا كان التنظيف أو التبييض أو الفينير أو تقييم الزراعة أو مسار آخر مناسباً. هذه معلومات تثقيفية، ولا تتحدد الخطة إلا بعد الفحص.",
     recovery:
       "مدة التعافي تعتمد على الإجراء وصحتك وطبيعة عملك. سنناقش العودة للنشاط، العناية بالجرح، المتابعة والعلامات التي تستدعي التواصل قبل تحديد الموعد.",
     cost: "التكلفة تتحدد بعد التقييم لأنها تعتمد على الخطة، المستشفى، التخدير والمتابعة. يمكنني حجز استشارة تحصل بعدها على عرض واضح ومفصل.",

@@ -81,7 +81,9 @@ export default function PatientHistory({ appointmentId }: { appointmentId: strin
                 {formatShortDate(item.slotDate)} · {formatSlotTime(item.slotTime)}
               </span>
               <span className="history-what">
-                {serviceLabel(item.service)} · {branchLabel(item.branch)}
+                {serviceLabel(item.service)}
+                {item.practitioner ? ` · ${item.practitioner}` : ""}
+                {` · ${branchLabel(item.branch)}`}
               </span>
               <span className={`status-pill status-pill--${meta?.tone ?? "confirmed"}`}>
                 {meta?.label ?? item.status}

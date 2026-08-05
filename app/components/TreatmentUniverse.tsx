@@ -5,19 +5,28 @@ import {
   ArrowRight,
   CalendarDays,
   Check,
-  Layers,
+  Info,
   Rotate3D,
-  ScanLine,
   ShieldCheck,
   Sparkles,
   X,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import Modal from "./Modal";
+import AnatomySystemToolbar from "./carelens/AnatomySystemToolbar";
+import LayerSelectorDock from "./carelens/LayerSelectorDock";
+import ModelLoadingFallback from "./carelens/ModelLoadingFallback";
 import {
   AREAS,
-  LAYERS,
   TOOTH_REGION,
   findArea,
   layerHint,
@@ -26,13 +35,40 @@ import {
   type AreaId,
   type LayerId,
 } from "@/lib/anatomy";
+import { SERVICES } from "@/lib/clinic";
 
 type Language = "en" | "ar";
 
+const MOBILE_CARELENS_QUERY = "(max-width: 768px)";
+const FOCUSABLE = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(",");
+
+const TreatmentDirectionContext = createContext(false);
+
+function TreatmentCanvasLoadingFallback() {
+  return <ModelLoadingFallback rtl={useContext(TreatmentDirectionContext)} />;
+}
+
 const TreatmentCanvas = dynamic(() => import("./TreatmentCanvas"), {
   ssr: false,
-  loading: () => <div className="universe-canvas-placeholder" aria-hidden />,
+  loading: TreatmentCanvasLoadingFallback,
 });
+
+function subscribeToMobileCareLens(callback: () => void) {
+  const media = window.matchMedia(MOBILE_CARELENS_QUERY);
+  media.addEventListener("change", callback);
+  return () => media.removeEventListener("change", callback);
+}
+
+function mobileCareLensSnapshot() {
+  return window.matchMedia(MOBILE_CARELENS_QUERY).matches;
+}
 
 /**
  * The text controls arrive before the WebGL engine. This second viewport gate
@@ -60,9 +96,11 @@ function LazyTreatmentCanvas(props: React.ComponentProps<typeof TreatmentCanvas>
   }, [ready]);
 
   return (
-    <div ref={anchor} className="universe-canvas-mount">
-      {ready ? <TreatmentCanvas {...props} /> : <div className="universe-canvas-placeholder" aria-hidden />}
-    </div>
+    <TreatmentDirectionContext.Provider value={props.rtl}>
+      <div ref={anchor} className="universe-canvas-mount">
+        {ready ? <TreatmentCanvas {...props} /> : <ModelLoadingFallback rtl={props.rtl} />}
+      </div>
+    </TreatmentDirectionContext.Provider>
   );
 }
 
@@ -72,7 +110,7 @@ export default function TreatmentUniverse({
   onAsk,
 }: {
   language: Language;
-  onBook: () => void;
+  onBook: (serviceId?: string) => void;
   onAsk: () => void;
 }) {
   const rtl = language === "ar";
@@ -80,7 +118,20 @@ export default function TreatmentUniverse({
   const [layer, setLayer] = useState<LayerId>("surface");
   const [regionId, setRegionId] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [mobileInfoOpen, setMobileInfoOpen] = useState(false);
   const [hasOrbited, setHasOrbited] = useState(false);
+  const infoPanelRef = useRef<HTMLDivElement>(null);
+  const infoTriggerRef = useRef<HTMLButtonElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const isMobileViewport = useSyncExternalStore(
+    subscribeToMobileCareLens,
+    mobileCareLensSnapshot,
+    () => false,
+  );
+  const mobileSheetVisible = isMobileViewport && mobileInfoOpen;
+  // The consultation map is its own modal. Suspending this trap while it is
+  // open prevents Tab and Escape from being handled by two dialogs at once.
+  const mobileSheetActive = mobileSheetVisible && !detailOpen;
 
   const area = findArea(areaId);
   const available = useMemo(() => layersFor(area), [area]);
@@ -91,6 +142,9 @@ export default function TreatmentUniverse({
   // Cutting to a deeper layer must never leave the panel describing something
   // the viewer can no longer see.
   const region = visible.find((candidate) => candidate.id === regionId) ?? visible[0] ?? null;
+  const selectedServiceId = region
+    ? SERVICES.find((service) => region.procedures.includes(service.en))?.id
+    : undefined;
 
   const selectArea = (next: AreaId) => {
     setAreaId(next);
@@ -107,31 +161,106 @@ export default function TreatmentUniverse({
     if (deeper) setRegionId(deeper.id);
   };
 
+  const openMobileInfo = () => {
+    if (!isMobileViewport) return;
+    const focused = document.activeElement;
+    returnFocusRef.current = focused instanceof HTMLElement && focused !== document.body
+      ? focused
+      : infoTriggerRef.current;
+    setMobileInfoOpen(true);
+  };
+
+  useEffect(() => {
+    if (!mobileSheetActive) return;
+    const panel = infoPanelRef.current;
+    const returnTarget = returnFocusRef.current ?? infoTriggerRef.current;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const focusables = () =>
+      Array.from(panel?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter(
+        (element) => element.tabIndex >= 0 && element.offsetParent !== null,
+      );
+
+    // The sheet changes from `visibility: hidden` in the same commit. Waiting
+    // one frame lets that style settle; focusing while it is still hidden is
+    // ignored by browsers and leaves focus on the newly inert canvas.
+    const focusFrame = window.requestAnimationFrame(() => {
+      (focusables()[0] ?? panel)?.focus({ preventScroll: true });
+    });
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMobileInfoOpen(false);
+        return;
+      }
+      if (event.key !== "Tab" || !panel) return;
+
+      const items = focusables();
+      if (items.length === 0) {
+        event.preventDefault();
+        panel.focus({ preventScroll: true });
+        return;
+      }
+
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+
+      if (event.shiftKey && (active === first || !panel.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !panel.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", onKeyDown, true);
+      document.body.style.overflow = previousOverflow;
+      if (returnTarget?.isConnected) returnTarget.focus({ preventScroll: true });
+    };
+  }, [mobileSheetActive]);
+
   return (
     <>
-      <div className="treatment-universe">
-        <div className="universe-canvas">
+      <div className={`treatment-universe${mobileSheetVisible ? " mobile-info-open" : ""}`}>
+        <div
+          className="universe-canvas"
+          aria-hidden={mobileSheetVisible || undefined}
+          inert={mobileSheetVisible || undefined}
+        >
           <LazyTreatmentCanvas
             area={areaId}
             layer={layer}
             framing={area.view}
             regions={visible}
             activeRegion={region?.id ?? null}
+            focusRegion={regionId ? region : null}
             rtl={rtl}
-            onSelect={setRegionId}
+            onSelect={(id) => {
+              setRegionId(id);
+              openMobileInfo();
+            }}
             /* Clicking a tooth opens whatever that tooth means at this
                depth: its crown, its root, or the bone it is anchored in. */
-            onTooth={() => setRegionId(TOOTH_REGION[layer])}
+            onTooth={() => {
+              setRegionId(TOOTH_REGION[layer]);
+              openMobileInfo();
+            }}
             onEngage={() => setHasOrbited(true)}
           />
-          <div className="universe-scan-line" aria-hidden />
-          <div className="universe-corner universe-corner--one" aria-hidden />
-          <div className="universe-corner universe-corner--two" aria-hidden />
+          <div className="universe-rings" aria-hidden><i /><i /><i /></div>
 
-          <div className="universe-canvas-label">
-            <ScanLine size={15} />
-            <span>{rtl ? "نموذج توضيحي للاستكشاف" : "ILLUSTRATIVE STUDY MODEL"}</span>
-          </div>
+          <AnatomySystemToolbar
+            activeArea={areaId}
+            rtl={rtl}
+            onSelect={selectArea}
+          />
 
           {/* The hint retires once it has been obeyed. A prompt that keeps
               asking for something already done reads as an animation, not an
@@ -143,29 +272,65 @@ export default function TreatmentUniverse({
             </div>
           )}
 
-          <div className="universe-depth" role="group" aria-label={rtl ? "عمق العرض" : "View depth"}>
-            <span className="universe-depth-tag">
-              <Layers size={13} />
-              {rtl ? "العمق" : "DEPTH"}
+          <button
+            ref={infoTriggerRef}
+            type="button"
+            className="universe-info-trigger"
+            aria-expanded={mobileSheetVisible}
+            aria-controls="carelens-information"
+            onClick={openMobileInfo}
+          >
+            <Info size={16} />
+            <span>{region ? (rtl ? region.ar : region.en) : (rtl ? area.ar : area.en)}</span>
+          </button>
+
+          <LayerSelectorDock
+            available={available}
+            activeLayer={layer}
+            rtl={rtl}
+            onSelect={selectLayer}
+          />
+
+          <div className="universe-safety-note" role="note">
+            <ShieldCheck size={14} />
+            <span>
+              {rtl
+                ? "للتثقيف ودعم الاستشارة فقط — ليس تشخيصاً طبياً ولا ضماناً للنتيجة النهائية. تعتمد النتائج الفعلية على المريض والإجراء والتعافي وتقييم الطبيب."
+                : "For education and consultation support only — not a medical diagnosis or a guaranteed final result. Actual results depend on the patient, procedure, healing process, and doctor’s assessment."}
             </span>
-            {available.map((id) => {
-              const entry = LAYERS.find((candidate) => candidate.id === id)!;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  className={layer === id ? "active" : ""}
-                  aria-pressed={layer === id}
-                  onClick={() => selectLayer(id)}
-                >
-                  {rtl ? entry.ar : entry.en}
-                </button>
-              );
-            })}
           </div>
         </div>
 
-        <div className="universe-interface">
+        <button
+          type="button"
+          className="universe-sheet-backdrop"
+          tabIndex={-1}
+          aria-hidden
+          onClick={() => setMobileInfoOpen(false)}
+        />
+
+        <div
+          ref={infoPanelRef}
+          className="universe-interface"
+          id="carelens-information"
+          role={mobileSheetActive ? "dialog" : undefined}
+          aria-modal={mobileSheetActive ? "true" : undefined}
+          aria-label={mobileSheetActive
+            ? (rtl ? "معلومات المنطقة التشريحية" : "Anatomy information")
+            : undefined}
+          aria-hidden={isMobileViewport && !mobileSheetActive ? true : undefined}
+          inert={isMobileViewport && !mobileSheetActive ? true : undefined}
+          tabIndex={mobileSheetActive ? -1 : undefined}
+        >
+          <div className="universe-sheet-handle" aria-hidden />
+          <button
+            type="button"
+            className="universe-sheet-close"
+            onClick={() => setMobileInfoOpen(false)}
+            aria-label={rtl ? "إغلاق معلومات التشريح" : "Close anatomy information"}
+          >
+            <X size={19} />
+          </button>
           {/**
            * Buttons, not a tablist.
            *
@@ -252,7 +417,12 @@ export default function TreatmentUniverse({
                 {rtl ? "افتح خريطة الاستشارة" : "Open consultation map"}
                 <ArrowRight size={16} />
               </button>
-              <button onClick={onAsk}>
+              <button onClick={() => {
+                // NOOR opens a separate modal owned by the page. Retire this
+                // sheet first so two focus traps never compete.
+                setMobileInfoOpen(false);
+                onAsk();
+              }}>
                 <Sparkles size={15} />
                 {rtl ? "اسأل نور" : "Ask NOOR"}
               </button>
@@ -341,16 +511,19 @@ export default function TreatmentUniverse({
                   <ShieldCheck size={17} />
                   <p>
                     {rtl
-                      ? "هذا النموذج توضيحي وليس تشخيصياً. كل خطة ومدة تعافٍ تختلف حسب الفحص والإجراء والصحة العامة."
-                      : "This model is illustrative, not diagnostic. Every plan and recovery timeline is individual and depends on assessment, procedure, and overall health."}
+                      ? "هذا النموذج التعليمي يدعم الاستشارة، وليس تشخيصاً طبياً أو ضماناً للنتيجة النهائية. تعتمد النتائج الفعلية على المريض والإجراء وعملية التعافي وتقييم الطبيب."
+                      : "This educational model supports consultation; it is not a medical diagnosis or a guaranteed final outcome. Actual results depend on the patient, procedure, healing process, and doctor’s assessment."}
                   </p>
                 </div>
 
                 <button
                   className="button button--burgundy button--large"
                   onClick={() => {
+                    // Booking is another page-level modal. Do not reactivate
+                    // the mobile anatomy dialog underneath it.
+                    setMobileInfoOpen(false);
                     setDetailOpen(false);
-                    onBook();
+                    onBook(selectedServiceId);
                   }}
                 >
                   <CalendarDays size={17} />

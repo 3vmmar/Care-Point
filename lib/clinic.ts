@@ -245,6 +245,45 @@ export function servicesInCategory(category: ServiceCategory): Service[] {
   return SERVICES.filter((service) => service.category === category);
 }
 
+/**
+ * Anatomical reporting groups used by Clinic OS.
+ *
+ * These deliberately sit beside, rather than replace, `ServiceCategory`.
+ * `ServiceCategory` answers which rota can take a booking (surgical,
+ * non-surgical, or dental); this taxonomy answers what area patients are asking
+ * the clinic about. Conflating the two made it impossible to compare Face,
+ * Breast and Body demand because all three legitimately use the surgical rota.
+ */
+export const REPORTING_CATEGORIES = [
+  { id: "dental", label: "Dental" },
+  { id: "face", label: "Face" },
+  { id: "breast", label: "Breast" },
+  { id: "body", label: "Body" },
+  { id: "other", label: "Other" },
+] as const;
+
+export type ReportingCategory = (typeof REPORTING_CATEGORIES)[number]["id"];
+
+/**
+ * The service catalogue is code-reviewed and Clinic OS currently edits only
+ * durations, not arbitrary service ids, so one explicit mapping is safer than
+ * guessing from display copy. Prefix handling keeps separately named Dental
+ * services in the correct group when that catalogue expands.
+ *
+ * Anything unrecognised reports as "other" rather than being guessed at, which
+ * is also what happens to rows left behind by a retired line of care: a booking
+ * taken before a service was withdrawn still counts toward the clinic's totals,
+ * it simply stops claiming a column of its own.
+ */
+export function reportingCategoryForService(serviceId: string): ReportingCategory {
+  const id = serviceId.trim().toLowerCase();
+  if (id === "dental" || id.startsWith("dental-")) return "dental";
+  if (["face", "nose", "nonsurgical", "skin"].includes(id)) return "face";
+  if (id === "breast") return "breast";
+  if (id === "body") return "body";
+  return "other";
+}
+
 export const SERVICE_IDS = SERVICES.map((service) => service.id);
 
 export function findService(id: string | null | undefined): Service | undefined {

@@ -6,6 +6,25 @@ import {
   retryDelayMs,
   retryDisposition,
 } from "../lib/notification-policy.ts";
+import {
+  describeAppointment,
+  type NotificationPayload,
+} from "../lib/notify.ts";
+
+const appointmentNotification: NotificationPayload = {
+  kind: "booking.confirmed",
+  appointment: {
+    id: "a5f1c2d0-0000-4000-8000-000000000001",
+    branch: "Maadi",
+    service: "aesthetic",
+    slotDate: "2026-08-05",
+    slotTime: "16:00",
+    patientName: "Mona Ali",
+    patientPhone: "+201000000000",
+    patientEmail: "mona@example.com",
+    language: "en",
+  },
+};
 
 test("booking events fan out to independent patient and clinic channels", () => {
   const channels = channelsForNotification("booking.confirmed");
@@ -23,6 +42,32 @@ test("data requests notify the clinic without echoing sensitive data to a patien
     "clinic_email",
     "clinic_webhook",
   ]);
+});
+
+test("notification summaries use the appointment's stored practitioner", () => {
+  const detail = describeAppointment({
+    ...appointmentNotification,
+    appointment: {
+      ...appointmentNotification.appointment,
+      practitioner: "Dr. Leila Haddad",
+    },
+  });
+  assert.equal(detail.practitioner, "Dr. Leila Haddad");
+  // Kept as an alias for existing webhook and WhatsApp consumers.
+  assert.equal(detail.doctor, "Dr. Leila Haddad");
+});
+
+test("legacy dental notifications are never attributed to the plastic surgeon", () => {
+  const detail = describeAppointment({
+    ...appointmentNotification,
+    appointment: {
+      ...appointmentNotification.appointment,
+      service: "dental-check",
+      practitioner: null,
+    },
+  });
+  assert.equal(detail.practitioner, "Dental team");
+  assert.notEqual(detail.doctor, "Dr. Ashraf Metwally");
 });
 
 test("retry backoff recovers quickly then becomes deliberately conservative", () => {

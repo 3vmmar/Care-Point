@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { listAppointments, type AppointmentStatus } from "@/db/bookings";
 import { recordAccess } from "@/db/audit";
 import { requireStaffPermission } from "@/lib/auth";
-import { BRANCH_IDS, branchLabel, serviceLabel } from "@/lib/clinic";
+import { BRANCH_IDS } from "@/lib/clinic";
+import {
+  APPOINTMENT_EXPORT_HEADER,
+  appointmentExportRow,
+} from "@/lib/appointment-presentation";
 import { isDateKey } from "@/lib/dates";
 import { reportError } from "@/lib/observability";
 import { clientFingerprint } from "@/lib/request";
@@ -31,19 +35,6 @@ const STATUSES: AppointmentStatus[] = [
   "cancelled",
 ];
 
-const HEADER = [
-  "Date",
-  "Time",
-  "Patient",
-  "Phone",
-  "Email",
-  "Consultation",
-  "Clinic",
-  "Status",
-  "Source",
-  "Note",
-];
-
 export async function GET(request: NextRequest) {
   const clientHash = await clientFingerprint(request);
   const gate = await requireStaffPermission("patient:export", { clientHash });
@@ -70,18 +61,7 @@ export async function GET(request: NextRequest) {
       offset: 0,
     });
 
-    const rows = list.appointments.map((item) => [
-      item.slotDate,
-      item.slotTime,
-      item.patientName,
-      item.patientPhone,
-      item.patientEmail,
-      serviceLabel(item.service),
-      branchLabel(item.branch),
-      item.status,
-      item.source,
-      item.staffNote ?? item.patientNote,
-    ]);
+    const rows = list.appointments.map(appointmentExportRow);
 
     await recordAccess({
       actor: staff.email,
@@ -93,7 +73,7 @@ export async function GET(request: NextRequest) {
 
     // `csvDocument` applies the formula guard and the byte-order mark, and is
     // shared with the data-subject export so the two cannot drift apart again.
-    const csv = csvDocument(HEADER, rows);
+    const csv = csvDocument(APPOINTMENT_EXPORT_HEADER, rows);
     const filename = `care-point-${from && isDateKey(from) ? from : "schedule"}.csv`;
 
     return new NextResponse(csv, {

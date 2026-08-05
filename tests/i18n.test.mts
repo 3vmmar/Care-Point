@@ -64,10 +64,12 @@ test("the Arabic prompt list is translated, not copied", () => {
 });
 
 test("navigation labels line up with the sections they point at", () => {
-  // The header renders four anchors against these labels; a short list would
-  // silently render `undefined`.
-  assert.equal(dictionary.en.nav.length, 4);
-  assert.equal(dictionary.ar.nav.length, 4);
+  // Four section anchors plus the indexable Dental page. A short list would
+  // silently render `undefined` in desktop and mobile navigation.
+  assert.equal(dictionary.en.nav.length, 5);
+  assert.equal(dictionary.ar.nav.length, 5);
+  assert.equal(dictionary.en.nav[2], "Dental");
+  assert.match(dictionary.ar.nav[2], ARABIC);
 });
 
 test("NOOR answer sets cover the same topics in both languages", () => {
@@ -77,6 +79,13 @@ test("NOOR answer sets cover the same topics in both languages", () => {
   for (const answer of Object.values(dictionary.ar.noorAnswers)) {
     assert.ok(ARABIC.test(answer));
   }
+});
+
+test("NOOR has a bilingual dental handoff that names the dental team", () => {
+  assert.match(dictionary.en.noorAnswers.dental, /dental team/i);
+  assert.match(dictionary.en.noorAnswers.dental, /examination/i);
+  assert.match(dictionary.ar.noorAnswers.dental, ARABIC);
+  assert.doesNotMatch(dictionary.en.noorAnswers.dental, /Dr\. Ashraf/i);
 });
 
 test("interpolated strings substitute their argument", () => {

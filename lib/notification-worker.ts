@@ -25,12 +25,13 @@ function eventContext(job: NotificationJob): Partial<{
   service: string;
   slotDate: string;
   slotTime: string;
+  practitioner: string;
 }> {
   if (!job.contextJson) return {};
   try {
     const value = JSON.parse(job.contextJson) as Record<string, unknown>;
     return Object.fromEntries(
-      ["branch", "service", "slotDate", "slotTime"]
+      ["branch", "service", "slotDate", "slotTime", "practitioner"]
         .filter((key) => typeof value[key] === "string")
         .map((key) => [key, value[key]]),
     );
@@ -60,6 +61,7 @@ function appointmentPayload(
       id: subject.id,
       branch: context.branch ?? subject.branch,
       service: context.service ?? subject.service,
+      practitioner: context.practitioner ?? subject.practitioner,
       slotDate: context.slotDate ?? subject.slotDate,
       slotTime: context.slotTime ?? subject.slotTime,
       patientName: subject.patientName,

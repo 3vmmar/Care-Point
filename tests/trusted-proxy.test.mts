@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { serialiseJsonLd } from "../lib/site.ts";
+import { serialiseJsonLd, treatmentJsonLd } from "../lib/site.ts";
+import { findTreatment } from "../lib/treatments.ts";
 
 /**
  * The staff-identity trust boundary.
@@ -165,4 +166,38 @@ test("ampersands are escaped so the payload cannot become an entity", () => {
 test("ordinary content is left readable", () => {
   const output = serialiseJsonLd({ name: "Dr. Ashraf Metwally" });
   assert.equal(output, '{"name":"Dr. Ashraf Metwally"}');
+});
+
+test("Dental structured data belongs to the dental line, not the plastic surgeon", () => {
+  const dental = findTreatment("dental-care");
+  assert.ok(dental, "the indexable Dental page is missing");
+  assert.equal(dental.provider?.kind, "dental");
+
+  const graph = treatmentJsonLd(dental, "en")["@graph"] as Array<
+    Record<string, unknown>
+  >;
+  const procedure = graph[0];
+  const performer = procedure.performer as Record<string, unknown>;
+  const breadcrumb = graph[2];
+  const items = breadcrumb.itemListElement as Array<Record<string, unknown>>;
+
+  assert.equal(procedure["@type"], "MedicalProcedure");
+  assert.equal(procedure.medicalSpecialty, "Dentistry");
+  assert.equal(procedure.procedureType, undefined);
+  assert.equal(performer["@type"], "Dentist");
+  assert.match(String(performer["@id"]), /#dentistry$/);
+  assert.doesNotMatch(JSON.stringify(procedure), /#physician|SurgicalProcedure/);
+  assert.equal(items[0].name, "Care Point");
+});
+
+test("surgical treatment structured data keeps the surgeon attribution", () => {
+  const treatment = findTreatment("rhinoplasty");
+  assert.ok(treatment);
+  const procedure = treatmentJsonLd(treatment, "en")["@graph"][0] as Record<
+    string,
+    unknown
+  >;
+
+  assert.equal(procedure.procedureType, "https://schema.org/SurgicalProcedure");
+  assert.match(JSON.stringify(procedure.performer), /#physician/);
 });

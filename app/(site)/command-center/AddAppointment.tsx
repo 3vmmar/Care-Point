@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { Check, Loader2, X } from "lucide-react";
 import Modal from "@/app/components/Modal";
-import { BRANCHES, SERVICE_CATEGORIES, SERVICES, servicesInCategory } from "@/lib/clinic";
+import { BRANCHES, SERVICE_CATEGORIES, SERVICES } from "@/lib/clinic";
 import { formatShortDate } from "@/lib/dates";
+import type { LiveCatalogue } from "./types";
 
 type AvailabilityDay = { date: string; slots: string[] };
 
@@ -16,9 +17,11 @@ type AvailabilityDay = { date: string; slots: string[] };
  * day view an unreliable schedule and the reporting meaningless.
  */
 export default function AddAppointment({
+  catalogue,
   onClose,
   onCreated,
 }: {
+  catalogue: LiveCatalogue | null;
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -29,6 +32,17 @@ export default function AddAppointment({
   const [slotTime, setSlotTime] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const branches = catalogue?.branches ?? BRANCHES;
+  const services = catalogue?.services ?? SERVICES;
+  // The modal can open before the live catalogue settles. Derive a valid
+  // selection synchronously so the authoritative list can replace the static
+  // fallback without an effect-driven render pass.
+  const selectedBranch = branches.some((item) => item.id === branch)
+    ? branch
+    : branches[0]?.id ?? "";
+  const selectedService = services.some((item) => item.id === service)
+    ? service
+    : services[0]?.id ?? "";
 
   /**
    * Open slots for the chosen clinic **and consultation type**.
@@ -42,7 +56,7 @@ export default function AddAppointment({
   useEffect(() => {
     const controller = new AbortController();
     fetch(
-      `/api/availability?branch=${encodeURIComponent(branch)}&service=${encodeURIComponent(service)}`,
+      `/api/availability?branch=${encodeURIComponent(selectedBranch)}&service=${encodeURIComponent(selectedService)}`,
       { signal: controller.signal },
     )
       .then(async (response) => {
@@ -60,7 +74,7 @@ export default function AddAppointment({
         setError("Could not load open slots. Check the connection and try again.");
       });
     return () => controller.abort();
-  }, [branch, service]);
+  }, [selectedBranch, selectedService, catalogue?.revision]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -72,8 +86,8 @@ export default function AddAppointment({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          branch,
-          service,
+          branch: selectedBranch,
+          service: selectedService,
           slotDate,
           slotTime,
           patientName: form.get("name"),
@@ -112,8 +126,8 @@ export default function AddAppointment({
         <div className="add-grid">
           <label>
             <span>Clinic</span>
-            <select value={branch} onChange={(event) => setBranch(event.target.value as typeof branch)}>
-              {BRANCHES.map((item) => (
+            <select value={selectedBranch} onChange={(event) => setBranch(event.target.value as typeof branch)}>
+              {branches.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.en}
                 </option>
@@ -122,10 +136,10 @@ export default function AddAppointment({
           </label>
           <label>
             <span>Consultation</span>
-            <select value={service} onChange={(event) => setService(event.target.value)}>
+            <select value={selectedService} onChange={(event) => setService(event.target.value)}>
               {SERVICE_CATEGORIES.map((category) => (
                 <optgroup key={category.id} label={category.en}>
-                  {servicesInCategory(category.id).map((item) => (
+                  {services.filter((item) => item.category === category.id).map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.en} · {item.durationMinutes} min
                     </option>

@@ -44,8 +44,9 @@ import {
   branchOpenDays,
   SERVICE_CATEGORIES,
   SERVICES,
-  servicesInCategory,
   WHATSAPP_URL,
+  type Branch,
+  type Service,
 } from "@/lib/clinic";
 import { copyFor, LOCALE_PATH, otherLanguage, type Language } from "@/lib/i18n";
 import { TREATMENTS, treatmentCopy, treatmentPath } from "@/lib/treatments";
@@ -59,6 +60,15 @@ const TreatmentUniverse = dynamic(() => import("./TreatmentUniverse"), {
 
 const OPEN_BOOKING_EVENT = "carepoint:open-booking";
 
+type BookingOpenDetail = { serviceId?: string };
+
+/** Ignore stale or hand-authored service ids instead of opening a broken form. */
+function validServiceId(value: unknown): string | undefined {
+  return typeof value === "string" && SERVICES.some((service) => service.id === value)
+    ? value
+    : undefined;
+}
+
 /**
  * Booking owns its own render boundary. The patient page is intentionally rich
  * and large; keeping modal state in the page root made one tap reconcile the
@@ -68,6 +78,7 @@ function BookingLauncher({ language }: { language: Language }) {
   const [open, setOpen] = useState(false);
   const [prepared, setPrepared] = useState(false);
   const [generation, setGeneration] = useState(0);
+  const [initialService, setInitialService] = useState<string>();
   useEffect(() => {
     // Prepare the sizeable form after the hero has settled. A later tap then
     // reveals existing DOM instead of constructing the whole form in the input
@@ -78,7 +89,9 @@ function BookingLauncher({ language }: { language: Language }) {
     };
     if (document.readyState === "complete") prepareAfterLoad();
     else window.addEventListener("load", prepareAfterLoad, { once: true });
-    const show = () => {
+    const show = (event: Event) => {
+      const detail = (event as CustomEvent<BookingOpenDetail>).detail;
+      setInitialService(validServiceId(detail?.serviceId));
       setPrepared(true);
       setOpen(true);
     };
@@ -92,8 +105,9 @@ function BookingLauncher({ language }: { language: Language }) {
   if (!prepared) return null;
   return (
     <BookingModal
-      key={generation}
+      key={`${generation}:${initialService ?? "default"}`}
       language={language}
+      initialService={initialService}
       open={open}
       onClose={() => {
         setOpen(false);
@@ -111,7 +125,8 @@ function BookingLauncher({ language }: { language: Language }) {
  */
 function LazyCareLens(props: {
   language: Language;
-  onBook: () => void;
+  /** A CareLens region may nominate the exact consultation it describes. */
+  onBook: (serviceId?: string) => void;
   onAsk: () => void;
 }) {
   const anchor = useRef<HTMLDivElement>(null);
@@ -407,53 +422,139 @@ export default function CarePointExperience({ language }: { language: Language }
         scrollTrigger: { start: 0, end: "max", scrub: 0.3 },
       });
 
-      gsap.to(".portrait-frame img", {
-        yPercent: 7,
-        scale: 1.07,
-        ease: "none",
+      /**
+       * The hero's hold and exit, choreographed across the sticky stage.
+       *
+       * The stage (`.hero-stage`, CSS `position: sticky`) provides the hold as
+       * static layout; this timeline is only the choreography inside it. The
+       * scrub runs from the moment the hero docks under the header to the moment
+       * the stage releases it, so every phase below is a fraction of the hold:
+       *
+       *   0.00–0.30  the scroll cue retires; the portrait starts to breathe in
+       *   0.30–0.70  the copy settles back and dims — the visitor has committed
+       *   0.70–1.00  the whole hero eases upward slightly, handing off to the
+       *              portal section with momentum instead of a hard edge
+       *
+       * One timeline, not three triggers, so the phases cannot drift apart at
+       * different scrub rates. A ScrollTrigger `pin:` is deliberately not used —
+       * its injected spacer re-measures on every async settle and broke the
+       * site's in-page anchor navigation; sticky has nothing to re-measure.
+       */
+      const heroTimeline = gsap.timeline({
         scrollTrigger: {
-          trigger: ".hero",
-          start: "top top",
-          end: "bottom top",
-          scrub: 1.1,
+          trigger: ".hero-stage",
+          start: "top 104px",
+          end: "bottom bottom",
+          scrub: 1.05,
+          invalidateOnRefresh: true,
         },
+        defaults: { ease: "none" },
       });
 
-      gsap.to(".hero-copy", {
-        yPercent: 13,
-        opacity: 0.32,
-        ease: "none",
-        scrollTrigger: {
-          trigger: ".hero",
-          start: "45% center",
-          end: "bottom top",
-          scrub: 1.1,
-        },
+      heroTimeline
+        .to(".hero-rail", { autoAlpha: 0, y: 18, duration: 0.18 }, 0)
+        .to(".portrait-frame img", { yPercent: 6, scale: 1.06, duration: 1 }, 0)
+        .to(".hero-copy", { yPercent: 10, opacity: 0.38, duration: 0.4 }, 0.3)
+        .to(".hero-visual", { yPercent: -3, opacity: 0.9, duration: 0.4 }, 0.34)
+        .to(".hero", { yPercent: -5, opacity: 0.85, duration: 0.3 }, 0.7);
+
+      /**
+       * Two reveal families, so the page has cadence instead of a single verb.
+       *
+       * Headings announce: they rise out of a clip with their index line, a
+       * touch slower, always alone. Content answers: cards and panels lift in
+       * a stagger with a hint of scale, so a section reads as "statement, then
+       * evidence" rather than one undifferentiated fade repeated down the page
+       * — the exact repetition the brief calls out.
+       *
+       * Batching (rather than per-element triggers) keeps the stagger honest:
+       * whatever genuinely enters together animates together.
+       */
+      ScrollTrigger.batch(".section-heading, .proof-intro", {
+        start: "top 86%",
+        once: true,
+        onEnter: (batch) =>
+          gsap.fromTo(
+            batch,
+            { autoAlpha: 0, y: 44, clipPath: "inset(0 0 26% 0)" },
+            {
+              autoAlpha: 1,
+              y: 0,
+              clipPath: "inset(0 0 0% 0)",
+              duration: 1.15,
+              ease: "power3.out",
+              overwrite: true,
+            },
+          ),
       });
 
-      // Batching lets ScrollTrigger stagger whatever actually enters together
-      // instead of giving every element a fixed index-based delay, so a section
-      // reveals as one movement rather than as a queue.
       ScrollTrigger.batch(
-        ".proof-intro, .proof-stats article, .section-heading, .treatment-universe, .journey-grid article, .location-card, .final-cta > div, .final-cta .final-actions",
+        ".proof-stats article, .treatment-universe, .journey-grid article, .location-card, .noor-feature > *, .final-cta > div, .final-cta .final-actions",
         {
           start: "top 88%",
           once: true,
           onEnter: (batch) =>
             gsap.fromTo(
               batch,
-              { autoAlpha: 0, y: 34 },
+              { autoAlpha: 0, y: 30, scale: 0.988 },
               {
                 autoAlpha: 1,
                 y: 0,
-                duration: 1,
-                stagger: 0.08,
+                scale: 1,
+                duration: 0.95,
+                stagger: 0.09,
                 ease: "power2.out",
                 overwrite: true,
               },
             ),
         },
       );
+
+      /**
+       * The portal's giant BEYOND drifts against the scenes in front of it.
+       *
+       * Type as scenery: the one purely cinematic gesture in the section, and
+       * cheap — a single transform on an aria-hidden element, scrubbed on the
+       * compositor like every other scroll effect here.
+       */
+      gsap.fromTo(
+        ".portal-word",
+        { yPercent: 14 },
+        {
+          yPercent: -14,
+          ease: "none",
+          scrollTrigger: {
+            trigger: ".experience-portal",
+            start: "top bottom",
+            end: "bottom top",
+            scrub: 1.2,
+          },
+        },
+      );
+
+      /**
+       * Counters, driven off the value already in the DOM.
+       *
+       * The target is read from the rendered text rather than passed in, so the
+       * markup stays the single source of truth — a stat that changes in the JSX
+       * cannot drift from the number that counts up to it. `snap` keeps every
+       * intermediate frame a whole number; without it a "years of experience"
+       * figure spends a second reading 18.4372.
+       */
+      gsap.utils.toArray<HTMLElement>(".stat-count").forEach((node) => {
+        const target = Number(node.textContent?.replace(/\D/g, "") ?? 0);
+        if (!Number.isFinite(target) || target === 0) return;
+        const counter = { value: Number(node.dataset.countFrom ?? 0) };
+
+        gsap.to(counter, {
+          value: target,
+          duration: 1.5,
+          ease: "power2.out",
+          snap: { value: 1 },
+          onUpdate: () => { node.textContent = String(Math.round(counter.value)); },
+          scrollTrigger: { trigger: node, start: "top 88%", once: true },
+        });
+      });
 
       const scenes = gsap.utils.toArray<HTMLElement>(".portal-scene");
       gsap.set(scenes, { autoAlpha: 0, y: 48 });
@@ -534,8 +635,13 @@ export default function CarePointExperience({ language }: { language: Language }
     };
   }, [introOpen, language]);
 
-  const openBooking = useCallback(() => {
-    window.dispatchEvent(new Event(OPEN_BOOKING_EVENT));
+  const openBooking = useCallback((serviceId?: string) => {
+    const selected = validServiceId(serviceId);
+    window.dispatchEvent(
+      new CustomEvent<BookingOpenDetail>(OPEN_BOOKING_EVENT, {
+        detail: selected ? { serviceId: selected } : {},
+      }),
+    );
     setMobileOpen(false);
   }, []);
 
@@ -551,19 +657,20 @@ export default function CarePointExperience({ language }: { language: Language }
    * Handled here rather than by adding an anchor, because booking is a modal and
    * there is nothing to scroll to.
    *
-   * `?book=<service>` is accepted and currently only opens the modal — the
-   * consultation is *not* preselected yet, because the modal does not take an
-   * initial service. Wiring that is the obvious next step and is why each
-   * treatment already carries a `service` field.
+   * `?book=<service>` carries the requested consultation through the same event
+   * used by CareLens. Unknown or retired ids safely fall back to the default
+   * option instead of leaving the form in an impossible state.
    */
   useEffect(() => {
+    // A deep-linked dialog should appear after the welcome layer, not underneath
+    // it. Dismissing the introduction re-runs this effect with the URL intact.
+    if (introOpen) return;
+
     const open = () => {
       const url = new URL(window.location.href);
       const service = url.searchParams.get("book");
       if (url.hash !== "#book" && !service) return;
-
-
-      window.dispatchEvent(new Event(OPEN_BOOKING_EVENT));
+      openBooking(service ?? undefined);
 
       // Clear it so a refresh, or a back-navigation, does not reopen the modal
       // over content the visitor has moved on to.
@@ -573,13 +680,13 @@ export default function CarePointExperience({ language }: { language: Language }
     };
 
     // Deferred past the intro overlay, which otherwise sits on top of the modal.
-    const timer = window.setTimeout(open, introOpen ? 0 : 350);
+    const timer = window.setTimeout(open, 350);
     window.addEventListener("hashchange", open);
     return () => {
       window.clearTimeout(timer);
       window.removeEventListener("hashchange", open);
     };
-  }, [introOpen]);
+  }, [introOpen, openBooking]);
 
   const heroAvailability = !availabilityChecked
     ? t.heroAvailabilityLoading
@@ -600,7 +707,7 @@ export default function CarePointExperience({ language }: { language: Language }
       <a className="skip-link" href="#patient-content">
         {rtl ? "تخطي إلى المحتوى" : "Skip to content"}
       </a>
-      <header className="site-header">
+      <header className={heroPassed ? "site-header site-header--afloat" : "site-header"}>
         <Link className="brand" href="#top" aria-label={t.homeLabel}>
           <Image src="/logo.png" alt="" width={52} height={52} priority unoptimized />
           <span>
@@ -609,9 +716,18 @@ export default function CarePointExperience({ language }: { language: Language }
           </span>
         </Link>
         <nav className={mobileOpen ? "nav nav--open" : "nav"} id="site-nav">
-          {["expertise", "carelens", "journey", "locations"].map((id, index) => (
-            <a href={`#${id}`} key={id} onClick={() => setMobileOpen(false)}>
-              {t.nav[index]}
+          {[
+            { href: "#expertise", label: t.nav[0] },
+            { href: "#carelens", label: t.nav[1] },
+            {
+              href: treatmentPath("dental-care", language),
+              label: t.nav[2],
+            },
+            { href: "#journey", label: t.nav[3] },
+            { href: "#locations", label: t.nav[4] },
+          ].map((item) => (
+            <a href={item.href} key={item.href} onClick={() => setMobileOpen(false)}>
+              {item.label}
             </a>
           ))}
           {/*
@@ -627,7 +743,7 @@ export default function CarePointExperience({ language }: { language: Language }
             <Globe2 size={15} />
             {t.languageShort}
           </Link>
-          <button className="button button--dark nav-book" onClick={openBooking}>
+          <button className="button button--dark nav-book" onClick={() => openBooking()}>
             {t.book}
             <ArrowRight size={16} />
           </button>
@@ -650,7 +766,7 @@ export default function CarePointExperience({ language }: { language: Language }
             <Globe2 size={15} />
             {t.languageShort}
           </Link>
-          <button className="button button--dark desktop-book" onClick={openBooking}>
+          <button className="button button--dark desktop-book" onClick={() => openBooking()}>
             {t.book}
             <ArrowRight size={16} />
           </button>
@@ -666,7 +782,19 @@ export default function CarePointExperience({ language }: { language: Language }
         </div>
       </header>
 
-      <section className="hero" id="top">
+      {/**
+       * The stage is the scroll distance; the hero inside it is sticky.
+       *
+       * This is the "hero holds until you mean to leave" requirement, built from
+       * static layout instead of a ScrollTrigger pin. The stage is one hero
+       * height plus ~85svh of hold; the hero sticks below the header while the
+       * stage scrolls past, so the browser resolves everything and there is no
+       * injected spacer to re-measure when the canvas, fonts or hero image
+       * settle — which is what broke in-page anchor jumps when this was a pin.
+       * `id="top"` moves to the stage so the logo's anchor still lands here.
+       */}
+      <div className="hero-stage" id="top">
+      <section className="hero">
         <div className="hero-copy">
           <div className="eyebrow reveal-item">
             <span />
@@ -678,7 +806,7 @@ export default function CarePointExperience({ language }: { language: Language }
           </h1>
           <p className="hero-intro reveal-item reveal-delay-2">{t.intro}</p>
           <div className="hero-actions reveal-item reveal-delay-3">
-            <button className="button button--burgundy" onClick={openBooking}>
+            <button className="button button--burgundy" onClick={() => openBooking()}>
               <CalendarDays size={18} />
               {t.book}
             </button>
@@ -726,7 +854,7 @@ export default function CarePointExperience({ language }: { language: Language }
               </div>
               <button
                 className="availability-card"
-                onClick={openBooking}
+                onClick={() => openBooking()}
                 aria-label={t.viewAvailability}
               >
                 <span className="live-dot" />
@@ -747,6 +875,7 @@ export default function CarePointExperience({ language }: { language: Language }
           <i />
         </div>
       </section>
+      </div>
 
       <section className="experience-portal" aria-label={t.portalLabel}>
         <div className="portal-sticky">
@@ -793,7 +922,7 @@ export default function CarePointExperience({ language }: { language: Language }
               <em>{t.portalThreeEm}</em>
             </h2>
             <p>{t.portalThreeBody}</p>
-            <button className="portal-action portal-action--solid" onClick={openBooking}>
+            <button className="portal-action portal-action--solid" onClick={() => openBooking()}>
               <CalendarDays size={17} />
               {t.portalThreeAction}
               <ArrowRight size={17} />
@@ -813,23 +942,44 @@ export default function CarePointExperience({ language }: { language: Language }
           <h2>{t.proofTitle}</h2>
           <p>{t.proofBody}</p>
         </div>
+        {/**
+          * Counters, written so the number is correct without JavaScript.
+          *
+          * Each value is rendered as itself and `data-count-from` only tells the
+          * tween where to start. Nothing here depends on the script running: no
+          * script, reduced motion, or a failed hydration all leave the real figure
+          * on screen. The counting span is hidden from assistive technology and
+          * paired with a static one, because a screen reader that happens to read
+          * mid-count would otherwise announce "7 Cairo locations".
+          */}
         <div className="proof-stats">
           <article>
-            <strong>25<sup>+</sup></strong>
+            <strong>
+              <span className="stat-count" data-count-from="0" aria-hidden>25</span>
+              <span className="stat-static">25</span>
+              <sup>+</sup>
+            </strong>
             <span>{t.statYears}</span>
           </article>
           <article>
-            <strong>{BRANCHES.length}</strong>
+            <strong>
+              <span className="stat-count" data-count-from="0" aria-hidden>{BRANCHES.length}</span>
+              <span className="stat-static">{BRANCHES.length}</span>
+            </strong>
             <span>{t.statClinics}</span>
           </article>
           <article>
-            <strong>360°</strong>
+            <strong>
+              <span className="stat-count" data-count-from="0" aria-hidden>360</span>
+              <span className="stat-static">360</span>°
+            </strong>
             <span>{t.statJourney}</span>
           </article>
         </div>
       </section>
 
       <section className="carelens section-pad" id="carelens">
+        <div className="carelens-word" aria-hidden>CARELENS</div>
         <div className="section-heading">
           <div>
             <span className="section-index">02 — {t.careLensKicker}</span>
@@ -934,7 +1084,7 @@ export default function CarePointExperience({ language }: { language: Language }
                   <Navigation size={15} />
                   {t.directions}
                 </a>
-                <button onClick={openBooking}>
+                <button onClick={() => openBooking()}>
                   <CalendarDays size={15} />
                   {t.book}
                 </button>
@@ -958,7 +1108,7 @@ export default function CarePointExperience({ language }: { language: Language }
             <Sparkles size={18} />
             {t.designYourJourney}
           </button>
-          <button className="button button--burgundy button--large" onClick={openBooking}>
+          <button className="button button--burgundy button--large" onClick={() => openBooking()}>
             <CalendarDays size={19} />
             {t.book}
             <ArrowRight size={18} />
@@ -1025,7 +1175,7 @@ export default function CarePointExperience({ language }: { language: Language }
         <JourneyDesigner
           language={language}
           onClose={() => setJourneyDesignerOpen(false)}
-          onBook={openBooking}
+          onBook={() => openBooking()}
         />
       )}
     </main>
@@ -1080,6 +1230,12 @@ function NoorPanel({
     if (/where|location|address|branch|direction|map|فرع|عنوان|مكان|خريطة/.test(normalized))
       return answers.location;
     if (/nose|rhino|أنف|تجميل الأنف/.test(normalized)) return answers.nose;
+    if (
+      /dental|dentist|tooth|teeth|gum|smile|veneer|implant|whiten|أسنان|السن|اللثة|ابتسامة|فينير|زراعة|تبييض/.test(
+        normalized,
+      )
+    )
+      return answers.dental;
     if (/recover|healing|recovery|تعافي|نقاهة/.test(normalized)) return answers.recovery;
     if (/price|cost|تكلفة|سعر/.test(normalized)) return answers.cost;
     if (/prepare|consult|استعد|استشارة/.test(normalized)) return answers.prepare;
@@ -1212,17 +1368,22 @@ function NoorPanel({
 
 function BookingModal({
   language,
+  initialService,
   open = true,
   onClose,
 }: {
   language: Language;
+  /** Service requested by a treatment page, CareLens region, or deep link. */
+  initialService?: string;
   open?: boolean;
   onClose: () => void;
 }) {
   const t = copyFor(language);
   const rtl = language === "ar";
   const [step, setStep] = useState<"slots" | "details" | "success">("slots");
-  const [service, setService] = useState(SERVICES[0].id);
+  const [service, setService] = useState(
+    () => validServiceId(initialService) ?? SERVICES[0].id,
+  );
   const [branch, setBranch] = useState(BRANCHES[0].id);
   const [days, setDays] = useState<AvailabilityDay[]>([]);
   const [selectedDate, setSelectedDate] = useState("");
@@ -1235,6 +1396,8 @@ function BookingModal({
   const [reloadKey, setReloadKey] = useState(0);
   const [turnstileSiteKey, setTurnstileSiteKey] = useState<string | null>(null);
   const [availableBranchIds, setAvailableBranchIds] = useState<readonly string[]>(BRANCH_IDS);
+  const [liveBranches, setLiveBranches] = useState<Branch[]>(BRANCHES);
+  const [liveServices, setLiveServices] = useState<Service[]>(SERVICES);
   const [bookingPaused, setBookingPaused] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -1247,8 +1410,8 @@ function BookingModal({
     () => days.find((day) => day.date === selectedDate),
     [days, selectedDate],
   );
-  const branchDetail = BRANCHES.find((item) => item.id === branch);
-  const serviceDetail = SERVICES.find((item) => item.id === service);
+  const branchDetail = liveBranches.find((item) => item.id === branch);
+  const serviceDetail = liveServices.find((item) => item.id === service);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1269,16 +1432,25 @@ function BookingModal({
         if (!response.ok) throw new Error("unavailable");
         return (await response.json()) as {
           branch: string;
+          service: string;
           dates: AvailabilityDay[];
           turnstileSiteKey?: string | null;
           availableBranchIds?: string[];
           bookingPaused?: boolean;
+          catalogue?: {
+            revision: string;
+            branches: Branch[];
+            services: Service[];
+          };
         };
       })
       .then((data) => {
         if (data.branch && data.branch !== branch) {
           setBranch(data.branch as typeof branch);
         }
+        if (data.service && data.service !== service) setService(data.service);
+        if (data.catalogue?.branches.length) setLiveBranches(data.catalogue.branches);
+        if (data.catalogue?.services.length) setLiveServices(data.catalogue.services);
         setDays(data.dates ?? []);
         setTurnstileSiteKey(data.turnstileSiteKey ?? null);
         setAvailableBranchIds(data.availableBranchIds ?? BRANCH_IDS);
@@ -1466,11 +1638,13 @@ function BookingModal({
                       key={category.id}
                       label={rtl ? category.ar : category.en}
                     >
-                      {servicesInCategory(category.id).map((item) => (
+                      {liveServices
+                        .filter((item) => item.category === category.id)
+                        .map((item) => (
                         <option key={item.id} value={item.id}>
                           {rtl ? item.ar : item.en}
                         </option>
-                      ))}
+                        ))}
                     </optgroup>
                   ))}
                 </select>
@@ -1484,7 +1658,7 @@ function BookingModal({
                     setBranch(event.target.value as typeof branch);
                   }}
                 >
-                  {BRANCHES.filter((item) => availableBranchIds.includes(item.id)).map((item) => (
+                  {liveBranches.filter((item) => availableBranchIds.includes(item.id)).map((item) => (
                     <option key={item.id} value={item.id}>
                       {rtl ? item.ar : item.en}
                     </option>

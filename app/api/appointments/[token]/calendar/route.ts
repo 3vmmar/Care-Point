@@ -31,6 +31,7 @@ export async function GET(
     slotDate: appointment.slotDate,
     slotTime: appointment.slotTime,
     durationMinutes: appointment.durationMinutes,
+    practitioner: appointment.practitioner,
     language: appointment.language,
     manageUrl,
   });

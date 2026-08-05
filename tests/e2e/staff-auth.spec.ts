@@ -258,6 +258,8 @@ test.describe("staff directory and bulk export", () => {
     expect(body.charCodeAt(0)).toBe(0xfeff);
     expect(body).toContain('"Patient"');
     expect(body).toContain('"Phone"');
+    expect(body).toContain('"Treatment category"');
+    expect(body).toContain('"Practitioner"');
   });
 
   test("the export is recorded in the access log", async ({ request }) => {

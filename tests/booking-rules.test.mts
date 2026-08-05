@@ -3,6 +3,10 @@ import test from "node:test";
 import { findBranch, findService } from "../lib/clinic.ts";
 import { isDateKey, isOpenDay, isSlotTime } from "../lib/dates.ts";
 import { generateSlots } from "../lib/schedule.ts";
+import {
+  APPOINTMENT_EXPORT_HEADER,
+  appointmentExportRow,
+} from "../lib/appointment-presentation.ts";
 
 /**
  * The request-validation rules enforced by the API routes.
@@ -193,4 +197,45 @@ test("CSV export cannot be broken by patient-supplied text", () => {
   assert.equal(csvCell(null), '""');
   // A newline inside a quoted CSV field is valid and must survive intact.
   assert.equal(csvCell("line one\nline two"), '"line one\nline two"');
+});
+
+test("appointment exports include treatment category and resolved practitioner", () => {
+  const row = appointmentExportRow({
+    slotDate: "2026-08-05",
+    slotTime: "14:00",
+    patientName: "Mona Ali",
+    patientPhone: "+201000000000",
+    patientEmail: "mona@example.com",
+    service: "dental-check",
+    practitioner: null,
+    branch: "Maadi",
+    status: "confirmed",
+    source: "web",
+    staffNote: null,
+    patientNote: "First visit",
+  });
+
+  assert.equal(row.length, APPOINTMENT_EXPORT_HEADER.length);
+  assert.equal(row[6], "Dental");
+  assert.equal(row[7], "Dental team");
+  assert.equal(row[8], "Maadi");
+});
+
+test("appointment exports prefer the stored practitioner over a category fallback", () => {
+  const row = appointmentExportRow({
+    slotDate: "2026-08-05",
+    slotTime: "14:00",
+    patientName: null,
+    patientPhone: null,
+    patientEmail: null,
+    service: "dental-check",
+    practitioner: "Dr. Leila Haddad",
+    branch: "Maadi",
+    status: "confirmed",
+    source: "staff",
+    staffNote: null,
+    patientNote: null,
+  });
+
+  assert.equal(row[7], "Dr. Leila Haddad");
 });

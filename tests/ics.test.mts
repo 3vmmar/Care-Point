@@ -72,6 +72,32 @@ test("the manage link is included when supplied", () => {
   assert.match(ics.replace(/\r\n /g, ""), /appointment\/token-123/);
 });
 
+test("the invite attributes the stored practitioner", () => {
+  const rows = lines(buildAppointmentIcs({
+    ...base,
+    practitioner: "Dr. Leila Haddad",
+  }));
+  const summary = rows.find((row) => row.startsWith("SUMMARY:"));
+  assert.match(summary ?? "", /Dr\. Leila Haddad/);
+});
+
+test("legacy dental invites fall back to the Dental team", () => {
+  const rows = lines(buildAppointmentIcs({
+    ...base,
+    service: "dental-check",
+    practitioner: null,
+  }));
+  const summary = rows.find((row) => row.startsWith("SUMMARY:"));
+  assert.match(summary ?? "", /Dental team/);
+  assert.doesNotMatch(summary ?? "", /Dr\. Ashraf/);
+});
+
+test("legacy non-dental invites fall back to Dr. Ashraf", () => {
+  const rows = lines(buildAppointmentIcs({ ...base, practitioner: null }));
+  const summary = rows.find((row) => row.startsWith("SUMMARY:"));
+  assert.match(summary ?? "", /Dr\. Ashraf Metwally/);
+});
+
 test("the filename identifies the visit", () => {
   assert.equal(icsFilename(base), "care-point-2026-07-29-1500.ics");
 });

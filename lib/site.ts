@@ -144,6 +144,16 @@ export function clinicJsonLd() {
 export function treatmentJsonLd(treatment: Treatment, language: Language) {
   const copy = treatmentCopy(treatment, language);
   const url = `${SITE_URL}${treatmentPath(treatment.slug, language)}`;
+  const dental = treatment.provider?.kind === "dental";
+  const provider = dental
+    ? {
+        "@type": "Dentist",
+        "@id": `${SITE_URL}#dentistry`,
+        name: treatment.provider!.en,
+        alternateName: treatment.provider!.ar,
+        medicalSpecialty: "Dentistry",
+      }
+    : { "@id": `${SITE_URL}#physician` };
 
   return {
     "@context": "https://schema.org",
@@ -155,10 +165,17 @@ export function treatmentJsonLd(treatment: Treatment, language: Language) {
         description: copy.metaDescription,
         url,
         inLanguage: language,
-        procedureType: "https://schema.org/SurgicalProcedure",
-        bodyLocation: copy.title,
+        // The Dental page spans preventive, cosmetic and implant assessment.
+        // Calling that whole line a SurgicalProcedure would be false, so it is
+        // described by its specialty while surgical pages retain their type.
+        ...(dental
+          ? { medicalSpecialty: "Dentistry", bodyLocation: "Teeth, gums and jaw" }
+          : {
+              procedureType: "https://schema.org/SurgicalProcedure",
+              bodyLocation: copy.title,
+            }),
         howPerformed: copy.intro,
-        performer: { "@id": `${SITE_URL}#physician` },
+        performer: provider,
         availableService: copy.options.map((option) => ({
           "@type": "MedicalTherapy",
           name: option,
@@ -180,7 +197,7 @@ export function treatmentJsonLd(treatment: Treatment, language: Language) {
           {
             "@type": "ListItem",
             position: 1,
-            name: DOCTOR.nameEn,
+            name: dental ? "Care Point" : DOCTOR.nameEn,
             item: `${SITE_URL}${language === "ar" ? "/ar" : "/"}`,
           },
           { "@type": "ListItem", position: 2, name: copy.title, item: url },

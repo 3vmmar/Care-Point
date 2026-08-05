@@ -1,4 +1,5 @@
 import type { Branch, Closure, Service } from "@/lib/clinic";
+export type { AnalyticsWindowDays, ClinicAnalytics } from "@/db/analytics";
 
 export type AppointmentStatus =
   | "confirmed"
@@ -11,6 +12,7 @@ export type Appointment = {
   id: string;
   status: AppointmentStatus;
   branch: string;
+  practitioner: string | null;
   service: string;
   slotDate: string;
   slotTime: string;

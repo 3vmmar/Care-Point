@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAppointmentByManageToken } from "@/db/bookings";
-import { CONTACT, DOCTOR, findBranch, serviceLabel } from "@/lib/clinic";
+import { CONTACT, findBranch, serviceLabel } from "@/lib/clinic";
+import { appointmentPractitioner } from "@/lib/appointment-presentation";
 import { formatFullDate, formatSlotTime } from "@/lib/dates";
 import { copyFor, isLanguage } from "@/lib/i18n";
 import ManageBooking from "./ManageBooking";
@@ -29,6 +30,10 @@ export default async function AppointmentPage({
   const rtl = language === "ar";
   const branch = findBranch(appointment.branch);
   const cancelled = appointment.status === "cancelled";
+  const practitioner = appointmentPractitioner(
+    appointment.service,
+    appointment.practitioner,
+  );
 
   return (
     <main className="manage-page" dir={rtl ? "rtl" : "ltr"} lang={language}>
@@ -63,7 +68,7 @@ export default async function AppointmentPage({
             <dt>{rtl ? "الاستشارة" : "Consultation"}</dt>
             <dd>
               {serviceLabel(appointment.service, language)}
-              <small>{rtl ? DOCTOR.nameAr : DOCTOR.nameEn}</small>
+              <small>{practitioner}</small>
             </dd>
           </div>
         </dl>

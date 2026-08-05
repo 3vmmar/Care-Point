@@ -6,6 +6,7 @@ test.describe.serial("HTTP route contracts", () => {
     ["health", "/api/health", 200],
     ["availability", "/api/availability", 200],
     ["bookings dashboard", "/api/bookings", 200],
+    ["clinic analytics", "/api/clinic/analytics?days=30", 200],
     ["audit", "/api/clinic/audit", 200],
     ["data request queue", "/api/clinic/data-requests", 200],
     ["notification operations", "/api/clinic/notifications", 200],
@@ -22,6 +23,30 @@ test.describe.serial("HTTP route contracts", () => {
       expect(response.headers()["cache-control"]).toMatch(/no-store|private|max-age=0/i);
     });
   }
+
+  test("public availability exposes the same active Dental catalogue used by staff", async ({ request }) => {
+    const response = await request.get("/api/availability?service=dental-check");
+    expect(response.status()).toBe(200);
+    const body = (await response.json()) as {
+      service: string;
+      catalogue: {
+        revision: string;
+        branches: Array<{ id: string }>;
+        services: Array<{ id: string; category: string }>;
+      };
+    };
+
+    expect(body.service).toBe("dental-check");
+    expect(body.catalogue.revision).toBeTruthy();
+    expect(body.catalogue.branches.length).toBeGreaterThan(0);
+    expect(body.catalogue.services).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "dental-check", category: "dental" }),
+        expect.objectContaining({ id: "dental-cosmetic", category: "dental" }),
+        expect.objectContaining({ id: "dental-implant", category: "dental" }),
+      ]),
+    );
+  });
 
   test("mutation routes reject malformed or nonexistent work explicitly", async ({ request }) => {
     const cases = [

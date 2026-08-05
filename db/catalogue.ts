@@ -200,6 +200,37 @@ async function createSchema() {
       if (!/duplicate column/i.test(message)) throw error;
     }
   }
+
+  /**
+   * Add newly introduced consultations to an existing catalogue without
+   * overwriting anything the clinic has edited. Clinic OS deactivates rows
+   * instead of deleting them, so `INSERT OR IGNORE` preserves deliberate
+   * removals while making a genuinely new service available after an upgrade as
+   * well as on a fresh database.
+   */
+  const introducedAt = new Date().toISOString();
+  await db.batch(
+    SERVICES.map((service, index) =>
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO clinic_services
+           (id, department_id, name_en, name_ar, duration_minutes,
+            turnaround_minutes, active, sort_order, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+        )
+        .bind(
+          service.id,
+          service.category,
+          service.en,
+          service.ar,
+          service.durationMinutes,
+          CLINIC_TURNAROUND_MINUTES,
+          index,
+          introducedAt,
+          introducedAt,
+        ),
+    ),
+  );
 }
 
 /**

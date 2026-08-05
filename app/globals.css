@@ -27,6 +27,7 @@ html {
   scroll-behavior: smooth;
 }
 
+
 body {
   margin: 0;
   background: var(--ivory);
@@ -576,6 +577,37 @@ section[id] {
 .nav-book,
 .mobile-language {
   display: none;
+}
+
+/**
+ * The hero's hold, as static layout.
+ *
+ * The stage is one hero-height plus 85svh; the hero sticks below the 104px
+ * header while the stage's extra height scrolls past. The browser resolves all
+ * of it — no JS-injected spacer, nothing to re-measure when the WebGL canvas or
+ * fonts settle, and in-page anchor jumps stay exact (the failure mode that
+ * killed the ScrollTrigger `pin:` version of this).
+ *
+ * Gated to real desktop viewports: on phones the hero is a stacked column
+ * taller than the screen, and holding it would trap the visitor. Under reduced
+ * motion the hold collapses too — a frozen hero with no exit choreography reads
+ * as the page being stuck, not as a moment.
+ */
+@media (min-width: 981px) and (min-height: 620px) {
+  .hero-stage {
+    height: calc(185svh - 104px);
+  }
+
+  .hero-stage .hero {
+    position: sticky;
+    top: 104px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-stage {
+    height: auto !important;
+  }
 }
 
 .hero {
@@ -1328,7 +1360,10 @@ section[id] {
 }
 
 .section-pad {
-  padding: 120px max(5vw, calc((100vw - 1320px) / 2));
+  /* Luxury is measured in air: ~15vh between statements instead of a fixed
+     120px, so the rhythm scales with the screen instead of compressing on
+     large displays. */
+  padding: clamp(128px, 15vh, 184px) max(5vw, calc((100vw - 1320px) / 2));
 }
 
 .section-heading {
@@ -1336,7 +1371,7 @@ section[id] {
   grid-template-columns: 1.3fr 0.7fr;
   gap: 9vw;
   align-items: end;
-  margin-bottom: 65px;
+  margin-bottom: clamp(64px, 8vh, 92px);
 }
 
 .section-heading h2 {
@@ -5598,4 +5633,1651 @@ footer {
 
 .legal-footer a:hover {
   color: var(--burgundy);
+}
+
+/* CareLens immersive anatomy viewer --------------------------------------- */
+
+.carelens {
+  position: relative;
+  z-index: 46;
+  overflow: clip;
+}
+
+.treatment-universe {
+  position: relative;
+  height: min(820px, calc(100svh - 112px));
+  min-height: 720px;
+  grid-template-columns: minmax(0, 1.08fr) minmax(420px, 0.92fr);
+  overflow: hidden;
+  background: #070707;
+  isolation: isolate;
+}
+
+/**
+ * Short windows: let the explorer actually fit.
+ *
+ * `height` already tracks the viewport, but the 720px floor overrode it — in a
+ * 750px-tall window the section stayed 720px against ~636px of available room,
+ * so the Layers dock and safety note fell past the fold and the whole explorer
+ * looked broken (reported from a 1920×748 window). The floor exists to protect
+ * the panel's content on tall screens; below it, the viewport must win, and the
+ * chrome inside the canvas tightens to match.
+ */
+@media (min-width: 861px) and (max-height: 840px) {
+  .treatment-universe {
+    min-height: 540px;
+    height: calc(100svh - 118px);
+  }
+
+  .universe-layer-dock {
+    bottom: 12px;
+  }
+
+  .universe-safety-note {
+    max-width: min(46ch, 44%);
+    font-size: 10.5px;
+  }
+
+  .anatomy-system-toolbar {
+    gap: 4px;
+    padding: 8px 6px;
+  }
+
+  .anatomy-system-toolbar button {
+    padding: 7px 6px 6px;
+  }
+}
+
+.universe-canvas {
+  height: 100%;
+  min-height: 0;
+  background:
+    radial-gradient(circle at 55% 30%, rgba(120, 85, 75, 0.18), transparent 30%),
+    radial-gradient(circle at 50% 62%, rgba(196, 31, 84, 0.08), transparent 42%),
+    linear-gradient(180deg, #121212 0%, #070707 100%);
+  cursor: grab;
+}
+
+.universe-canvas:active {
+  cursor: grabbing;
+}
+
+.universe-canvas canvas {
+  touch-action: pan-y;
+}
+
+.universe-canvas::before,
+.universe-canvas::after {
+  display: none;
+}
+
+.universe-canvas-mount {
+  animation: anatomyModelIn 0.7s var(--ease-smooth) both;
+}
+
+@keyframes anatomyModelIn {
+  from { opacity: 0; transform: scale(0.985); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.universe-rings {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.universe-rings::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 32%;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.78));
+}
+
+.universe-rings i {
+  position: absolute;
+  left: 52%;
+  top: 44%;
+  width: min(74vw, 640px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.universe-rings i:nth-child(2) {
+  width: min(56vw, 480px);
+  border-color: rgba(196, 31, 84, 0.11);
+}
+
+.universe-rings i:nth-child(3) {
+  width: min(38vw, 330px);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.anatomy-system-toolbar {
+  position: absolute;
+  z-index: 6;
+  left: 12px;
+  top: 50%;
+  display: grid;
+  gap: 3px;
+  width: 64px;
+  padding: 8px 0;
+  transform: translateY(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(8, 8, 8, 0.34);
+  backdrop-filter: blur(9px);
+}
+
+.site-shell[dir="rtl"] .anatomy-system-toolbar {
+  right: 12px;
+  left: auto;
+}
+
+.anatomy-system-toolbar button {
+  position: relative;
+  width: 100%;
+  min-height: 52px;
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  border: 0;
+  border-radius: 0;
+  padding: 6px 4px;
+  color: rgba(255, 255, 255, 0.58);
+  background: transparent;
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.anatomy-system-toolbar button::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 2px;
+  background: #c41f54;
+  box-shadow: 0 0 14px rgba(196, 31, 84, 0.7);
+  opacity: 0;
+  transform: scaleY(0.4);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.site-shell[dir="rtl"] .anatomy-system-toolbar button::before {
+  right: -1px;
+  left: auto;
+}
+
+.anatomy-system-toolbar button span {
+  width: 100%;
+  overflow: hidden;
+  font-size: 8px;
+  line-height: 1.15;
+  text-align: center;
+  text-overflow: ellipsis;
+}
+
+.anatomy-system-toolbar button:hover,
+.anatomy-system-toolbar button.active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.anatomy-system-toolbar button.active::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+.anatomy-system-toolbar button:focus-visible,
+.universe-layer-dock button:focus-visible,
+.universe-info-trigger:focus-visible,
+.universe-sheet-close:focus-visible {
+  outline: 2px solid #f2a5bc;
+  outline-offset: 2px;
+}
+
+.universe-layer-dock {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  bottom: 22px;
+  width: min(88%, 510px);
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
+  background: rgba(10, 10, 10, 0.82);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(16px);
+}
+
+.layer-dock-title {
+  min-height: 48px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px 0 4px;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.site-shell[dir="rtl"] .layer-dock-title {
+  padding: 0 4px 0 11px;
+  border-right: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.layer-dock-track {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+}
+
+.layer-dock-track::-webkit-scrollbar {
+  display: none;
+}
+
+.universe-layer-dock button {
+  min-width: 66px;
+  min-height: 64px;
+  flex: 0 0 auto;
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  border: 0;
+  padding: 0 3px;
+  color: rgba(255, 255, 255, 0.55);
+  background: transparent;
+  cursor: pointer;
+  transition: color 0.22s ease, transform 0.22s ease;
+}
+
+.layer-dock-orb {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.72);
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.14), transparent 36%),
+    #171616;
+  transition: border-color 0.22s ease, box-shadow 0.22s ease, color 0.22s ease;
+}
+
+.layer-dock-label {
+  max-width: 72px;
+  overflow: hidden;
+  font-size: 9px;
+  line-height: 1.1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.universe-layer-dock button:hover,
+.universe-layer-dock button.active {
+  color: #fff;
+}
+
+.universe-layer-dock button.active {
+  transform: translateY(-3px);
+}
+
+.universe-layer-dock button.active .layer-dock-orb {
+  color: #fff;
+  border-color: #c41f54;
+  box-shadow: 0 0 0 2px rgba(196, 31, 84, 0.16), 0 0 22px rgba(196, 31, 84, 0.38);
+}
+
+.universe-rotate {
+  right: auto;
+  top: auto;
+  left: 50%;
+  bottom: 116px;
+  z-index: 6;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  white-space: nowrap;
+}
+
+.universe-safety-note {
+  position: absolute;
+  z-index: 6;
+  top: 16px;
+  right: 16px;
+  max-width: min(360px, 48%);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 9px 11px;
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(8, 8, 8, 0.56);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+}
+
+.site-shell[dir="rtl"] .universe-safety-note {
+  right: auto;
+  left: 16px;
+}
+
+.universe-safety-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #e29ab0;
+}
+
+.universe-safety-note span {
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: 0.015em;
+}
+
+.universe-info-trigger,
+.universe-sheet-backdrop,
+.universe-sheet-close,
+.universe-sheet-handle {
+  display: none;
+}
+
+.universe-model-loading {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 9px;
+  color: #fff;
+  background:
+    radial-gradient(circle at 52% 40%, rgba(196, 31, 84, 0.15), transparent 30%),
+    #090909;
+}
+
+.universe-model-loading strong {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.universe-model-loading small {
+  color: rgba(255, 255, 255, 0.46);
+  font-size: 10px;
+}
+
+.model-loading-ring {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-top-color: #c41f54;
+  border-radius: 50%;
+  animation: modelLoadingSpin 0.9s linear infinite;
+}
+
+@keyframes modelLoadingSpin {
+  to { transform: rotate(360deg); }
+}
+
+.universe-interface {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: #eee9e1;
+}
+
+.universe-tabs {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.universe-tabs button,
+.universe-tabs button:nth-child(even),
+.universe-tabs button:nth-child(n+5),
+.universe-tabs button:nth-child(odd):last-child {
+  grid-column: auto;
+  min-height: 74px;
+  border-right: 1px solid rgba(35, 35, 32, 0.12);
+  border-bottom: 1px solid rgba(35, 35, 32, 0.12);
+  padding: 12px 8px;
+  display: grid;
+  grid-template-columns: 1fr;
+  text-align: center;
+}
+
+.universe-tabs button:last-child {
+  border-right: 0;
+}
+
+.universe-tabs button > span {
+  display: none;
+}
+
+.universe-tabs strong {
+  font-family: inherit;
+  font-size: clamp(11px, 1vw, 14px);
+  font-weight: 500;
+}
+
+.universe-detail {
+  min-height: 0;
+  justify-content: flex-start;
+  overflow-y: auto;
+  padding: 38px 36px 42px;
+}
+
+.universe-detail h3 {
+  margin: 20px 0 14px;
+  font-size: clamp(31px, 2.7vw, 46px);
+  line-height: 1.04;
+}
+
+/* The immersive two-column view needs real width. Tablet layouts stack the
+   model and information so neither is compressed into a narrow strip. */
+@media (min-width: 769px) and (max-width: 1100px) {
+  .treatment-universe {
+    height: auto;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(620px, 72svh) auto;
+    overflow: visible;
+  }
+
+  .universe-canvas {
+    height: min(760px, 72svh);
+    min-height: 620px;
+  }
+
+  .universe-interface {
+    height: auto;
+    min-height: 620px;
+    overflow: visible;
+  }
+
+  .universe-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .universe-tabs button:nth-child(3n) {
+    border-right: 0;
+  }
+
+  .universe-detail {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 768px) {
+  .carelens.section-pad {
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .carelens > .section-heading,
+  .carelens > .treatment-links {
+    margin-right: 20px;
+    margin-left: 20px;
+  }
+
+  .treatment-universe {
+    width: 100%;
+    height: 100svh;
+    min-height: 620px;
+    display: block;
+    overflow: hidden;
+  }
+
+  .universe-canvas {
+    width: 100%;
+    height: 100%;
+    min-height: 620px;
+  }
+
+  .universe-rings i {
+    left: 57%;
+    top: 39%;
+    width: min(145vw, 620px);
+  }
+
+  .universe-rings i:nth-child(2) {
+    width: min(112vw, 480px);
+  }
+
+  .universe-rings i:nth-child(3) {
+    width: min(78vw, 330px);
+  }
+
+  .anatomy-system-toolbar {
+    left: max(8px, env(safe-area-inset-left));
+    width: 54px;
+    padding: 5px 0;
+    border-color: rgba(255, 255, 255, 0.06);
+    background: rgba(7, 7, 7, 0.22);
+  }
+
+  .site-shell[dir="rtl"] .anatomy-system-toolbar {
+    right: max(8px, env(safe-area-inset-right));
+    left: auto;
+  }
+
+  .anatomy-system-toolbar button {
+    min-height: 48px;
+    padding: 4px 2px;
+  }
+
+  .anatomy-system-toolbar button span {
+    font-size: 7px;
+  }
+
+  .universe-layer-dock {
+    right: max(10px, env(safe-area-inset-right));
+    bottom: max(10px, env(safe-area-inset-bottom));
+    left: max(68px, calc(env(safe-area-inset-left) + 66px));
+    width: auto;
+    gap: 8px;
+    padding: 8px 9px;
+    transform: none;
+  }
+
+  .site-shell[dir="rtl"] .universe-layer-dock {
+    right: max(68px, calc(env(safe-area-inset-right) + 66px));
+    left: max(10px, env(safe-area-inset-left));
+  }
+
+  .layer-dock-title {
+    min-height: 44px;
+    padding-right: 9px;
+  }
+
+  .layer-dock-track {
+    justify-content: flex-start;
+    gap: 5px;
+  }
+
+  .universe-layer-dock button {
+    min-width: 58px;
+    min-height: 58px;
+  }
+
+  .layer-dock-orb {
+    width: 40px;
+    height: 40px;
+  }
+
+  .universe-rotate {
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + 158px);
+    font-size: 9px;
+  }
+
+  .universe-safety-note {
+    top: max(10px, env(safe-area-inset-top));
+    right: max(10px, env(safe-area-inset-right));
+    max-width: calc(100% - 88px - env(safe-area-inset-left) - env(safe-area-inset-right));
+    padding: 8px 10px;
+  }
+
+  .site-shell[dir="rtl"] .universe-safety-note {
+    right: auto;
+    left: max(10px, env(safe-area-inset-left));
+  }
+
+  .universe-safety-note span {
+    font-size: 11px;
+  }
+
+  .universe-info-trigger {
+    position: absolute;
+    z-index: 7;
+    right: max(12px, env(safe-area-inset-right));
+    bottom: calc(max(10px, env(safe-area-inset-bottom)) + 102px);
+    max-width: 176px;
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 999px;
+    padding: 0 13px;
+    color: #fff;
+    background: rgba(9, 9, 9, 0.76);
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.28);
+    backdrop-filter: blur(12px);
+  }
+
+  .site-shell[dir="rtl"] .universe-info-trigger {
+    right: auto;
+    left: max(12px, env(safe-area-inset-left));
+  }
+
+  .universe-info-trigger span {
+    overflow: hidden;
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .universe-sheet-backdrop {
+    position: absolute;
+    z-index: 8;
+    inset: 0;
+    width: 100%;
+    border: 0;
+    padding: 0;
+    background: rgba(0, 0, 0, 0.52);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .mobile-info-open .universe-sheet-backdrop {
+    display: block;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .universe-interface {
+    position: absolute;
+    z-index: 9;
+    right: max(8px, env(safe-area-inset-right));
+    bottom: max(8px, env(safe-area-inset-bottom));
+    left: max(8px, env(safe-area-inset-left));
+    width: auto;
+    height: auto;
+    max-height: min(78svh, 720px);
+    display: block;
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 22px 22px 14px 14px;
+    box-shadow: 0 -28px 80px rgba(0, 0, 0, 0.42);
+    transform: translateY(calc(100% + 20px));
+    visibility: hidden;
+    transition:
+      transform 0.38s cubic-bezier(0.2, 0.8, 0.2, 1),
+      visibility 0s linear 0.38s;
+  }
+
+  .mobile-info-open .universe-interface {
+    transform: translateY(0);
+    visibility: visible;
+    transition:
+      transform 0.38s cubic-bezier(0.2, 0.8, 0.2, 1),
+      visibility 0s;
+  }
+
+  .universe-sheet-handle {
+    position: sticky;
+    z-index: 2;
+    top: 9px;
+    width: 42px;
+    height: 4px;
+    margin: 9px auto 0;
+    display: block;
+    border-radius: 999px;
+    background: rgba(30, 28, 25, 0.24);
+  }
+
+  .universe-sheet-close {
+    position: sticky;
+    z-index: 3;
+    top: 12px;
+    margin: -4px 14px -36px auto;
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(35, 35, 32, 0.13);
+    border-radius: 50%;
+    color: #24221f;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(10px);
+  }
+
+  .site-shell[dir="rtl"] .universe-sheet-close {
+    margin-right: 14px;
+    margin-left: auto;
+  }
+
+  .universe-tabs {
+    display: none;
+  }
+
+  .universe-detail {
+    display: block;
+    overflow: visible;
+    padding: 44px 20px calc(28px + env(safe-area-inset-bottom));
+  }
+
+  .universe-detail h3 {
+    margin: 18px 0 13px;
+    padding-right: 40px;
+    font-size: clamp(28px, 8.2vw, 38px);
+  }
+
+  .site-shell[dir="rtl"] .universe-detail h3 {
+    padding-right: 0;
+    padding-left: 40px;
+  }
+
+  .universe-actions {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 380px) {
+  .layer-dock-title span {
+    display: none;
+  }
+
+  .layer-dock-title {
+    padding-right: 8px;
+  }
+
+  .universe-info-trigger {
+    max-width: 148px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .universe-canvas-mount,
+  .model-loading-ring,
+  .universe-layer-dock button,
+  .anatomy-system-toolbar button,
+  .universe-interface,
+  .universe-sheet-backdrop {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ══ Interaction layer ═════════════════════════════════════════════════════ */
+
+/**
+ * One motion vocabulary for the whole client-facing site.
+ *
+ * Deliberately additive and deliberately last. The sections above already carry
+ * their own hover states, tuned per component; replacing those would be a
+ * redesign. What was missing was the layer underneath them — press feedback,
+ * icon travel, a focus ring that looks designed rather than defaulted, and depth
+ * that responds to the pointer. Those belong in one place, because the thing that
+ * reads as quality is not any single effect but the fact that every element
+ * answers in the same accent.
+ *
+ * Three rules held throughout:
+ *
+ *  - **Transform and opacity only.** Both are compositor properties, so none of
+ *    this can trigger layout or paint, which is what keeps a page this animated
+ *    from costing anything measurable.
+ *  - **Down is pressed, up is offered.** Hover lifts, active presses past rest.
+ *    A control that only lifts feels decorative; one that also gives feels
+ *    physical.
+ *  - **Everything scales from the tokens below.** Timings are three values, not
+ *    thirty, which is the difference between a coordinated interface and a pile
+ *    of individually plausible transitions.
+ */
+
+:root {
+  /** Pointer-response timings. Fast enough to feel attached to the cursor. */
+  --tap: 90ms;
+  --lift: 260ms;
+  --settle: 520ms;
+  /** A softer overshoot for elements that travel, never for colour. */
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+}
+
+/* ── Press feedback ─────────────────────────────────────────────────────── */
+
+/**
+ * Every control gives when pressed.
+ *
+ * The site's buttons already lift on hover; none of them acknowledged the click
+ * itself, so a tap on a touch device — where there is no hover at all — produced
+ * no feedback whatsoever until the next screen arrived.
+ */
+.button:active:not(:disabled),
+.text-button:active,
+.nav-book:active,
+.menu-button:active,
+.availability-card:active,
+.universe-primary:active {
+  transform: translateY(1px) scale(0.988);
+  transition-duration: var(--tap);
+}
+
+/* ── Icon travel ────────────────────────────────────────────────────────── */
+
+/**
+ * Arrows lean toward where they lead.
+ *
+ * The most legible micro-interaction available: it says "forward" without a word
+ * of copy. Only the trailing icon moves, and only on the axis the writing runs,
+ * so it mirrors correctly on the Arabic site rather than pointing back at itself.
+ */
+.button > svg:last-child,
+.text-button > svg:last-child,
+.universe-primary > svg:last-child,
+.final-actions .button > svg:last-child {
+  transition: transform var(--lift) var(--ease-spring);
+}
+
+.button:hover > svg:last-child,
+.text-button:hover > svg:last-child,
+.universe-primary:hover > svg:last-child {
+  transform: translateX(4px);
+}
+
+[dir="rtl"] .button:hover > svg:last-child,
+[dir="rtl"] .text-button:hover > svg:last-child,
+[dir="rtl"] .universe-primary:hover > svg:last-child {
+  transform: translateX(-4px);
+}
+
+/** The availability card's chevron leads the same way. */
+.availability-card:hover .availability-arrow {
+  transform: translateX(3px);
+}
+
+.availability-arrow {
+  transition: transform var(--lift) var(--ease-spring);
+}
+
+[dir="rtl"] .availability-card:hover .availability-arrow {
+  transform: translateX(-3px);
+}
+
+/* ── Card depth ─────────────────────────────────────────────────────────── */
+
+/**
+ * Cards rise, and a soft wash follows the light.
+ *
+ * A flat card that only changes border colour on hover reads as a hyperlink with
+ * padding. Two shadows rather than one: a tight contact shadow that keeps the
+ * card attached to the page, and a wide ambient one that gives it height. That
+ * pairing is the whole difference between "premium card" and "box with a
+ * box-shadow".
+ */
+/**
+ * The portal cards are deliberately absent from this list.
+ *
+ * ScrollTrigger scrubs their transform, and a transform written inline by GSAP
+ * wins against a CSS `:hover` rule every time — so a hover lift there would not
+ * apply, and the `transition` needed to make it smooth would instead put a lag
+ * between the scroll position and the card. Elements the timeline owns are left
+ * to the timeline.
+ */
+.journey-grid article,
+.location-card {
+  transition:
+    transform var(--settle) var(--ease-out),
+    box-shadow var(--settle) var(--ease-out),
+    border-color var(--settle) var(--ease-out);
+  will-change: auto;
+}
+
+.journey-grid article:hover,
+.location-card:hover {
+  transform: translateY(-6px);
+  box-shadow:
+    0 2px 6px rgba(24, 22, 20, 0.05),
+    0 22px 48px -18px rgba(24, 22, 20, 0.16);
+}
+
+/**
+ * A single sweep of light across the top edge on hover.
+ *
+ * Rendered as a gradient border rather than an overlay, so it cannot intercept
+ * the pointer or wash out the text underneath it.
+ */
+.journey-grid article::after,
+.location-card::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(155, 46, 74, 0.42),
+    transparent
+  );
+  opacity: 0;
+  transition: opacity var(--settle) var(--ease-out);
+  pointer-events: none;
+}
+
+.journey-grid article:hover::after,
+.location-card:hover::after {
+  opacity: 1;
+}
+
+/* ── Navigation feedback ────────────────────────────────────────────────── */
+
+/**
+ * A rule that grows from the centre under each nav item.
+ *
+ * Scaled rather than sized, so it animates on the compositor. `transform-origin`
+ * at the centre makes it open outward from the word instead of wiping across it,
+ * which is the version that reads as deliberate.
+ */
+.nav a {
+  position: relative;
+}
+
+.nav a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -5px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.5;
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform var(--lift) var(--ease-out);
+}
+
+.nav a:hover::after,
+.nav a:focus-visible::after {
+  transform: scaleX(1);
+}
+
+/* ── Focus ──────────────────────────────────────────────────────────────── */
+
+/**
+ * One focus ring, everywhere, and never removed.
+ *
+ * `:focus-visible` rather than `:focus`, so a mouse click does not leave a ring
+ * behind while keyboard navigation still gets one. The offset is what makes it
+ * legible over both the ivory and the charcoal sections — a ring drawn on the
+ * element's own edge disappears into a dark button.
+ */
+.button:focus-visible,
+.text-button:focus-visible,
+.nav a:focus-visible,
+.nav-book:focus-visible,
+.menu-button:focus-visible,
+.availability-card:focus-visible,
+.location-card:focus-visible,
+.journey-grid article a:focus-visible,
+.experience-replay:focus-visible,
+.site-footer a:focus-visible {
+  outline: 2px solid var(--burgundy);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* Dark sections need the ring in the light accent to stay visible. */
+.carelens .button:focus-visible,
+.final-cta .button:focus-visible,
+.experience-portal a:focus-visible,
+.treatment-universe button:focus-visible {
+  outline-color: rgba(241, 218, 221, 0.9);
+}
+
+/* ── Counters ───────────────────────────────────────────────────────────── */
+
+/**
+ * The static twin of every animated stat.
+ *
+ * Present for assistive technology and never shown: the counting span carries
+ * the same figure at rest, so both agree except during the second and a half the
+ * number is climbing. Positioned rather than `display: none`, because a hidden
+ * element is not announced at all.
+ */
+.stat-static {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/** Tabular figures stop the stat jittering as digits change width. */
+.stat-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/**
+ * The counter span has to keep the display typography it is nested inside.
+ *
+ * `.proof-stats span` styles the caption under each figure at 9px uppercase, and
+ * wrapping the number in a span to animate it silently opted the number into that
+ * rule — the stats rendered at label size with the superscript still at 23px. An
+ * element-name selector cannot tell the difference between the two spans, so the
+ * fix is to let anything inside the `strong` inherit from it.
+ */
+.proof-stats strong span {
+  /**
+   * Longhand, not the `font` shorthand.
+   *
+   * `font: inherit` resets every font longhand it does not name — including
+   * `font-variant-numeric` — so it silently undid the tabular figures set on
+   * `.stat-count` a few rules above and the counter went back to jittering as
+   * digits changed width. Inheriting the four properties that actually matter
+   * leaves the rest alone.
+   */
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: none;
+}
+
+/* ── Form fields ────────────────────────────────────────────────────────── */
+
+/**
+ * Fields settle rather than snap.
+ *
+ * A booking form is where a prospective patient commits, so it is the last place
+ * that should feel abrupt. The label lift is left to the components that own it;
+ * this is only the field's own response.
+ */
+.field input,
+.field select,
+.field textarea {
+  transition:
+    border-color var(--lift) var(--ease-out),
+    box-shadow var(--lift) var(--ease-out),
+    background var(--lift) var(--ease-out);
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  box-shadow: 0 0 0 3px rgba(155, 46, 74, 0.12);
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────────────── */
+
+/**
+ * Everything above becomes a state change rather than a movement.
+ *
+ * Note what survives: the focus ring, the shadows, the field glow. A visitor who
+ * asks for less motion is asking not to be moved, not to be given a flatter
+ * interface — stripping the affordances along with the animation would make the
+ * site harder to use for the people most likely to need it legible.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .button:active:not(:disabled),
+  .text-button:active,
+  .nav-book:active,
+  .menu-button:active,
+  .availability-card:active,
+  .universe-primary:active,
+  .journey-grid article:hover,
+  .location-card:hover {
+    transform: none;
+  }
+
+  .button > svg:last-child,
+  .text-button > svg:last-child,
+  .universe-primary > svg:last-child,
+  .availability-arrow,
+  .nav a::after,
+  .journey-grid article,
+  .location-card,
+  .field input,
+  .field select,
+  .field textarea {
+    transition: none;
+  }
+
+  /* The nav rule still marks the hovered item; it simply appears. */
+  .nav a:hover::after,
+  .nav a:focus-visible::after {
+    transform: scaleX(1);
+  }
+}
+
+/* ══ Experience layer ══════════════════════════════════════════════════════ */
+
+/**
+ * Modal choreography.
+ *
+ * One entrance for every dialog built on `Modal`: the scrim breathes in and the
+ * panel rises a touch and settles. `hidden` is `display: none`, so a dialog kept
+ * mounted-but-inert (the booking form) replays the entrance each time it opens.
+ * The global reduced-motion block collapses both keyframes to their end state.
+ */
+.modal-scrim {
+  animation: scrimIn 0.42s var(--ease-out) both;
+}
+
+@keyframes scrimIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-layer > :not(.modal-scrim) {
+  animation: modalRise 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes modalRise {
+  from { opacity: 0; transform: translateY(16px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/** NOOR is a docked sheet, so it arrives from its own edge instead of rising. */
+.modal-layer > .noor-panel {
+  animation: noorSlideIn 0.55s var(--ease-out) both;
+}
+
+@keyframes noorSlideIn {
+  from { opacity: 0; transform: translateX(56px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.modal-layer > .noor-panel[dir="rtl"] {
+  animation-name: noorSlideInRtl;
+}
+
+@keyframes noorSlideInRtl {
+  from { opacity: 0; transform: translateX(-56px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/**
+ * The header past the hero: afloat rather than resting on the page.
+ *
+ * Same height — the sticky hero docks against a 104px header, and a shrinking
+ * header would open a seam under it mid-hold. What changes is the material:
+ * deeper glass, a hairline, and a soft drop, so crossing out of the hero reads
+ * as the interface lifting off the brand canvas.
+ */
+.site-header {
+  transition:
+    background 0.5s var(--ease-out),
+    box-shadow 0.5s var(--ease-out),
+    border-color 0.5s var(--ease-out);
+  border-bottom: 1px solid transparent;
+}
+
+.site-header--afloat {
+  background: rgba(242, 238, 230, 0.72);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border-bottom-color: rgba(24, 22, 20, 0.07);
+  box-shadow: 0 18px 44px -30px rgba(24, 22, 20, 0.35);
+}
+
+/**
+ * Section washes: light that belongs to the layout, not decoration on top.
+ *
+ * Each dark band gets one restrained radial glow in the brand burgundy so the
+ * page alternates between paper and depth instead of flat ivory and flat black.
+ * Backgrounds only — no new elements, no stacking-context games.
+ */
+.proof-strip {
+  background-image: radial-gradient(
+    ellipse 90% 130% at 85% -20%,
+    rgba(123, 38, 60, 0.34),
+    transparent 55%
+  );
+}
+
+.final-cta {
+  background-image: radial-gradient(
+    ellipse 80% 120% at 15% 115%,
+    rgba(123, 38, 60, 0.3),
+    transparent 58%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-header {
+    transition: none;
+  }
+}
+
+/* ══ Sub-page choreography ═════════════════════════════════════════════════ */
+
+/**
+ * Page entrances.
+ *
+ * Every standalone page arrives instead of appearing: one rise-and-settle on
+ * the whole document body of the route. This is the entrance half of "page
+ * transitions" — exits are deliberately not intercepted, because hijacking
+ * navigation to play an exit animation trades a real page load for a fake one
+ * and breaks the back button's instant response.
+ */
+.treatment-page,
+.legal-page {
+  animation: pageEnter 0.7s var(--ease-out) both;
+}
+
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/** The treatment hero introduces itself line by line on load. */
+.treatment-hero > * {
+  animation: pageEnter 0.75s var(--ease-out) both;
+}
+
+.treatment-hero > :nth-child(1) { animation-delay: 0.05s; }
+.treatment-hero > :nth-child(2) { animation-delay: 0.12s; }
+.treatment-hero > :nth-child(3) { animation-delay: 0.2s; }
+.treatment-hero > :nth-child(4) { animation-delay: 0.28s; }
+.treatment-hero > :nth-child(5) { animation-delay: 0.36s; }
+.treatment-hero > :nth-child(6) { animation-delay: 0.44s; }
+
+/**
+ * Scroll reveals for server-rendered pages (`RevealOnScroll` sets the flag).
+ *
+ * Hidden ONLY once `data-reveal-ready` exists on <html>, so no-JS visitors and
+ * crawlers always see the content. Children cascade with transition delays, so
+ * a section reads as one orchestrated movement rather than a block toggle.
+ */
+html[data-reveal-ready] [data-reveal] {
+  opacity: 0;
+  transform: translateY(30px);
+  transition:
+    opacity 0.85s var(--ease-out),
+    transform 0.85s var(--ease-out);
+}
+
+html[data-reveal-ready] [data-reveal].in-view {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+html[data-reveal-ready] [data-reveal] :is(.treatment-checks li, .treatment-phases article, .treatment-clinics a, .treatment-faq details) {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 0.6s var(--ease-out),
+    transform 0.6s var(--ease-out);
+}
+
+html[data-reveal-ready] [data-reveal].in-view :is(.treatment-checks li, .treatment-phases article, .treatment-clinics a, .treatment-faq details) {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+html[data-reveal-ready] [data-reveal].in-view :is(.treatment-checks li, .treatment-phases article, .treatment-clinics a, .treatment-faq details):nth-child(1) { transition-delay: 0.08s; }
+html[data-reveal-ready] [data-reveal].in-view :is(.treatment-checks li, .treatment-phases article, .treatment-clinics a, .treatment-faq details):nth-child(2) { transition-delay: 0.16s; }
+html[data-reveal-ready] [data-reveal].in-view :is(.treatment-checks li, .treatment-phases article, .treatment-clinics a, .treatment-faq details):nth-child(3) { transition-delay: 0.24s; }
+html[data-reveal-ready] [data-reveal].in-view :is(.treatment-checks li, .treatment-phases article, .treatment-clinics a, .treatment-faq details):nth-child(4) { transition-delay: 0.32s; }
+html[data-reveal-ready] [data-reveal].in-view :is(.treatment-checks li, .treatment-phases article, .treatment-clinics a, .treatment-faq details):nth-child(n + 5) { transition-delay: 0.4s; }
+
+/**
+ * FAQ, opening like a considered answer.
+ *
+ * The marker is the site's "+" — it turns into a close by rotation, not by a
+ * character swap, so the change itself is motion. The answer slides down as it
+ * fades; `details` cannot animate its own height without JS, so the content
+ * animates within the space instead, which reads nearly the same at this size.
+ */
+.treatment-faq summary {
+  transition: background 0.35s var(--ease-out), color 0.35s var(--ease-out);
+}
+
+.treatment-faq summary:hover {
+  background: rgba(123, 38, 60, 0.045);
+}
+
+.treatment-faq summary::after {
+  display: inline-block;
+  transition: transform 0.4s var(--ease-spring), color 0.3s var(--ease-out);
+}
+
+.treatment-faq details[open] > summary::after {
+  transform: rotate(45deg);
+}
+
+.treatment-faq details[open] > p {
+  animation: faqAnswerIn 0.5s var(--ease-out) both;
+}
+
+@keyframes faqAnswerIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/**
+ * Journey designer: each step arrives, options cascade, progress glides.
+ *
+ * The step container is keyed by question, so React remounts it per answer and
+ * these entrance animations replay — the step *transition* comes free from the
+ * remount. The 220ms selection delay already in the component gives the leave
+ * a beat before the next question lands.
+ */
+.journey-question,
+.journey-result {
+  animation: journeyStepIn 0.5s var(--ease-out) both;
+}
+
+@keyframes journeyStepIn {
+  from { opacity: 0; transform: translateY(22px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.journey-question .journey-options button {
+  animation: journeyStepIn 0.55s var(--ease-out) both;
+}
+
+.journey-question .journey-options button:nth-child(1) { animation-delay: 0.08s; }
+.journey-question .journey-options button:nth-child(2) { animation-delay: 0.15s; }
+.journey-question .journey-options button:nth-child(3) { animation-delay: 0.22s; }
+.journey-question .journey-options button:nth-child(4) { animation-delay: 0.29s; }
+
+.journey-progress span {
+  transition: width 0.55s var(--ease-smooth);
+}
+
+/**
+ * Loading states that look intentional.
+ *
+ * The booking slot grid already announces `aria-busy` while availability
+ * refreshes; the interface now shows what it says — the grid settles to a calm
+ * pulse instead of sitting inert, and pointer input is paused so a slot cannot
+ * be grabbed mid-refresh.
+ */
+.slots[aria-busy="true"] {
+  pointer-events: none;
+  animation: slotsBreathe 1.2s var(--ease-smooth) infinite alternate;
+}
+
+@keyframes slotsBreathe {
+  from { opacity: 0.75; }
+  to { opacity: 0.4; }
+}
+
+/** Leading icons answer hover with a nudge; trailing arrows already travel. */
+.button > svg:first-child,
+.text-button > svg:first-child {
+  transition: transform var(--lift) var(--ease-spring);
+}
+
+.button:hover > svg:first-child,
+.text-button:hover > svg:first-child {
+  transform: scale(1.12) rotate(-4deg);
+}
+
+/**
+ * Reduced motion: content is always present and still.
+ *
+ * The global 0.001ms rule collapses the animations; these make the reveal
+ * system inert outright so nothing depends on a transition firing.
+ */
+@media (prefers-reduced-motion: reduce) {
+  html[data-reveal-ready] [data-reveal],
+  html[data-reveal-ready] [data-reveal] :is(.treatment-checks li, .treatment-phases article, .treatment-clinics a, .treatment-faq details) {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+
+  .slots[aria-busy="true"] {
+    animation: none;
+    opacity: 0.6;
+  }
+
+  .button:hover > svg:first-child,
+  .text-button:hover > svg:first-child {
+    transform: none;
+  }
+}
+
+/* ══ Luxury pass ═══════════════════════════════════════════════════════════ */
+
+/**
+ * Grounded in the installed design intelligence (ui-ux-pro-max, "Trust &
+ * Authority" for healthcare): professional restraint, layered subtle shadows
+ * for depth, 300–500ms moves, metrics that reveal smoothly. Nothing here adds
+ * a new colour to the brand — depth and cadence do the talking.
+ */
+
+/** Text selection in the house burgundy — the smallest premium tell there is. */
+::selection {
+  background: rgba(123, 38, 60, 0.85);
+  color: #f6f1e9;
+}
+
+/**
+ * Scrollbars that belong to the design.
+ *
+ * The stock Windows scrollbar is seventeen pixels of grey chrome, and it was
+ * sitting in the middle of the CareLens panel in every screenshot. Thin,
+ * rounded, translucent — visible when needed, silent otherwise.
+ */
+html {
+  scrollbar-color: rgba(23, 23, 22, 0.3) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(23, 23, 22, 0.22);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(23, 23, 22, 0.38);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+/** Dark surfaces get a light thumb, or the bar disappears entirely. */
+.treatment-universe *::-webkit-scrollbar-thumb,
+.specialty-deep-dive::-webkit-scrollbar-thumb {
+  background: rgba(238, 233, 225, 0.28);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+/**
+ * CareLens as an instrument, not a slab.
+ *
+ * The explorer used to run flush against the page — a hard black rectangle in
+ * an ivory context. Framed with a radius, a hairline and two layered shadows it
+ * reads as a piece of medical equipment set down on the page, which is exactly
+ * what it is. The glow underneath ties it to the section instead of leaving it
+ * floating in space.
+ */
+.treatment-universe {
+  border-radius: 26px;
+  border: 1px solid rgba(23, 23, 22, 0.35);
+  box-shadow:
+    0 1px 2px rgba(24, 22, 20, 0.18),
+    0 32px 84px -32px rgba(24, 22, 20, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+
+.carelens {
+  background-image: radial-gradient(
+    ellipse 72% 46% at 50% 62%,
+    rgba(123, 38, 60, 0.055),
+    transparent 68%
+  );
+}
+
+/**
+ * The panel answers every choice with motion.
+ *
+ * `.universe-detail` already re-enters when the area or depth changes; these
+ * finish the family. The region card re-mounts per region, so each selection
+ * slides its clinical copy in; the tag chips ride the same move.
+ */
+.universe-region-card {
+  animation: regionCardIn 0.5s var(--ease-out) both;
+}
+
+@keyframes regionCardIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/** Area tabs: a sweep that draws under the choice instead of a colour snap. */
+.universe-tabs button {
+  position: relative;
+  transition: background 0.4s var(--ease-out), color 0.4s var(--ease-out);
+}
+
+.universe-tabs button::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px 0;
+  height: 2px;
+  background: var(--burgundy);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.45s var(--ease-out);
+}
+
+.universe-tabs button:hover:not(.active) {
+  background: rgba(123, 38, 60, 0.05);
+}
+
+.universe-tabs button.active::after {
+  transform: scaleX(1);
+}
+
+/** Region rail: choices settle rather than flip. */
+.universe-regions button {
+  transition:
+    background 0.35s var(--ease-out),
+    color 0.35s var(--ease-out),
+    border-color 0.35s var(--ease-out),
+    transform 0.35s var(--ease-out);
+}
+
+.universe-regions button:hover {
+  transform: translateY(-1px);
+}
+
+.universe-regions button:active {
+  transform: translateY(0) scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .universe-regions button:hover,
+  .universe-regions button:active {
+    transform: none;
+  }
+
+  .universe-tabs button::after {
+    transition: none;
+  }
+}
+
+/**
+ * CareLens, folded into the page instead of framed as an app.
+ *
+ * What made the explorer read as "an isolated window" was its tab strip: six
+ * bordered cells for five areas — the spare cell sat there as an empty box —
+ * with an application-chrome look no editorial page has. The row is now five
+ * quiet labels on a single hairline, the active one carried by colour and the
+ * underline sweep, which is how the rest of the site marks selection.
+ */
+.universe-tabs {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border-bottom: 1px solid rgba(35, 35, 32, 0.14);
+  background: transparent;
+}
+
+.universe-tabs button,
+.universe-tabs button:nth-child(even),
+.universe-tabs button:nth-child(n + 5),
+.universe-tabs button:nth-child(odd):last-child,
+.universe-tabs button:last-child {
+  border-right: 0;
+  border-bottom: 0;
+  min-height: 64px;
+  background: transparent;
+  color: #565049;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.universe-tabs button.active {
+  background: transparent;
+  color: var(--burgundy);
+}
+
+.universe-tabs button:not(.active):hover {
+  background: rgba(123, 38, 60, 0.045);
+  color: #262320;
+}
+
+/** The section wears its name the way the portal wears BEYOND. */
+.carelens {
+  position: relative;
+  overflow: hidden;
+}
+
+.carelens-word {
+  position: absolute;
+  z-index: 0;
+  top: 0.5vw;
+  inset-inline-end: -2vw;
+  color: rgba(24, 22, 20, 0.032);
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 13.5vw;
+  line-height: 0.8;
+  letter-spacing: -0.05em;
+  pointer-events: none;
+  user-select: none;
+}
+
+.carelens > :not(.carelens-word) {
+  position: relative;
+  z-index: 1;
+}
+
+/**
+ * Idle life: the instrument hums even before it is touched.
+ *
+ * The decorative rings around the avatar turn once every two minutes — slow
+ * enough to be felt rather than seen, and the difference between a live
+ * instrument and a still image. Compositor-only, and gone under reduced motion
+ * with the rest of the animation layer.
+ */
+.universe-rings::after {
+  animation: ringsDrift 120s linear infinite;
+}
+
+@keyframes ringsDrift {
+  to { transform: rotate(360deg); }
 }

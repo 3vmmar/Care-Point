@@ -88,10 +88,18 @@ test("CareLens remains readable and operable when its deferred interface mounts"
   await dismissIntroduction(page);
   await page.locator("#carelens").scrollIntoViewIfNeeded();
   await expect(page.locator(".treatment-universe")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("button", { name: /Nose & profile/ })).toBeVisible();
+  /**
+   * Scoped to the Care areas rail: the quick toolbar over the canvas carries a
+   * second "Nose & profile" button (same accessible name, by design — it is the
+   * same control offered twice), so the bare role query is ambiguous under
+   * strict mode. The rail is the keyboard path this test is exercising.
+   */
+  const nose = page
+    .getByRole("group", { name: /care areas/i })
+    .getByRole("button", { name: /Nose & profile/ });
+  await expect(nose).toBeVisible();
   await expectAccessible(page, testInfo, "CareLens interface", "#carelens");
 
-  const nose = page.getByRole("button", { name: /Nose & profile/ });
   await nose.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: /balance from every angle/i })).toBeVisible();

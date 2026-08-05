@@ -41,12 +41,59 @@ async function openCareLens(page: Page) {
   return page.locator(".treatment-universe");
 }
 
-test("the explorer offers five areas, ending with Dental", async ({ page }) => {
+async function selectDental(universe: ReturnType<Page["locator"]>) {
+  await universe
+    .getByRole("group", { name: /care areas/i })
+    .getByRole("button", { name: /dental/i })
+    .click();
+}
+
+test("the explorer offers five areas, including Dental", async ({ page }) => {
   const universe = await openCareLens(page);
   const tabs = universe.getByRole("group", { name: /care areas/i }).getByRole("button");
 
   await expect(tabs).toHaveCount(5);
   await expect(tabs.nth(4)).toContainText("Dental");
+});
+
+test("Hair & scalp is absent from every CareLens control", async ({ page }) => {
+  /**
+   * The area was withdrawn before launch. Removing it from the content model is
+   * not enough on its own — an icon rail, a region label or a bookable
+   * procedure left behind advertises a consultation the booking form can no
+   * longer take, and none of those would fail a unit test.
+   */
+  const universe = await openCareLens(page);
+
+  for (const group of ["care areas", "quick care area selector", "anatomical regions"]) {
+    const controls = universe.getByRole("group", { name: new RegExp(group, "i") });
+    await expect(controls.getByRole("button", { name: /hair|scalp/i })).toHaveCount(0);
+  }
+
+  await expect(universe).not.toContainText(/hair & scalp/i);
+});
+
+test("the safety limitation stays visible beside the model", async ({ page }) => {
+  const universe = await openCareLens(page);
+  const note = universe.locator(".universe-safety-note");
+  await expect(note).toBeVisible();
+  await expect(note).toContainText(/education/i);
+  await expect(note).toContainText(/not a medical diagnosis/i);
+  await expect(note).toContainText(/not.*guaranteed/i);
+});
+
+test("Body architecture exposes its abdominal and frame landmarks", async ({ page }) => {
+  const universe = await openCareLens(page);
+  await universe
+    .getByRole("group", { name: /care areas/i })
+    .getByRole("button", { name: /body architecture/i })
+    .click();
+
+  const regions = universe.getByRole("group", { name: /anatomical regions/i });
+  await expect(regions.getByRole("button", { name: "Waist & flanks", exact: true })).toBeVisible();
+  await universe.getByRole("button", { name: "Structure", exact: true }).click();
+  await expect(regions.getByRole("button", { name: "Abdominal wall", exact: true })).toBeVisible();
+  await expect(universe.locator(".universe-region-card")).toContainText(/Body contouring consultation/i);
 });
 
 test("the 3D scene mounts once it is scrolled into view", async ({ page }) => {
@@ -75,7 +122,7 @@ test("the 3D scene mounts once it is scrolled into view", async ({ page }) => {
 
 test("Dental exposes all three depths and its own vocabulary", async ({ page }) => {
   const universe = await openCareLens(page);
-  await universe.getByRole("button", { name: /dental/i }).click();
+  await selectDental(universe);
 
   const depth = universe.getByRole("group", { name: /view depth/i });
   await expect(depth.getByRole("button")).toHaveCount(3);
@@ -89,7 +136,7 @@ test("Dental exposes all three depths and its own vocabulary", async ({ page }) 
 
 test("cutting deeper reveals regions that were not there before", async ({ page }) => {
   const universe = await openCareLens(page);
-  await universe.getByRole("button", { name: /dental/i }).click();
+  await selectDental(universe);
 
   const regions = universe.getByRole("group", { name: /anatomical regions/i }).getByRole("button");
   const atSurface = await regions.allInnerTexts();
@@ -181,6 +228,34 @@ test("switching area re-frames rather than stranding the camera", async ({ page 
   // already done reads as decoration.
   await expect(universe.locator(".universe-rotate")).toHaveCount(0);
 
-  await universe.getByRole("button", { name: /dental/i }).click();
+  await selectDental(universe);
   await expect(universe.locator(".universe-region-card h4")).toHaveText("Smile design");
+});
+
+test.describe("mobile CareLens", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test("the canvas leaves vertical gestures to the page", async ({ page }) => {
+    await openCareLens(page);
+    const canvas = page.locator(".universe-canvas canvas");
+    await expect(canvas).toBeVisible({ timeout: 20_000 });
+    await expect(canvas).toHaveCSS("touch-action", "pan-y");
+  });
+
+  test("the information sheet traps focus and restores it when dismissed", async ({ page }) => {
+    const universe = await openCareLens(page);
+    const trigger = universe.getByRole("button", { name: /brow & forehead/i });
+    await expect(trigger).toBeVisible();
+    await trigger.focus();
+    await trigger.click();
+
+    const dialog = page.getByRole("dialog", { name: /anatomy information/i });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAttribute("aria-modal", "true");
+    await expect(dialog.getByRole("button", { name: /close anatomy information/i })).toBeFocused();
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  });
 });
