@@ -1,16 +1,13 @@
-import { env } from "cloudflare:workers";
+import { database, type Database, type Statement } from "@/db/client";
 import {
   CONSENT_VERSION,
-  DEFAULT_APPOINTMENT_MINUTES,
-  findBranch,
   HOLD_DURATION_MINUTES,
   PII_RETENTION_DAYS,
   serviceDuration,
 } from "@/lib/clinic";
-import { generateSlots, occupiedCells } from "@/lib/schedule";
-import { addDays, clinicToday, openDayKeys, type DateKey } from "@/lib/dates";
+import { occupiedCells } from "@/lib/schedule";
+import { addDays, clinicToday, type DateKey } from "@/lib/dates";
 import {
-  ensureNotificationSchema,
   notificationJobStatements,
 } from "@/db/notifications";
 
@@ -77,209 +74,19 @@ export type Appointment = {
 export type ConfirmedAppointment = Appointment & { manageToken: string | null };
 
 const APPOINTMENT_COLUMNS = `id, status, branch, practitioner, service,
-        slot_date AS slotDate, slot_time AS slotTime,
-        duration_minutes AS durationMinutes,
-        patient_name AS patientName, patient_phone AS patientPhone,
-        patient_email AS patientEmail, patient_note AS patientNote,
-        staff_note AS staffNote, language, source,
-        created_at AS createdAt, confirmed_at AS confirmedAt,
-        checked_in_at AS checkedInAt, cancelled_at AS cancelledAt,
-        cancelled_by AS cancelledBy,
-        cancellation_reason AS cancellationReason,
-        cancellation_note AS cancellationNote`;
-
-function database() {
-  if (!env.DB) throw new Error("The appointment database is not available.");
-  return env.DB;
-}
+        slot_date AS "slotDate", slot_time AS "slotTime",
+        duration_minutes AS "durationMinutes",
+        patient_name AS "patientName", patient_phone AS "patientPhone",
+        patient_email AS "patientEmail", patient_note AS "patientNote",
+        staff_note AS "staffNote", language, source,
+        created_at AS "createdAt", confirmed_at AS "confirmedAt",
+        checked_in_at AS "checkedInAt", cancelled_at AS "cancelledAt",
+        cancelled_by AS "cancelledBy",
+        cancellation_reason AS "cancellationReason",
+        cancellation_note AS "cancellationNote"`;
 
 function now() {
   return new Date().toISOString();
-}
-
-/**
- * Schema setup is idempotent but not free — it used to run on every request,
- * costing several D1 round-trips before any real query. It is memoised for the
- * lifetime of the isolate instead, and the promise (not a boolean) is cached so
- * concurrent requests during a cold start all await the same work.
- */
-let schemaReady: Promise<void> | null = null;
-
-export function ensureBookingSchema(): Promise<void> {
-  schemaReady ??= createSchema().catch((error) => {
-    // Never cache a failure, or the isolate would stay broken until it recycles.
-    schemaReady = null;
-    throw error;
-  });
-  return schemaReady;
-}
-
-async function createSchema() {
-  const db = database();
-  await db.batch([
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS appointments (
-        id TEXT PRIMARY KEY,
-        hold_token TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'held',
-        branch TEXT NOT NULL,
-        service TEXT NOT NULL,
-        slot_date TEXT NOT NULL,
-        slot_time TEXT NOT NULL,
-        duration_minutes INTEGER NOT NULL DEFAULT ${DEFAULT_APPOINTMENT_MINUTES},
-        patient_name TEXT,
-        patient_phone TEXT,
-        patient_email TEXT,
-        language TEXT NOT NULL DEFAULT 'en',
-        source TEXT NOT NULL DEFAULT 'website',
-        client_fingerprint TEXT,
-        consent_given_at TEXT,
-        consent_version TEXT,
-        created_at TEXT NOT NULL,
-        hold_expires_at TEXT,
-        confirmed_at TEXT
-      )
-    `),
-    db.prepare(`
-      CREATE INDEX IF NOT EXISTS appointments_status_date
-      ON appointments (status, slot_date)
-    `),
-    db.prepare(`
-      CREATE INDEX IF NOT EXISTS appointments_hold_token
-      ON appointments (hold_token)
-    `),
-    db.prepare(`
-      CREATE INDEX IF NOT EXISTS appointments_slot_date
-      ON appointments (slot_date)
-    `),
-  ]);
-
-  // Databases created before these columns existed are upgraded in place;
-  // SQLite has no ADD COLUMN IF NOT EXISTS, so a duplicate is the success case.
-  for (const column of [
-    "client_fingerprint TEXT",
-    "consent_given_at TEXT",
-    "consent_version TEXT",
-    "patient_note TEXT",
-    "staff_note TEXT",
-    "manage_token TEXT",
-    "checked_in_at TEXT",
-    "cancelled_at TEXT",
-    "cancelled_by TEXT",
-    "status_updated_at TEXT",
-    "reminder_sent_at TEXT",
-    "reminder_queued_at TEXT",
-    "purged_at TEXT",
-    "practitioner TEXT",
-    "cancellation_reason TEXT",
-    "cancellation_note TEXT",
-  ]) {
-    try {
-      await db.prepare(`ALTER TABLE appointments ADD COLUMN ${column}`).run();
-    } catch (error) {
-      if (!/duplicate column/i.test(String(error))) throw error;
-    }
-  }
-
-  /**
-   * Occupancy grid.
-   *
-   * Uniqueness on the appointment's own start time was enough while every
-   * appointment lasted the same 45 minutes. It is not enough now: a 16:00
-   * sixty-minute consultation and a 16:30 thirty-minute one have different
-   * start times and occupy the same room, so nothing collided and both were
-   * written.
-   *
-   * Each appointment instead claims one row per fifteen-minute cell it covers,
-   * turnaround included. The composite primary key is what makes that
-   * impossible, and because the rows go in inside the same `batch()` as the
-   * appointment, a losing racer rolls the whole thing back rather than
-   * half-booking.
-   *
-   * Keyed by practitioner as well as branch — the surgeon and the dental team
-   * consult at the same address at the same time, in different rooms.
-   */
-  await db.batch([
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS appointment_cells (
-        branch TEXT NOT NULL,
-        practitioner TEXT NOT NULL,
-        slot_date TEXT NOT NULL,
-        cell_time TEXT NOT NULL,
-        appointment_id TEXT NOT NULL
-          REFERENCES appointments(id) ON DELETE CASCADE,
-        PRIMARY KEY (branch, practitioner, slot_date, cell_time)
-      )
-    `),
-    db.prepare(`
-      CREATE INDEX IF NOT EXISTS appointment_cells_appointment
-      ON appointment_cells (appointment_id)
-    `),
-    db.prepare(`
-      CREATE INDEX IF NOT EXISTS appointments_manage_token
-      ON appointments (manage_token)
-    `),
-  ]);
-
-  // Both older slot indexes are now actively wrong: they key on branch + time
-  // without the practitioner, so they would reject the dental team and the
-  // surgeon legitimately consulting at the same moment. `appointment_cells`
-  // supersedes them and is strictly stronger.
-  for (const index of ["appointments_slot_unique", "appointments_slot_live_unique"]) {
-    await db.prepare(`DROP INDEX IF EXISTS ${index}`).run().catch(() => undefined);
-  }
-
-  await backfillCells(db);
-  await seedAppointments(db);
-}
-
-/**
- * Gives existing appointments their occupancy rows.
- *
- * Runs once per database: appointments written before the grid existed have no
- * cells, so without this their times would read as free. Cheap and idempotent —
- * `INSERT OR IGNORE` means a second pass does nothing.
- */
-async function backfillCells(db: D1Database) {
-  try {
-    const orphans = await db
-      .prepare(
-        `SELECT a.id, a.branch, a.practitioner, a.slot_date AS slotDate,
-                a.slot_time AS slotTime, a.duration_minutes AS durationMinutes
-         FROM appointments a
-         LEFT JOIN appointment_cells c ON c.appointment_id = a.id
-         WHERE a.status <> 'cancelled' AND c.appointment_id IS NULL
-         LIMIT 500`,
-      )
-      .all<{
-        id: string;
-        branch: string;
-        practitioner: string | null;
-        slotDate: string;
-        slotTime: string;
-        durationMinutes: number;
-      }>();
-
-    const rows = orphans.results ?? [];
-    if (rows.length === 0) return;
-
-    const statements = rows.flatMap((row) =>
-      cellInserts(db, {
-        id: row.id,
-        branch: row.branch,
-        practitioner: row.practitioner,
-        slotDate: row.slotDate,
-        slotTime: row.slotTime,
-        durationMinutes: row.durationMinutes,
-      }),
-    );
-    if (statements.length > 0) await db.batch(statements);
-    console.log(`[schema] backfilled occupancy for ${rows.length} appointments`);
-  } catch (error) {
-    // A backfill failure must not take the whole isolate down; the read path
-    // still filters by interval overlap either way.
-    console.error("occupancy backfill skipped", error);
-  }
 }
 
 /**
@@ -288,40 +95,17 @@ async function backfillCells(db: D1Database) {
  */
 const UNASSIGNED = "unassigned";
 
-/** The INSERT statements claiming every cell an appointment covers. */
-function cellInserts(
-  db: D1Database,
-  appointment: {
-    id: string;
-    branch: string;
-    practitioner: string | null;
-    slotDate: string;
-    slotTime: string;
-    durationMinutes: number;
-  },
-): D1PreparedStatement[] {
-  const practitioner = appointment.practitioner || UNASSIGNED;
-  return occupiedCells(appointment.slotTime, appointment.durationMinutes).map((cell) =>
-    db
-      .prepare(
-        `INSERT OR IGNORE INTO appointment_cells
-         (branch, practitioner, slot_date, cell_time, appointment_id)
-         VALUES (?, ?, ?, ?, ?)`,
-      )
-      .bind(appointment.branch, practitioner, appointment.slotDate, cell, appointment.id),
-  );
-}
-
 /**
- * The same inserts, but strict.
+ * The INSERT statements claiming every cell an appointment covers.
  *
- * `INSERT OR IGNORE` is right for a backfill, where a pre-existing row means
- * the work is already done. It is exactly wrong when claiming a slot: a
- * conflicting cell must abort the batch so the caller can report a clash
- * instead of silently overwriting someone else's appointment.
+ * No `ON CONFLICT` clause, deliberately. Swallowing a conflict is right for a
+ * backfill, where a pre-existing row means the work is already done. It is
+ * exactly wrong when claiming a slot: a conflicting cell must abort the
+ * transaction so the caller can report a clash instead of silently handing the
+ * time to two patients.
  */
 function claimCells(
-  db: D1Database,
+  db: Database,
   appointment: {
     id: string;
     branch: string;
@@ -330,7 +114,7 @@ function claimCells(
     slotTime: string;
     durationMinutes: number;
   },
-): D1PreparedStatement[] {
+): Statement[] {
   const practitioner = appointment.practitioner || UNASSIGNED;
   return occupiedCells(appointment.slotTime, appointment.durationMinutes).map((cell) =>
     db
@@ -344,146 +128,10 @@ function claimCells(
 }
 
 /** Hands an appointment's time back to the calendar. */
-function releaseCells(db: D1Database, appointmentId: string): D1PreparedStatement {
+function releaseCells(db: Database, appointmentId: string): Statement {
   return db
     .prepare("DELETE FROM appointment_cells WHERE appointment_id = ?")
     .bind(appointmentId);
-}
-
-/* -------------------------------------------------------------------------- */
-/* Seed                                                                        */
-/* -------------------------------------------------------------------------- */
-
-/**
- * One real appointment so the dashboard is never an empty shell on a fresh
- * database. Keyed by a fixed id, so re-running bootstrap never duplicates it,
- * and rolled forward when its date passes so the clinic view stays populated.
- * Set SEED_APPOINTMENT="0" to skip it entirely.
- */
-const SEED_ID = "a5f1c2d0-0000-4000-8000-000000000001";
-
-/**
- * Deliberately synthetic.
- *
- * This previously carried a real person's name and a real-format Egyptian mobile
- * number, committed to source. Reserved numbers (Ofcom's 07700 900xxx range is
- * the usual convention; +20 100 000 0000 is unallocated here) and an obviously
- * placeholder name mean that if this ever does reach a real database, nobody
- * mistakes it for a patient and nobody's number is dialled.
- */
-const SEED = {
-  branch: "Maadi",
-  service: "aesthetic",
-  patientName: "SAMPLE — demonstration booking",
-  patientPhone: "+201000000000",
-  language: "en",
-};
-
-/**
- * Opt **in**, not opt out.
- *
- * The guard used to be `=== "0"`, which meant a production database with the
- * variable simply unset had a fabricated confirmed appointment written into the
- * clinic's real book on the first request that touched the schema — occupying a
- * genuine slot, and constituting personal data processed with no lawful basis.
- *
- * Requiring an explicit "1" means forgetting to configure something now produces
- * an empty calendar, which is recoverable, rather than a phantom patient, which
- * is not.
- */
-async function seedAppointments(db: D1Database) {
-  if (process.env.SEED_APPOINTMENT !== "1") return;
-
-  try {
-    const existing = await db
-      .prepare("SELECT id, slot_date AS slotDate, status FROM appointments WHERE id = ?")
-      .bind(SEED_ID)
-      .first<{ id: string; slotDate: string; status: string }>();
-
-    const today = clinicToday();
-    if (existing) {
-      // Leave a cancelled or still-upcoming seed alone; only roll forward one
-      // that has fallen into the past.
-      if (existing.status === "cancelled" || existing.slotDate >= today) return;
-      const rolled = await firstFreeSeedSlot(db, today);
-      if (!rolled) return;
-      await db
-        .prepare(
-          `UPDATE appointments SET slot_date = ?, slot_time = ?, practitioner = ?,
-           status = 'confirmed', status_updated_at = ? WHERE id = ?`,
-        )
-        .bind(rolled.date, rolled.time, rolled.practitioner, now(), SEED_ID)
-        .run();
-      return;
-    }
-
-    const target = await firstFreeSeedSlot(db, today);
-    if (!target) return;
-    const timestamp = now();
-    await db
-      .prepare(
-        `INSERT INTO appointments
-         (id, hold_token, status, branch, service, slot_date, slot_time,
-          duration_minutes, practitioner, patient_name, patient_phone, language,
-          source, consent_given_at, consent_version, manage_token, created_at,
-          confirmed_at, status_updated_at)
-         VALUES (?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'clinic', ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        SEED_ID,
-        crypto.randomUUID(),
-        SEED.branch,
-        SEED.service,
-        target.date,
-        target.time,
-        serviceDuration(SEED.service),
-        target.practitioner,
-        SEED.patientName,
-        SEED.patientPhone,
-        SEED.language,
-        timestamp,
-        CONSENT_VERSION,
-        crypto.randomUUID(),
-        timestamp,
-        timestamp,
-        timestamp,
-      )
-      .run();
-  } catch (error) {
-    // A seed is a convenience, never a reason to fail a request.
-    console.error("appointment seed skipped", error);
-  }
-}
-
-/**
- * The first upcoming day the seed branch actually runs, with a free slot.
- * Derived from the generated schedule, so it can never place the seed at a time
- * the clinic does not open.
- */
-async function firstFreeSeedSlot(
-  db: D1Database,
-  from: DateKey,
-): Promise<{ date: DateKey; time: string; practitioner: string } | null> {
-  const branch = findBranch(SEED.branch);
-  if (!branch) return null;
-
-  for (const day of openDayKeys(14).filter((candidate) => candidate >= from)) {
-    const slots = generateSlots(branch, day, SEED.service);
-    if (slots.length === 0) continue;
-
-    const taken = await db
-      .prepare(
-        `SELECT slot_time AS slotTime FROM appointments
-         WHERE branch = ? AND slot_date = ? AND status <> 'cancelled' AND id <> ?`,
-      )
-      .bind(SEED.branch, day, SEED_ID)
-      .all<{ slotTime: string }>();
-    const busy = new Set((taken.results ?? []).map((row) => row.slotTime));
-
-    const free = slots.find((slot) => !busy.has(slot.time));
-    if (free) return { date: day, time: free.time, practitioner: free.practitioner };
-  }
-  return null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -496,7 +144,6 @@ async function firstFreeSeedSlot(
  * it belongs on a cron trigger instead of firing a DELETE on every page view.
  */
 export async function releaseExpiredHolds(): Promise<number> {
-  await ensureBookingSchema();
   const db = database();
   const timestamp = now();
 
@@ -520,7 +167,6 @@ export async function releaseExpiredHolds(): Promise<number> {
  * retention window while keeping the anonymous row for reporting.
  */
 export async function purgeExpiredContactDetails(): Promise<number> {
-  await ensureBookingSchema();
   const cutoff = addDays(clinicToday(), -PII_RETENTION_DAYS);
   const result = await database()
     .prepare(
@@ -570,7 +216,6 @@ export async function getBookedIntervals(
   branch: string,
   dates: DateKey[],
 ): Promise<BookedInterval[]> {
-  await ensureBookingSchema();
   if (dates.length === 0) return [];
 
   const key = `${branch}|${dates.join(",")}`;
@@ -580,8 +225,8 @@ export async function getBookedIntervals(
   const placeholders = dates.map(() => "?").join(", ");
   const value = database()
     .prepare(
-      `SELECT slot_date AS slotDate, slot_time AS slotTime,
-              duration_minutes AS durationMinutes, practitioner
+      `SELECT slot_date AS "slotDate", slot_time AS "slotTime",
+              duration_minutes AS "durationMinutes", practitioner
        FROM appointments
        WHERE branch = ? AND slot_date IN (${placeholders})
        AND (status IN (${OCCUPYING_LIST})
@@ -605,7 +250,6 @@ export async function getBookedIntervals(
 
 /** Live holds attributed to one visitor, used to rate-limit the hold endpoint. */
 export async function countActiveHoldsForClient(fingerprint: string) {
-  await ensureBookingSchema();
   const row = await database()
     .prepare(
       `SELECT COUNT(*) AS total FROM appointments
@@ -624,7 +268,6 @@ export async function holdAppointment(input: {
   practitioner: string;
   fingerprint: string;
 }) {
-  await ensureBookingSchema();
   const db = database();
   const id = crypto.randomUUID();
   const holdToken = crypto.randomUUID();
@@ -700,7 +343,6 @@ export async function holdAppointment(input: {
  * another visitor's slot. Confirmed appointments never match this predicate.
  */
 export async function releaseHold(holdToken: string, fingerprint: string) {
-  await ensureBookingSchema();
   if (!holdToken || !fingerprint) return false;
   const db = database();
   const [, released] = await db.batch([
@@ -727,15 +369,13 @@ export async function releaseHold(holdToken: string, fingerprint: string) {
 export async function confirmAppointment(
   input: BookingInput,
 ): Promise<ConfirmedAppointment | null> {
-  await ensureBookingSchema();
-  await ensureNotificationSchema();
   const db = database();
   const timestamp = now();
   const manageToken = crypto.randomUUID();
 
   const candidate = await db
     .prepare(
-      `SELECT ${APPOINTMENT_COLUMNS}, manage_token AS manageToken
+      `SELECT ${APPOINTMENT_COLUMNS}, manage_token AS "manageToken"
        FROM appointments WHERE hold_token = ?`,
     )
     .bind(input.holdToken)
@@ -802,7 +442,7 @@ export async function confirmAppointment(
      */
     const existing = await db
       .prepare(
-        `SELECT ${APPOINTMENT_COLUMNS}, manage_token AS manageToken
+        `SELECT ${APPOINTMENT_COLUMNS}, manage_token AS "manageToken"
          FROM appointments WHERE hold_token = ? AND status = 'confirmed'`,
       )
       .bind(input.holdToken)
@@ -812,7 +452,7 @@ export async function confirmAppointment(
 
   return db
     .prepare(
-      `SELECT ${APPOINTMENT_COLUMNS}, manage_token AS manageToken
+      `SELECT ${APPOINTMENT_COLUMNS}, manage_token AS "manageToken"
        FROM appointments WHERE hold_token = ?`,
     )
     .bind(input.holdToken)
@@ -824,7 +464,6 @@ export async function confirmAppointment(
 /* -------------------------------------------------------------------------- */
 
 export async function getAppointmentByManageToken(token: string) {
-  await ensureBookingSchema();
   if (!token) return null;
   return database()
     .prepare(
@@ -836,14 +475,12 @@ export async function getAppointmentByManageToken(token: string) {
 }
 
 export async function cancelByManageToken(token: string, reason?: string | null) {
-  await ensureBookingSchema();
-  await ensureNotificationSchema();
   const db = database();
   const timestamp = now();
 
   const existing = await db
     .prepare(
-      `SELECT id, branch, practitioner, service, slot_date AS slotDate, slot_time AS slotTime
+      `SELECT id, branch, practitioner, service, slot_date AS "slotDate", slot_time AS "slotTime"
        FROM appointments WHERE manage_token = ?
          AND status IN ('confirmed', 'checked_in') AND slot_date >= ?`,
     )
@@ -902,14 +539,12 @@ export async function rescheduleByManageToken(input: {
   slotTime: string;
   practitioner?: string;
 }) {
-  await ensureBookingSchema();
-  await ensureNotificationSchema();
   const db = database();
   const timestamp = now();
 
   const existing = await db
     .prepare(
-      `SELECT id, branch, practitioner, duration_minutes AS durationMinutes
+      `SELECT id, branch, practitioner, duration_minutes AS "durationMinutes"
        FROM appointments
        WHERE manage_token = ? AND status = 'confirmed' AND slot_date >= ?`,
     )
@@ -984,7 +619,6 @@ export type AppointmentQuery = {
 };
 
 export async function listAppointments(query: AppointmentQuery = {}) {
-  await ensureBookingSchema();
   const limit = Math.min(Math.max(query.limit ?? 100, 1), 500);
   const offset = Math.max(query.offset ?? 0, 0);
 
@@ -1076,7 +710,6 @@ export type DashboardSummary = {
 export async function getDashboardSummary(
   input: { branch?: string; today?: DateKey } = {},
 ): Promise<DashboardSummary> {
-  await ensureBookingSchema();
   const db = database();
   const today = input.today ?? clinicToday();
   const weekAhead = addDays(today, 7);
@@ -1093,9 +726,9 @@ export async function getDashboardSummary(
         `SELECT
            SUM(CASE WHEN slot_date = ? THEN 1 ELSE 0 END) AS today,
            SUM(CASE WHEN slot_date >= ? THEN 1 ELSE 0 END) AS upcoming,
-           SUM(CASE WHEN slot_date >= ? AND slot_date <= ? THEN 1 ELSE 0 END) AS next7Days,
-           SUM(CASE WHEN confirmed_at >= ? THEN 1 ELSE 0 END) AS bookedLast7Days,
-           MAX(confirmed_at) AS newestBookingAt
+           SUM(CASE WHEN slot_date >= ? AND slot_date <= ? THEN 1 ELSE 0 END) AS "next7Days",
+           SUM(CASE WHEN confirmed_at >= ? THEN 1 ELSE 0 END) AS "bookedLast7Days",
+           MAX(confirmed_at) AS "newestBookingAt"
          FROM appointments
          WHERE status IN ('confirmed', 'checked_in', 'completed')${branchClause}`,
       )
@@ -1121,7 +754,7 @@ export async function getDashboardSummary(
          */
         `SELECT
            SUM(CASE WHEN status = 'cancelled' AND cancelled_at >= ? THEN 1 ELSE 0 END) AS cancelled,
-           SUM(CASE WHEN status = 'no_show' AND slot_date >= ? AND slot_date <= ? THEN 1 ELSE 0 END) AS noShow,
+           SUM(CASE WHEN status = 'no_show' AND slot_date >= ? AND slot_date <= ? THEN 1 ELSE 0 END) AS "noShow",
            SUM(CASE WHEN status = 'completed' AND slot_date >= ? AND slot_date <= ? THEN 1 ELSE 0 END) AS completed
          FROM appointments
          WHERE status <> 'held'${branchClause}`,
@@ -1196,7 +829,6 @@ export async function getDashboardSummary(
 }
 
 export async function getAppointmentById(id: string) {
-  await ensureBookingSchema();
   if (!id) return null;
   return database()
     .prepare(`SELECT ${APPOINTMENT_COLUMNS} FROM appointments WHERE id = ?`)
@@ -1213,7 +845,6 @@ export async function getAppointmentById(id: string) {
  * scripts, while the number is the thing patients give reliably.
  */
 export async function patientHistory(phone: string, excludeId?: string) {
-  await ensureBookingSchema();
   const normalised = normalisePhone(phone);
   if (!normalised) return [];
 
@@ -1242,7 +873,6 @@ export async function dailyLoad(input: {
   to: DateKey;
   branch?: string;
 }) {
-  await ensureBookingSchema();
   const clauses = ["status IN ('confirmed', 'checked_in', 'completed')", "slot_date >= ?", "slot_date <= ?"];
   const bindings: string[] = [input.from, input.to];
   if (input.branch) {
@@ -1270,8 +900,6 @@ export async function updateAppointmentStatus(input: {
   /** Staff-only free text. Never shown to the patient. */
   cancellationNote?: string | null;
 }) {
-  await ensureBookingSchema();
-  await ensureNotificationSchema();
   const db = database();
   const timestamp = now();
   const isCancel = input.status === "cancelled";
@@ -1279,7 +907,7 @@ export async function updateAppointmentStatus(input: {
 
   const existing = await db
     .prepare(
-      `SELECT id, branch, practitioner, service, slot_date AS slotDate, slot_time AS slotTime
+      `SELECT id, branch, practitioner, service, slot_date AS "slotDate", slot_time AS "slotTime"
        FROM appointments WHERE id = ? AND status <> 'held'`,
     )
     .bind(input.id)
@@ -1293,7 +921,7 @@ export async function updateAppointmentStatus(input: {
     }>();
   if (!existing) return null;
 
-  const statements: D1PreparedStatement[] = [
+  const statements: Statement[] = [
     db
       .prepare(
         `UPDATE appointments
@@ -1309,15 +937,15 @@ export async function updateAppointmentStatus(input: {
       .bind(
         input.status,
         timestamp,
-        isCheckIn ? 1 : 0,
+        isCheckIn,
         timestamp,
-        isCancel ? 1 : 0,
+        isCancel,
         timestamp,
-        isCancel ? 1 : 0,
+        isCancel,
         input.actor,
-        isCancel ? 1 : 0,
+        isCancel,
         input.cancellationReason ?? null,
-        isCancel ? 1 : 0,
+        isCancel,
         input.cancellationNote?.trim().slice(0, 500) || null,
         input.id,
         input.status,
@@ -1358,7 +986,6 @@ export async function updateAppointmentStatus(input: {
 }
 
 export async function setStaffNote(id: string, note: string) {
-  await ensureBookingSchema();
   const result = await database()
     .prepare(
       "UPDATE appointments SET staff_note = ?, status_updated_at = ? WHERE id = ? AND status <> 'held'",
@@ -1386,8 +1013,6 @@ export async function createClinicAppointment(input: {
   practitioner?: string;
   actor: string;
 }) {
-  await ensureBookingSchema();
-  await ensureNotificationSchema();
   const db = database();
   const timestamp = now();
   const id = crypto.randomUUID();
@@ -1470,11 +1095,10 @@ export async function createClinicAppointment(input: {
  * `reminder_sent_at` is written only after a patient channel confirms delivery.
  */
 export async function appointmentsNeedingReminder(limit = 200) {
-  await ensureBookingSchema();
   const tomorrow = addDays(clinicToday(), 1);
   const result = await database()
     .prepare(
-      `SELECT ${APPOINTMENT_COLUMNS}, manage_token AS manageToken
+      `SELECT ${APPOINTMENT_COLUMNS}, manage_token AS "manageToken"
        FROM appointments
        WHERE status = 'confirmed' AND reminder_queued_at IS NULL
          AND slot_date = ?
@@ -1494,7 +1118,6 @@ export async function appointmentsNeedingReminder(limit = 200) {
  */
 export async function checkDatabase(): Promise<{ ok: boolean }> {
   try {
-    await ensureBookingSchema();
     const row = await database()
       .prepare("SELECT COUNT(*) AS total FROM appointments WHERE slot_date >= ?")
       .bind(clinicToday())

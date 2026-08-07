@@ -1,4 +1,4 @@
-import { env } from "cloudflare:workers";
+import { database } from "@/db/client";
 import { AUDIT_RETENTION_DAYS } from "@/lib/clinic";
 import { addDays, clinicToday } from "@/lib/dates";
 import { reportError } from "@/lib/observability";
@@ -70,138 +70,6 @@ export const LOCKOUT_MINUTES = 15;
 
 export const ISSUER = "Care Point";
 
-function database() {
-  if (!env.DB) throw new Error("The appointment database is not available.");
-  return env.DB;
-}
-
-let staffReady: Promise<void> | null = null;
-
-export function ensureStaffSchema(): Promise<void> {
-  staffReady ??= createSchema().catch((error) => {
-    staffReady = null;
-    throw error;
-  });
-  return staffReady;
-}
-
-/**
- * Columns added to `staff_users` after the table first shipped.
- *
- * The migration under `drizzle/` is what production runs. This exists because a
- * database created by an earlier migration already has the table, so
- * `CREATE TABLE IF NOT EXISTS` is a no-op and the new columns would never
- * appear on a developer's or a test runner's copy.
- */
-const ADDED_COLUMNS: Array<[string, string]> = [
-  ["password_hash", "TEXT"],
-  ["password_set_at", "TEXT"],
-  ["must_change_password", "INTEGER NOT NULL DEFAULT 0"],
-  ["totp_secret", "TEXT"],
-  ["totp_confirmed_at", "TEXT"],
-  ["totp_last_counter", "INTEGER NOT NULL DEFAULT 0"],
-  ["failed_attempts", "INTEGER NOT NULL DEFAULT 0"],
-  ["locked_until", "TEXT"],
-  ["session_epoch", "INTEGER NOT NULL DEFAULT 1"],
-  ["invited_by", "TEXT"],
-  ["last_seen_at", "TEXT"],
-];
-
-async function createSchema() {
-  const db = database();
-  await db.batch([
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS staff_users (
-        email TEXT PRIMARY KEY,
-        display_name TEXT NOT NULL,
-        active INTEGER NOT NULL DEFAULT 1,
-        password_hash TEXT,
-        password_set_at TEXT,
-        must_change_password INTEGER NOT NULL DEFAULT 0,
-        totp_secret TEXT,
-        totp_confirmed_at TEXT,
-        totp_last_counter INTEGER NOT NULL DEFAULT 0,
-        failed_attempts INTEGER NOT NULL DEFAULT 0,
-        locked_until TEXT,
-        session_epoch INTEGER NOT NULL DEFAULT 1,
-        invited_by TEXT,
-        last_seen_at TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `),
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS staff_user_roles (
-        email TEXT NOT NULL,
-        role TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        PRIMARY KEY (email, role)
-      )
-    `),
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS staff_recovery_codes (
-        email TEXT NOT NULL,
-        code_hash TEXT NOT NULL,
-        used_at TEXT,
-        created_at TEXT NOT NULL,
-        PRIMARY KEY (email, code_hash)
-      )
-    `),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS staff_recovery_codes_email ON staff_recovery_codes (email, used_at)",
-    ),
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS security_events (
-        id TEXT PRIMARY KEY,
-        actor TEXT NOT NULL,
-        event TEXT NOT NULL,
-        outcome TEXT NOT NULL,
-        subject TEXT,
-        detail TEXT,
-        client_hash TEXT,
-        at TEXT NOT NULL
-      )
-    `),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS security_events_actor_at ON security_events (actor, at)",
-    ),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS security_events_event_at ON security_events (event, at)",
-    ),
-    db.prepare("CREATE INDEX IF NOT EXISTS security_events_at ON security_events (at)"),
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS staff_sessions (
-        id TEXT PRIMARY KEY,
-        email TEXT NOT NULL,
-        token_digest TEXT NOT NULL,
-        device TEXT,
-        client_hash TEXT,
-        issued_at TEXT NOT NULL,
-        last_seen_at TEXT NOT NULL,
-        expires_at TEXT NOT NULL,
-        revoked_at TEXT,
-        revoked_by TEXT
-      )
-    `),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS staff_sessions_email ON staff_sessions (email, revoked_at)",
-    ),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS staff_sessions_expires ON staff_sessions (expires_at)",
-    ),
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS auth_throttle (
-        key TEXT PRIMARY KEY,
-        attempts INTEGER NOT NULL DEFAULT 0,
-        window_started_at TEXT NOT NULL,
-        blocked_until TEXT
-      )
-    `),
-  ]);
-
-  await addMissingColumns(db);
-}
-
 /* -------------------------------------------------------------------------- */
 /* Per-client throttle                                                        */
 /* -------------------------------------------------------------------------- */
@@ -228,12 +96,11 @@ export async function checkAuthThrottle(
   // could not be hashed would lock the clinic out of its own dashboard.
   if (!key) return { allowed: true, remaining: options.limit ?? MAX_CLIENT_ATTEMPTS };
 
-  await ensureStaffSchema();
   const limit = options.limit ?? MAX_CLIENT_ATTEMPTS;
   const nowMs = options.nowMs ?? Date.now();
   const row = await database()
     .prepare(
-      `SELECT attempts, window_started_at AS windowStartedAt, blocked_until AS blockedUntil
+      `SELECT attempts, window_started_at AS "windowStartedAt", blocked_until AS "blockedUntil"
        FROM auth_throttle WHERE key = ?`,
     )
     .bind(key)
@@ -265,7 +132,6 @@ export async function recordAuthFailure(
 ): Promise<ThrottleDecision> {
   if (!key) return { allowed: true, remaining: options.limit ?? MAX_CLIENT_ATTEMPTS };
 
-  await ensureStaffSchema();
   const limit = options.limit ?? MAX_CLIENT_ATTEMPTS;
   const nowMs = options.nowMs ?? Date.now();
   const timestamp = new Date(nowMs).toISOString();
@@ -273,7 +139,7 @@ export async function recordAuthFailure(
 
   const row = await db
     .prepare(
-      `SELECT attempts, window_started_at AS windowStartedAt FROM auth_throttle WHERE key = ?`,
+      `SELECT attempts, window_started_at AS "windowStartedAt" FROM auth_throttle WHERE key = ?`,
     )
     .bind(key)
     .first<{ attempts: number; windowStartedAt: string }>();
@@ -316,7 +182,6 @@ export async function recordAuthFailure(
 export async function clearAuthThrottle(key: string | null | undefined): Promise<void> {
   if (!key) return;
   try {
-    await ensureStaffSchema();
     await database().prepare("DELETE FROM auth_throttle WHERE key = ?").bind(key).run();
   } catch {
     // A counter that failed to clear only costs the client its remaining budget.
@@ -325,7 +190,6 @@ export async function clearAuthThrottle(key: string | null | undefined): Promise
 
 /** Drops counters whose window and block have both lapsed. */
 export async function purgeExpiredThrottles(): Promise<number> {
-  await ensureStaffSchema();
   const cutoff = new Date(
     Date.now() - Math.max(THROTTLE_WINDOW_MINUTES, THROTTLE_BLOCK_MINUTES) * 60_000,
   ).toISOString();
@@ -393,7 +257,6 @@ export async function recordStaffSession(input: {
   expiresAtMs: number;
 }): Promise<void> {
   try {
-    await ensureStaffSchema();
     const timestamp = new Date().toISOString();
     await database()
       .prepare(
@@ -424,11 +287,10 @@ export async function recordStaffSession(input: {
 
 /** Sessions a staff member currently holds, newest first. */
 export async function listStaffSessions(email: string): Promise<StaffSessionRow[]> {
-  await ensureStaffSchema();
   const result = await database()
     .prepare(
-      `SELECT id, device, issued_at AS issuedAt, last_seen_at AS lastSeenAt,
-              expires_at AS expiresAt
+      `SELECT id, device, issued_at AS "issuedAt", last_seen_at AS "lastSeenAt",
+              expires_at AS "expiresAt"
        FROM staff_sessions
        WHERE email = ? AND revoked_at IS NULL AND expires_at > ?
        ORDER BY last_seen_at DESC LIMIT 25`,
@@ -450,9 +312,8 @@ export async function listStaffSessions(email: string): Promise<StaffSessionRow[
 export async function isSessionRevoked(sessionId: string): Promise<boolean> {
   if (!sessionId) return false;
   try {
-    await ensureStaffSchema();
     const row = await database()
-      .prepare("SELECT revoked_at AS revokedAt FROM staff_sessions WHERE id = ?")
+      .prepare(`SELECT revoked_at AS "revokedAt" FROM staff_sessions WHERE id = ?`)
       .bind(sessionId)
       .first<{ revokedAt: string | null }>();
     return Boolean(row?.revokedAt);
@@ -479,7 +340,6 @@ export async function revokeStaffSession(input: {
   email: string;
   actor: string;
 }): Promise<boolean> {
-  await ensureStaffSchema();
   const result = await database()
     .prepare(
       `UPDATE staff_sessions SET revoked_at = ?, revoked_by = ?
@@ -512,7 +372,6 @@ export async function revokeAllStaffSessions(input: {
   email: string;
   actor: string;
 }): Promise<void> {
-  await ensureStaffSchema();
   const email = normaliseEmail(input.email);
   const timestamp = new Date().toISOString();
   const db = database();
@@ -540,35 +399,12 @@ export async function revokeAllStaffSessions(input: {
 
 /** Drops sessions that expired long enough ago to be of no further interest. */
 export async function purgeExpiredStaffSessions(): Promise<number> {
-  await ensureStaffSchema();
   const cutoff = addDays(clinicToday(), -30);
   const result = await database()
     .prepare("DELETE FROM staff_sessions WHERE expires_at < ?")
     .bind(`${cutoff}T00:00:00.000Z`)
     .run();
   return result.meta.changes ?? 0;
-}
-
-async function addMissingColumns(db: D1Database) {
-  let existing: Set<string> | null = null;
-  try {
-    const info = await db.prepare("PRAGMA table_info(staff_users)").all<{ name: string }>();
-    existing = new Set((info.results ?? []).map((column) => column.name));
-  } catch {
-    // Some environments refuse the pragma. Fall through to attempting each
-    // column and treating "already there" as success.
-    existing = null;
-  }
-
-  for (const [column, definition] of ADDED_COLUMNS) {
-    if (existing && existing.has(column)) continue;
-    try {
-      await db.prepare(`ALTER TABLE staff_users ADD COLUMN ${column} ${definition}`).run();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!/duplicate column/i.test(message)) throw error;
-    }
-  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -613,7 +449,6 @@ export async function recordSecurityEvent(entry: {
   clientHash?: string | null;
 }): Promise<void> {
   try {
-    await ensureStaffSchema();
     await database()
       .prepare(
         `INSERT INTO security_events
@@ -651,7 +486,6 @@ export type SecurityEventRow = {
 };
 
 export async function listSecurityEvents(options: { limit?: number; actor?: string } = {}) {
-  await ensureStaffSchema();
   const limit = Math.min(Math.max(options.limit ?? 100, 1), 500);
   const where = options.actor ? "WHERE actor = ?" : "";
   const bindings = options.actor ? [options.actor, limit] : [limit];
@@ -668,7 +502,6 @@ export async function listSecurityEvents(options: { limit?: number; actor?: stri
 
 /** Trimmed on the audit schedule: it identifies staff, not patients. */
 export async function purgeExpiredSecurityEvents(): Promise<number> {
-  await ensureStaffSchema();
   const cutoff = addDays(clinicToday(), -AUDIT_RETENTION_DAYS);
   const result = await database()
     .prepare("DELETE FROM security_events WHERE at < ?")
@@ -724,14 +557,14 @@ type StaffRow = {
   updatedAt: string;
 };
 
-const ROW_COLUMNS = `email, display_name AS displayName, active,
-       password_hash AS passwordHash, password_set_at AS passwordSetAt,
-       must_change_password AS mustChangePassword,
-       totp_secret AS totpSecret, totp_confirmed_at AS totpConfirmedAt,
-       totp_last_counter AS totpLastCounter, failed_attempts AS failedAttempts,
-       locked_until AS lockedUntil, session_epoch AS sessionEpoch,
-       invited_by AS invitedBy, last_seen_at AS lastSeenAt,
-       created_at AS createdAt, updated_at AS updatedAt`;
+const ROW_COLUMNS = `email, display_name AS "displayName", active,
+       password_hash AS "passwordHash", password_set_at AS "passwordSetAt",
+       must_change_password AS "mustChangePassword",
+       totp_secret AS "totpSecret", totp_confirmed_at AS "totpConfirmedAt",
+       totp_last_counter AS "totpLastCounter", failed_attempts AS "failedAttempts",
+       locked_until AS "lockedUntil", session_epoch AS "sessionEpoch",
+       invited_by AS "invitedBy", last_seen_at AS "lastSeenAt",
+       created_at AS "createdAt", updated_at AS "updatedAt"`;
 
 export function normaliseEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -783,7 +616,6 @@ async function unusedRecoveryCount(email: string): Promise<number> {
 }
 
 export async function getStaffRecord(email: string): Promise<StaffRecord | null> {
-  await ensureStaffSchema();
   const key = normaliseEmail(email);
   const row = await database()
     .prepare(`SELECT ${ROW_COLUMNS} FROM staff_users WHERE email = ?`)
@@ -796,7 +628,6 @@ export async function getStaffRecord(email: string): Promise<StaffRecord | null>
 }
 
 export async function listStaff(): Promise<StaffRecord[]> {
-  await ensureStaffSchema();
   const db = database();
   const [people, roles, recovery] = await Promise.all([
     db.prepare(`SELECT ${ROW_COLUMNS} FROM staff_users ORDER BY email`).all<StaffRow>(),
@@ -830,12 +661,11 @@ export async function listStaff(): Promise<StaffRecord[]> {
 
 /** How many active owners exist. The set that must never reach zero. */
 export async function countActiveOwners(): Promise<number> {
-  await ensureStaffSchema();
   const row = await database()
     .prepare(
       `SELECT COUNT(*) AS owners FROM staff_user_roles r
        JOIN staff_users u ON u.email = r.email
-       WHERE r.role = 'owner' AND u.active = 1`,
+       WHERE r.role = 'owner' AND u.active = TRUE`,
     )
     .first<{ owners: number }>();
   return row?.owners ?? 0;
@@ -849,7 +679,8 @@ async function writeRoles(email: string, roles: StaffRole[]) {
     ...roles.map((role) =>
       db
         .prepare(
-          "INSERT OR IGNORE INTO staff_user_roles (email, role, created_at) VALUES (?, ?, ?)",
+          `INSERT INTO staff_user_roles (email, role, created_at) VALUES (?, ?, ?)
+           ON CONFLICT DO NOTHING`,
         )
         .bind(email, role, timestamp),
     ),
@@ -872,7 +703,6 @@ export async function upsertStaffMember(input: {
   roles?: readonly string[];
   actor: string;
 }): Promise<StaffRecord> {
-  await ensureStaffSchema();
   const email = normaliseEmail(input.email);
   if (!email || !email.includes("@")) throw new Error("A staff email address is required.");
   const displayName = input.displayName.trim().slice(0, 120);
@@ -886,7 +716,7 @@ export async function upsertStaffMember(input: {
   await database()
     .prepare(
       `INSERT INTO staff_users (email, display_name, active, invited_by, created_at, updated_at)
-       VALUES (?, ?, 1, ?, ?, ?)
+       VALUES (?, ?, TRUE, ?, ?, ?)
        ON CONFLICT(email) DO UPDATE SET
          display_name = excluded.display_name,
          updated_at = excluded.updated_at`,
@@ -923,7 +753,6 @@ export async function setStaffActive(input: {
   active: boolean;
   actor: string;
 }): Promise<StaffRecord> {
-  await ensureStaffSchema();
   const email = normaliseEmail(input.email);
   const record = await getStaffRecord(email);
   if (!record) throw new Error("That staff member is not in the directory.");
@@ -942,11 +771,11 @@ export async function setStaffActive(input: {
     .prepare(
       `UPDATE staff_users
        SET active = ?, updated_at = ?,
-           session_epoch = session_epoch + CASE WHEN ? = 0 THEN 1 ELSE 0 END,
+           session_epoch = session_epoch + CASE WHEN ? THEN 0 ELSE 1 END,
            failed_attempts = 0, locked_until = NULL
        WHERE email = ?`,
     )
-    .bind(input.active ? 1 : 0, timestamp, input.active ? 1 : 0, email)
+    .bind(input.active, timestamp, input.active, email)
     .run();
 
   await recordSecurityEvent({
@@ -966,7 +795,6 @@ export async function setStaffRoles(input: {
   roles: readonly string[];
   actor: string;
 }): Promise<StaffRecord> {
-  await ensureStaffSchema();
   const email = normaliseEmail(input.email);
   const record = await getStaffRecord(email);
   if (!record) throw new Error("That staff member is not in the directory.");
@@ -1001,7 +829,6 @@ export async function setStaffRoles(input: {
 /** Records that someone used the dashboard, for the directory's "last seen". */
 export async function touchLastSeen(email: string): Promise<void> {
   try {
-    await ensureStaffSchema();
     await database()
       .prepare("UPDATE staff_users SET last_seen_at = ? WHERE email = ?")
       .bind(new Date().toISOString(), normaliseEmail(email))
@@ -1010,7 +837,6 @@ export async function touchLastSeen(email: string): Promise<void> {
     // Cosmetic. Never worth failing a request over.
   }
 }
-
 
 /* -------------------------------------------------------------------------- */
 /* Passwords                                                                  */
@@ -1041,11 +867,10 @@ export async function verifyStaffPassword(input: {
   password: string;
   clientHash?: string | null;
 }): Promise<PasswordCheck> {
-  await ensureStaffSchema();
   const email = normaliseEmail(input.email);
   const row = await database()
     .prepare(
-      `SELECT password_hash AS hash, active, must_change_password AS mustChange
+      `SELECT password_hash AS hash, active, must_change_password AS "mustChange"
        FROM staff_users WHERE email = ?`,
     )
     .bind(email)
@@ -1168,7 +993,6 @@ export async function setStaffPassword(input: {
   /** True when the holder must choose their own on next sign-in. */
   temporary?: boolean;
 }): Promise<void> {
-  await ensureStaffSchema();
   const email = normaliseEmail(input.email);
   const record = await getStaffRecord(email);
   if (!record) throw new Error("That staff member is not in the directory.");
@@ -1190,7 +1014,7 @@ export async function setStaffPassword(input: {
              failed_attempts = 0, locked_until = NULL, updated_at = ?
          WHERE email = ?`,
       )
-      .bind(hash, timestamp, input.temporary ? 1 : 0, timestamp, email),
+      .bind(hash, timestamp, input.temporary, timestamp, email),
     /**
      * Every existing session dies with a password change.
      *
@@ -1243,7 +1067,6 @@ export async function beginMfaEnrolment(input: {
   roles?: readonly string[];
   actor: string;
 }): Promise<{ secret: string; uri: string }> {
-  await ensureStaffSchema();
   const email = normaliseEmail(input.email);
   if (!email || !email.includes("@")) throw new Error("A staff email address is required.");
 
@@ -1271,7 +1094,7 @@ export async function beginMfaEnrolment(input: {
       .prepare(
         `INSERT INTO staff_users
          (email, display_name, active, totp_secret, invited_by, created_at, updated_at)
-         VALUES (?, ?, 1, ?, ?, ?, ?)`,
+         VALUES (?, ?, TRUE, ?, ?, ?, ?)`,
       )
       .bind(
         email,
@@ -1309,7 +1132,7 @@ async function readSecret(
 ): Promise<{ secret: string; lastCounter: number } | null> {
   const row = await database()
     .prepare(
-      "SELECT totp_secret AS secret, totp_last_counter AS lastCounter FROM staff_users WHERE email = ?",
+      `SELECT totp_secret AS secret, totp_last_counter AS "lastCounter" FROM staff_users WHERE email = ?`,
     )
     .bind(email)
     .first<{ secret: string | null; lastCounter: number }>();
@@ -1329,7 +1152,6 @@ export async function confirmMfaEnrolment(input: {
   | { ok: true; recoveryCodes: string[] }
   | { ok: false; reason: "not-enrolling" | "already-enrolled" | "bad-code" }
 > {
-  await ensureStaffSchema();
   const email = normaliseEmail(input.email);
   const record = await getStaffRecord(email);
   if (!record) return { ok: false, reason: "not-enrolling" };
@@ -1373,7 +1195,6 @@ export async function confirmMfaEnrolment(input: {
 
 /** Replaces every recovery code. Returns the new ones, once. */
 export async function issueRecoveryCodes(email: string): Promise<string[]> {
-  await ensureStaffSchema();
   const key = normaliseEmail(email);
   const codes = generateRecoveryCodes(RECOVERY_CODE_COUNT);
   const hashes = await Promise.all(codes.map(hashRecoveryCode));
@@ -1463,7 +1284,6 @@ export async function verifyMfaCode(input: {
   code: string;
   clientHash?: string | null;
 }): Promise<MfaVerification> {
-  await ensureStaffSchema();
   const email = normaliseEmail(input.email);
   const record = await getStaffRecord(email);
   if (!record) return { ok: false, reason: "unknown" };
@@ -1568,7 +1388,6 @@ async function redeemRecoveryCode(email: string, submitted: string): Promise<boo
  * when the phone was stolen rather than replaced.
  */
 export async function resetMfa(input: { email: string; actor: string }): Promise<void> {
-  await ensureStaffSchema();
   const email = normaliseEmail(input.email);
   const record = await getStaffRecord(email);
   if (!record) throw new Error("That staff member is not in the directory.");

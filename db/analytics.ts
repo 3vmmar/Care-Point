@@ -1,5 +1,4 @@
-import { env } from "cloudflare:workers";
-import { ensureBookingSchema } from "@/db/bookings";
+import { database } from "@/db/client";
 import {
   REPORTING_CATEGORIES,
   reportingCategoryForService,
@@ -59,11 +58,6 @@ type AnalyticsInput = {
   today?: DateKey;
 };
 
-function database() {
-  if (!env.DB) throw new Error("The appointment database is not available.");
-  return env.DB;
-}
-
 function scheduledWhere(branch?: string) {
   return {
     sql: `status <> 'held' AND slot_date >= ? AND slot_date <= ?${branch ? " AND branch = ?" : ""}`,
@@ -115,7 +109,6 @@ function buildTrend(
  * useful when somebody opens Insights but wasteful on the reception day view.
  */
 export async function getClinicAnalytics(input: AnalyticsInput): Promise<ClinicAnalytics> {
-  await ensureBookingSchema();
   const db = database();
   const to = input.today ?? clinicToday();
   const from = addDays(to, -(input.days - 1));
@@ -127,9 +120,11 @@ export async function getClinicAnalytics(input: AnalyticsInput): Promise<ClinicA
 
   // The same nine-digit match used by patient history. It joins common Egyptian
   // local and international forms without returning the number to the client.
-  const patientKey = `substr(
+  // `RIGHT`, not `substr(…, -9)` — see the note on PATIENT_KEY in
+  // db/analytics-growth.ts. Postgres does not read a negative start as "last N".
+  const patientKey = `RIGHT(
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(patient_phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''),
-    -9
+    9
   )`;
   const branchPeriodClause = input.branch ? "AND branch = ?" : "";
   const patientBindings: string[] = [from, to];
@@ -159,7 +154,7 @@ export async function getClinicAnalytics(input: AnalyticsInput): Promise<ClinicA
              GROUP BY patientKey
            )
            SELECT COUNT(*) AS known,
-                  SUM(CASE WHEN firstDate >= ? THEN 1 ELSE 0 END) AS newPatients
+                  SUM(CASE WHEN firstDate >= ? THEN 1 ELSE 0 END) AS "newPatients"
            FROM periodPatients
            JOIN firstRetainedVisit USING (patientKey)`,
         )

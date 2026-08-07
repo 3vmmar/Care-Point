@@ -1,5 +1,4 @@
-import { env } from "cloudflare:workers";
-import { ensureBookingSchema } from "@/db/bookings";
+import { database, type Database } from "@/db/client";
 import { dayCapacity, type ScheduleContext } from "@/lib/schedule";
 import { addDays, clinicInstant, clinicToday, isOpenDay, type DateKey } from "@/lib/dates";
 
@@ -115,17 +114,17 @@ type GrowthInput = {
   capacityServices?: string[];
 };
 
-function database() {
-  if (!env.DB) throw new Error("The appointment database is not available.");
-  return env.DB;
-}
-
 /** The nine-digit match used everywhere patient identity is joined. It folds
  *  the local and international forms of an Egyptian mobile into one key
  *  without ever returning the number itself. */
-const PATIENT_KEY = `substr(
+/* `RIGHT`, not `substr(…, -9)`. SQLite reads a negative start as "the last N
+ * characters"; Postgres reads it as a position before the string and returns the
+ * whole thing. That difference does not error — it silently stops joining
+ * `01501606307` to `+20 150 160 6307`, which is the one behaviour patient
+ * history depends on. */
+const PATIENT_KEY = `RIGHT(
   REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(patient_phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''),
-  -9
+  9
 )`;
 
 /** Statuses that represent a real appointment. `held` is excluded everywhere:
@@ -171,7 +170,7 @@ function compare(
 
 /** Patients whose first linkable visit falls inside a period. */
 function newPatientCount(
-  db: D1Database,
+  db: Database,
   periodFrom: DateKey,
   periodTo: DateKey,
   branch: string | undefined,
@@ -196,7 +195,6 @@ function newPatientCount(
 }
 
 export async function getClinicGrowth(input: GrowthInput): Promise<ClinicGrowth> {
-  await ensureBookingSchema();
   const db = database();
 
   const to = input.today ?? clinicToday();
@@ -251,10 +249,10 @@ export async function getClinicGrowth(input: GrowthInput): Promise<ClinicGrowth>
          firstVisit AS (
            SELECT patientKey, MIN(slotDate) AS firstDate FROM retained GROUP BY patientKey
          )
-         SELECT substr(a.slot_date, 1, 7) AS month,
+         SELECT to_char(a.slot_date, 'YYYY-MM') AS month,
                 COUNT(*) AS total,
                 COUNT(DISTINCT CASE
-                  WHEN f.firstDate = a.slot_date THEN ${PATIENT_KEY} END) AS newPatients
+                  WHEN f.firstDate = a.slot_date THEN ${PATIENT_KEY} END) AS "newPatients"
          FROM appointments a
          LEFT JOIN firstVisit f ON f.patientKey = ${PATIENT_KEY}
          WHERE ${REAL} AND a.slot_date BETWEEN ? AND ?${branchClause}
@@ -265,7 +263,7 @@ export async function getClinicGrowth(input: GrowthInput): Promise<ClinicGrowth>
 
     db
       .prepare(
-        `SELECT CAST(substr(slot_time, 1, 2) AS INTEGER) AS hour, COUNT(*) AS total
+        `SELECT CAST(EXTRACT(HOUR FROM slot_time) AS INTEGER) AS hour, COUNT(*) AS total
          FROM appointments WHERE ${REAL} AND slot_date BETWEEN ? AND ?${branchClause}
          GROUP BY hour ORDER BY hour`,
       )
@@ -274,7 +272,7 @@ export async function getClinicGrowth(input: GrowthInput): Promise<ClinicGrowth>
 
     db
       .prepare(
-        `SELECT CAST(strftime('%w', slot_date) AS INTEGER) AS weekday, COUNT(*) AS total
+        `SELECT CAST(EXTRACT(DOW FROM slot_date) AS INTEGER) AS weekday, COUNT(*) AS total
          FROM appointments WHERE ${REAL} AND slot_date BETWEEN ? AND ?${branchClause}
          GROUP BY weekday ORDER BY weekday`,
       )
@@ -285,7 +283,7 @@ export async function getClinicGrowth(input: GrowthInput): Promise<ClinicGrowth>
     // decision was made; created_at is when the hold opened.
     db
       .prepare(
-        `SELECT CAST(julianday(slot_date) - julianday(substr(confirmed_at, 1, 10)) AS INTEGER) AS leadDays
+        `SELECT (slot_date - confirmed_at::date) AS "leadDays"
          FROM appointments
          WHERE ${REAL} AND confirmed_at IS NOT NULL
            AND slot_date BETWEEN ? AND ?${branchClause}`,
@@ -306,7 +304,7 @@ export async function getClinicGrowth(input: GrowthInput): Promise<ClinicGrowth>
 
     db
       .prepare(
-        `SELECT slot_date AS slotDate, slot_time AS slotTime, checked_in_at AS checkedInAt
+        `SELECT slot_date AS "slotDate", slot_time AS "slotTime", checked_in_at AS "checkedInAt"
          FROM appointments
          WHERE checked_in_at IS NOT NULL AND slot_date BETWEEN ? AND ?${branchClause}`,
       )
@@ -318,7 +316,7 @@ export async function getClinicGrowth(input: GrowthInput): Promise<ClinicGrowth>
     // end of the day would report hours. Outliers are filtered below.
     db
       .prepare(
-        `SELECT checked_in_at AS checkedInAt, status_updated_at AS completedAt
+        `SELECT checked_in_at AS "checkedInAt", status_updated_at AS "completedAt"
          FROM appointments
          WHERE status = 'completed' AND checked_in_at IS NOT NULL
            AND status_updated_at IS NOT NULL

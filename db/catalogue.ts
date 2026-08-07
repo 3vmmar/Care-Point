@@ -1,4 +1,4 @@
-import { env } from "cloudflare:workers";
+import { database } from "@/db/client";
 import {
   BRANCHES,
   CLINIC_CLOSURES,
@@ -68,172 +68,6 @@ export const STATIC_CATALOGUE: Catalogue = {
   live: false,
 };
 
-function database() {
-  if (!env.DB) throw new Error("The appointment database is not available.");
-  return env.DB;
-}
-
-let catalogueReady: Promise<void> | null = null;
-
-export function ensureCatalogueSchema(): Promise<void> {
-  catalogueReady ??= createSchema().catch((error) => {
-    catalogueReady = null;
-    throw error;
-  });
-  return catalogueReady;
-}
-
-/** Columns added after these tables first shipped unused. */
-const ADDED_COLUMNS: Array<[string, string, string]> = [
-  ["weekly_sessions", "categories", "TEXT NOT NULL DEFAULT ''"],
-  ["schedule_exceptions", "reason_ar", "TEXT"],
-];
-
-async function createSchema() {
-  const db = database();
-  await db.batch([
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS departments (
-        id TEXT PRIMARY KEY,
-        name_en TEXT NOT NULL,
-        name_ar TEXT NOT NULL,
-        active INTEGER NOT NULL DEFAULT 1,
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `),
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS clinic_branches (
-        id TEXT PRIMARY KEY,
-        name_en TEXT NOT NULL,
-        name_ar TEXT NOT NULL,
-        address_en TEXT NOT NULL,
-        address_ar TEXT NOT NULL,
-        map_url TEXT,
-        timezone TEXT NOT NULL DEFAULT 'Africa/Cairo',
-        active INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `),
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS practitioners (
-        id TEXT PRIMARY KEY,
-        department_id TEXT NOT NULL,
-        name_en TEXT NOT NULL,
-        name_ar TEXT NOT NULL,
-        title_en TEXT NOT NULL,
-        title_ar TEXT NOT NULL,
-        credentials TEXT,
-        active INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `),
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS clinic_services (
-        id TEXT PRIMARY KEY,
-        department_id TEXT NOT NULL,
-        name_en TEXT NOT NULL,
-        name_ar TEXT NOT NULL,
-        duration_minutes INTEGER NOT NULL,
-        turnaround_minutes INTEGER NOT NULL DEFAULT 10,
-        active INTEGER NOT NULL DEFAULT 1,
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `),
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS weekly_sessions (
-        id TEXT PRIMARY KEY,
-        branch_id TEXT NOT NULL,
-        practitioner_id TEXT NOT NULL,
-        weekday INTEGER NOT NULL,
-        start_time TEXT NOT NULL,
-        end_time TEXT NOT NULL,
-        interval_minutes INTEGER NOT NULL DEFAULT 30,
-        categories TEXT NOT NULL DEFAULT '',
-        active INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS weekly_sessions_branch_day ON weekly_sessions (branch_id, weekday, active)",
-    ),
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS schedule_exceptions (
-        id TEXT PRIMARY KEY,
-        branch_id TEXT NOT NULL,
-        practitioner_id TEXT,
-        date TEXT NOT NULL,
-        kind TEXT NOT NULL,
-        start_time TEXT,
-        end_time TEXT,
-        reason TEXT,
-        reason_ar TEXT,
-        created_by TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      )
-    `),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS schedule_exceptions_branch_date ON schedule_exceptions (branch_id, date)",
-    ),
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS cancellation_reasons (
-        code TEXT PRIMARY KEY,
-        label_en TEXT NOT NULL,
-        label_ar TEXT NOT NULL,
-        audience TEXT NOT NULL DEFAULT 'both',
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        active INTEGER NOT NULL DEFAULT 1
-      )
-    `),
-  ]);
-
-  for (const [table, column, definition] of ADDED_COLUMNS) {
-    try {
-      await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!/duplicate column/i.test(message)) throw error;
-    }
-  }
-
-  /**
-   * Add newly introduced consultations to an existing catalogue without
-   * overwriting anything the clinic has edited. Clinic OS deactivates rows
-   * instead of deleting them, so `INSERT OR IGNORE` preserves deliberate
-   * removals while making a genuinely new service available after an upgrade as
-   * well as on a fresh database.
-   */
-  const introducedAt = new Date().toISOString();
-  await db.batch(
-    SERVICES.map((service, index) =>
-      db
-        .prepare(
-          `INSERT OR IGNORE INTO clinic_services
-           (id, department_id, name_en, name_ar, duration_minutes,
-            turnaround_minutes, active, sort_order, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
-        )
-        .bind(
-          service.id,
-          service.category,
-          service.en,
-          service.ar,
-          service.durationMinutes,
-          CLINIC_TURNAROUND_MINUTES,
-          index,
-          introducedAt,
-          introducedAt,
-        ),
-    ),
-  );
-}
-
 /**
  * Populates a never-used catalogue from the constants.
  *
@@ -293,7 +127,6 @@ export type CancellationReason = {
 export async function listCancellationReasons(
   audience: "patient" | "staff",
 ): Promise<CancellationReason[]> {
-  await ensureCatalogueSchema();
   const db = database();
   const existing = await db
     .prepare("SELECT COUNT(*) AS total FROM cancellation_reasons")
@@ -304,9 +137,10 @@ export async function listCancellationReasons(
       DEFAULT_CANCELLATION_REASONS.map((reason, index) =>
         db
           .prepare(
-            `INSERT OR IGNORE INTO cancellation_reasons
+            `INSERT INTO cancellation_reasons
              (code, label_en, label_ar, audience, sort_order, active)
-             VALUES (?, ?, ?, ?, ?, 1)`,
+             VALUES (?, ?, ?, ?, ?, TRUE)
+             ON CONFLICT DO NOTHING`,
           )
           .bind(reason.code, reason.labelEn, reason.labelAr, reason.audience, index),
       ),
@@ -315,9 +149,9 @@ export async function listCancellationReasons(
 
   const result = await db
     .prepare(
-      `SELECT code, label_en AS labelEn, label_ar AS labelAr, audience
+      `SELECT code, label_en AS "labelEn", label_ar AS "labelAr", audience
        FROM cancellation_reasons
-       WHERE active = 1 AND audience IN (?, 'both')
+       WHERE active = TRUE AND audience IN (?, 'both')
        ORDER BY sort_order, code`,
     )
     .bind(audience)
@@ -344,9 +178,10 @@ async function seedFromConstants() {
     statements.push(
       db
         .prepare(
-          `INSERT OR IGNORE INTO departments
+          `INSERT INTO departments
            (id, name_en, name_ar, active, sort_order, created_at, updated_at)
-           VALUES (?, ?, ?, 1, ?, ?, ?)`,
+           VALUES (?, ?, ?, TRUE, ?, ?, ?)
+           ON CONFLICT DO NOTHING`,
         )
         .bind(category.id, category.en, category.ar, index, now, now),
     );
@@ -356,9 +191,10 @@ async function seedFromConstants() {
     statements.push(
       db
         .prepare(
-          `INSERT OR IGNORE INTO clinic_branches
+          `INSERT INTO clinic_branches
            (id, name_en, name_ar, address_en, address_ar, map_url, timezone, active, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'Africa/Cairo', 1, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, 'Africa/Cairo', TRUE, ?, ?)
+           ON CONFLICT DO NOTHING`,
         )
         .bind(
           branch.id,
@@ -379,9 +215,10 @@ async function seedFromConstants() {
     statements.push(
       db
         .prepare(
-          `INSERT OR IGNORE INTO practitioners
+          `INSERT INTO practitioners
            (id, department_id, name_en, name_ar, title_en, title_ar, active, created_at, updated_at)
-           VALUES (?, ?, ?, ?, '', '', 1, ?, ?)`,
+           VALUES (?, ?, ?, ?, '', '', TRUE, ?, ?)
+           ON CONFLICT DO NOTHING`,
         )
         .bind(id, id === "dental" ? "dental" : "surgical", name, name, now, now),
     );
@@ -391,9 +228,10 @@ async function seedFromConstants() {
     statements.push(
       db
         .prepare(
-          `INSERT OR IGNORE INTO clinic_services
+          `INSERT INTO clinic_services
            (id, department_id, name_en, name_ar, duration_minutes, turnaround_minutes, active, sort_order, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, TRUE, ?, ?, ?)
+           ON CONFLICT DO NOTHING`,
         )
         .bind(
           service.id,
@@ -498,38 +336,37 @@ function parseCategories(value: string): ServiceCategory[] {
 }
 
 async function readCatalogue(attempt = 0): Promise<Catalogue> {
-  await ensureCatalogueSchema();
   const db = database();
 
   const [branches, sessions, services, closures, stamp] = await Promise.all([
     db
       .prepare(
-        `SELECT id, name_en AS nameEn, name_ar AS nameAr, address_en AS addressEn,
-                address_ar AS addressAr, map_url AS mapUrl
-         FROM clinic_branches WHERE active = 1`,
+        `SELECT id, name_en AS "nameEn", name_ar AS "nameAr", address_en AS "addressEn",
+                address_ar AS "addressAr", map_url AS "mapUrl"
+         FROM clinic_branches WHERE active = TRUE`,
       )
       .all<BranchRow>(),
     db
       .prepare(
-        `SELECT s.id, s.branch_id AS branchId, s.practitioner_id AS practitionerId,
-                p.name_en AS practitionerName, s.weekday, s.start_time AS startTime,
-                s.end_time AS endTime, s.interval_minutes AS intervalMinutes, s.categories
+        `SELECT s.id, s.branch_id AS "branchId", s.practitioner_id AS "practitionerId",
+                p.name_en AS "practitionerName", s.weekday, s.start_time AS "startTime",
+                s.end_time AS "endTime", s.interval_minutes AS "intervalMinutes", s.categories
          FROM weekly_sessions s
          LEFT JOIN practitioners p ON p.id = s.practitioner_id
-         WHERE s.active = 1
+         WHERE s.active = TRUE
          ORDER BY s.weekday, s.start_time`,
       )
       .all<SessionRow>(),
     db
       .prepare(
-        `SELECT id, department_id AS departmentId, name_en AS nameEn, name_ar AS nameAr,
-                duration_minutes AS durationMinutes, turnaround_minutes AS turnaroundMinutes
-         FROM clinic_services WHERE active = 1 ORDER BY sort_order, id`,
+        `SELECT id, department_id AS "departmentId", name_en AS "nameEn", name_ar AS "nameAr",
+                duration_minutes AS "durationMinutes", turnaround_minutes AS "turnaroundMinutes"
+         FROM clinic_services WHERE active = TRUE ORDER BY sort_order, id`,
       )
       .all<ServiceRow>(),
     db
       .prepare(
-        `SELECT date, reason, reason_ar AS reasonAr FROM schedule_exceptions
+        `SELECT date, reason, reason_ar AS "reasonAr" FROM schedule_exceptions
          WHERE kind = 'closed' AND practitioner_id IS NULL`,
       )
       .all<ClosureRow>(),
@@ -539,12 +376,12 @@ async function readCatalogue(attempt = 0): Promise<Catalogue> {
     db
       .prepare(
         `SELECT
-           (SELECT COUNT(*) FROM weekly_sessions WHERE active = 1) AS sessions,
-           (SELECT COUNT(*) FROM weekly_sessions) AS everSessions,
-           (SELECT MAX(updated_at) FROM weekly_sessions) AS sessionsAt,
-           (SELECT MAX(updated_at) FROM clinic_services) AS servicesAt,
+           (SELECT COUNT(*) FROM weekly_sessions WHERE active = TRUE) AS sessions,
+           (SELECT COUNT(*) FROM weekly_sessions) AS "everSessions",
+           (SELECT MAX(updated_at) FROM weekly_sessions) AS "sessionsAt",
+           (SELECT MAX(updated_at) FROM clinic_services) AS "servicesAt",
            (SELECT COUNT(*) FROM schedule_exceptions WHERE kind = 'closed') AS closures,
-           (SELECT MAX(created_at) FROM schedule_exceptions) AS closuresAt`,
+           (SELECT MAX(created_at) FROM schedule_exceptions) AS "closuresAt"`,
       )
       .first<{
         sessions: number;
@@ -719,12 +556,12 @@ async function rejectIfInvalid(input: SessionInput): Promise<void> {
    */
   const rows = await database()
     .prepare(
-      `SELECT s.id, s.branch_id AS branchId, s.weekday, s.start_time AS startTime,
-              s.end_time AS endTime, s.interval_minutes AS intervalMinutes,
-              s.categories, p.name_en AS practitionerName, s.practitioner_id AS practitionerId
+      `SELECT s.id, s.branch_id AS "branchId", s.weekday, s.start_time AS "startTime",
+              s.end_time AS "endTime", s.interval_minutes AS "intervalMinutes",
+              s.categories, p.name_en AS "practitionerName", s.practitioner_id AS "practitionerId"
        FROM weekly_sessions s
        LEFT JOIN practitioners p ON p.id = s.practitioner_id
-       WHERE s.active = 1`,
+       WHERE s.active = TRUE`,
     )
     .all<SessionRow>();
 
@@ -785,7 +622,6 @@ async function practitionerName(id: string): Promise<string> {
 }
 
 export async function saveSession(input: SessionInput & { actor: string }): Promise<void> {
-  await ensureCatalogueSchema();
   await rejectIfInvalid(input);
 
   const now = new Date().toISOString();
@@ -844,9 +680,8 @@ export async function saveSession(input: SessionInput & { actor: string }): Prom
  * already promised, and the slot simply stops being offered.
  */
 export async function removeSession(id: string): Promise<boolean> {
-  await ensureCatalogueSchema();
   const result = await database()
-    .prepare("UPDATE weekly_sessions SET active = 0, updated_at = ? WHERE id = ? AND active = 1")
+    .prepare("UPDATE weekly_sessions SET active = FALSE, updated_at = ? WHERE id = ? AND active = TRUE")
     .bind(new Date().toISOString(), id)
     .run();
   invalidateCatalogue();
@@ -873,7 +708,6 @@ export async function savePractitioner(input: {
   titleAr?: string;
   actor: string;
 }): Promise<string> {
-  await ensureCatalogueSchema();
   const nameEn = input.nameEn.trim().slice(0, 120);
   if (!nameEn) throw new Error("A practitioner needs a name.");
   if (!SERVICE_CATEGORIES.some((category) => category.id === input.departmentId)) {
@@ -962,10 +796,9 @@ export async function savePractitioner(input: {
  * sessions deliberately and see what that costs them first.
  */
 export async function deactivatePractitioner(id: string): Promise<void> {
-  await ensureCatalogueSchema();
   const db = database();
   const sessions = await db
-    .prepare("SELECT COUNT(*) AS total FROM weekly_sessions WHERE practitioner_id = ? AND active = 1")
+    .prepare("SELECT COUNT(*) AS total FROM weekly_sessions WHERE practitioner_id = ? AND active = TRUE")
     .bind(id)
     .first<{ total: number }>();
   if ((sessions?.total ?? 0) > 0) {
@@ -974,7 +807,7 @@ export async function deactivatePractitioner(id: string): Promise<void> {
     );
   }
   const result = await db
-    .prepare("UPDATE practitioners SET active = 0, updated_at = ? WHERE id = ? AND active = 1")
+    .prepare("UPDATE practitioners SET active = FALSE, updated_at = ? WHERE id = ? AND active = TRUE")
     .bind(new Date().toISOString(), id)
     .run();
   if ((result.meta.changes ?? 0) === 0) {
@@ -988,7 +821,6 @@ export async function saveServiceDuration(input: {
   durationMinutes: number;
   turnaroundMinutes?: number;
 }): Promise<void> {
-  await ensureCatalogueSchema();
   if (
     !Number.isInteger(input.durationMinutes) ||
     input.durationMinutes <= 0 ||
@@ -1023,7 +855,6 @@ export async function saveClosure(input: {
   ar: string;
   actor: string;
 }): Promise<void> {
-  await ensureCatalogueSchema();
   if (!isDateKey(input.date)) throw new Error("A closure date must be YYYY-MM-DD.");
   const en = input.en.trim().slice(0, 120);
   const ar = input.ar.trim().slice(0, 120);
@@ -1049,7 +880,6 @@ export async function saveClosure(input: {
 }
 
 export async function removeClosure(date: string): Promise<boolean> {
-  await ensureCatalogueSchema();
   const result = await database()
     .prepare(
       "DELETE FROM schedule_exceptions WHERE date = ? AND kind = 'closed' AND practitioner_id IS NULL",
@@ -1072,41 +902,40 @@ export async function removeClosure(date: string): Promise<boolean> {
  * applies to.
  */
 export async function getCatalogueForEditing() {
-  await ensureCatalogueSchema();
   const db = database();
   const [sessions, services, practitioners, closures, branches] = await Promise.all([
     db
       .prepare(
-        `SELECT s.id, s.branch_id AS branchId, s.practitioner_id AS practitionerId,
-                p.name_en AS practitionerName, s.weekday, s.start_time AS startTime,
-                s.end_time AS endTime, s.interval_minutes AS intervalMinutes, s.categories
+        `SELECT s.id, s.branch_id AS "branchId", s.practitioner_id AS "practitionerId",
+                p.name_en AS "practitionerName", s.weekday, s.start_time AS "startTime",
+                s.end_time AS "endTime", s.interval_minutes AS "intervalMinutes", s.categories
          FROM weekly_sessions s
          LEFT JOIN practitioners p ON p.id = s.practitioner_id
-         WHERE s.active = 1
+         WHERE s.active = TRUE
          ORDER BY s.branch_id, s.weekday, s.start_time`,
       )
       .all<SessionRow>(),
     db
       .prepare(
-        `SELECT id, department_id AS departmentId, name_en AS nameEn, name_ar AS nameAr,
-                duration_minutes AS durationMinutes, turnaround_minutes AS turnaroundMinutes
-         FROM clinic_services WHERE active = 1 ORDER BY sort_order, id`,
+        `SELECT id, department_id AS "departmentId", name_en AS "nameEn", name_ar AS "nameAr",
+                duration_minutes AS "durationMinutes", turnaround_minutes AS "turnaroundMinutes"
+         FROM clinic_services WHERE active = TRUE ORDER BY sort_order, id`,
       )
       .all<ServiceRow>(),
     db
       .prepare(
-        `SELECT id, name_en AS name, department_id AS departmentId
-         FROM practitioners WHERE active = 1 ORDER BY name_en`,
+        `SELECT id, name_en AS name, department_id AS "departmentId"
+         FROM practitioners WHERE active = TRUE ORDER BY name_en`,
       )
       .all<{ id: string; name: string; departmentId: string }>(),
     db
       .prepare(
-        `SELECT date, reason, reason_ar AS reasonAr FROM schedule_exceptions
+        `SELECT date, reason, reason_ar AS "reasonAr" FROM schedule_exceptions
          WHERE kind = 'closed' AND practitioner_id IS NULL ORDER BY date`,
       )
       .all<ClosureRow>(),
     db
-      .prepare("SELECT id, name_en AS name FROM clinic_branches WHERE active = 1 ORDER BY id")
+      .prepare("SELECT id, name_en AS name FROM clinic_branches WHERE active = TRUE ORDER BY id")
       .all<{ id: string; name: string }>(),
   ]);
 

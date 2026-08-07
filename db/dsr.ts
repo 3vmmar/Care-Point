@@ -1,9 +1,8 @@
-import { env } from "cloudflare:workers";
+import { database } from "@/db/client";
 import { clinicToday } from "@/lib/dates";
 import { recordAccess } from "@/db/audit";
 import { reportError } from "@/lib/observability";
 import {
-  ensureNotificationSchema,
   notificationJobStatements,
 } from "@/db/notifications";
 
@@ -47,55 +46,10 @@ export type DataRequest = {
 };
 
 const COLUMNS = `id, kind, status,
-  requester_name AS requesterName, requester_phone AS requesterPhone,
-  requester_email AS requesterEmail, note, language,
-  created_at AS createdAt, resolved_by AS resolvedBy,
-  resolved_at AS resolvedAt, resolution, affected_count AS affectedCount`;
-
-function database() {
-  if (!env.DB) throw new Error("The appointment database is not available.");
-  return env.DB;
-}
-
-let ready: Promise<void> | null = null;
-
-export function ensureDataRequestSchema(): Promise<void> {
-  ready ??= createSchema().catch((error) => {
-    ready = null;
-    throw error;
-  });
-  return ready;
-}
-
-async function createSchema() {
-  const db = database();
-  await db.batch([
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS data_requests (
-        id TEXT PRIMARY KEY,
-        kind TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'pending',
-        requester_name TEXT NOT NULL,
-        requester_phone TEXT NOT NULL,
-        requester_email TEXT,
-        note TEXT,
-        language TEXT NOT NULL DEFAULT 'en',
-        client_hash TEXT,
-        created_at TEXT NOT NULL,
-        resolved_by TEXT,
-        resolved_at TEXT,
-        resolution TEXT,
-        affected_count INTEGER
-      )
-    `),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS data_requests_status ON data_requests (status, created_at)",
-    ),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS data_requests_phone ON data_requests (requester_phone)",
-    ),
-  ]);
-}
+  requester_name AS "requesterName", requester_phone AS "requesterPhone",
+  requester_email AS "requesterEmail", note, language,
+  created_at AS "createdAt", resolved_by AS "resolvedBy",
+  resolved_at AS "resolvedAt", resolution, affected_count AS "affectedCount"`;
 
 /**
  * Phone numbers are entered inconsistently — `01501606307`, `+201501606307`,
@@ -132,8 +86,6 @@ export async function submitDataRequest(input: {
   language?: string;
   clientHash?: string;
 }): Promise<{ id: string }> {
-  await ensureDataRequestSchema();
-  await ensureNotificationSchema();
   const db = database();
   const id = crypto.randomUUID();
   const timestamp = new Date().toISOString();
@@ -169,7 +121,6 @@ export async function submitDataRequest(input: {
 
 /** Open requests submitted from the same caller in the last day. */
 export async function recentRequestCount(clientHash: string): Promise<number> {
-  await ensureDataRequestSchema();
   const since = new Date(Date.now() - 86_400_000).toISOString();
   const row = await database()
     .prepare(
@@ -181,7 +132,6 @@ export async function recentRequestCount(clientHash: string): Promise<number> {
 }
 
 export async function listDataRequests(status?: DataRequestStatus) {
-  await ensureDataRequestSchema();
   const where = status ? "WHERE status = ?" : "";
   const bindings = status ? [status] : [];
   const result = await database()
@@ -192,7 +142,6 @@ export async function listDataRequests(status?: DataRequestStatus) {
 }
 
 export async function getDataRequest(id: string) {
-  await ensureDataRequestSchema();
   return database()
     .prepare(`SELECT ${COLUMNS} FROM data_requests WHERE id = ?`)
     .bind(id)
@@ -230,17 +179,16 @@ export type PatientRecord = {
  * without clinical review is not a decision this code should make.
  */
 export async function exportPatientData(phone: string): Promise<PatientRecord[]> {
-  await ensureDataRequestSchema();
   const key = phoneKey(phone);
   if (!key) return [];
 
   const result = await database()
     .prepare(
-      `SELECT id, status, branch, service, slot_date AS slotDate, slot_time AS slotTime,
-              patient_name AS patientName, patient_phone AS patientPhone,
-              patient_email AS patientEmail, patient_note AS patientNote,
-              language, source, created_at AS createdAt, confirmed_at AS confirmedAt,
-              consent_given_at AS consentGivenAt, consent_version AS consentVersion
+      `SELECT id, status, branch, service, slot_date AS "slotDate", slot_time AS "slotTime",
+              patient_name AS "patientName", patient_phone AS "patientPhone",
+              patient_email AS "patientEmail", patient_note AS "patientNote",
+              language, source, created_at AS "createdAt", confirmed_at AS "confirmedAt",
+              consent_given_at AS "consentGivenAt", consent_version AS "consentVersion"
        FROM appointments
        WHERE patient_phone IS NOT NULL
        ORDER BY slot_date DESC, slot_time DESC`,
@@ -271,7 +219,6 @@ export async function erasePatientData(
   phone: string,
   actor: string,
 ): Promise<EraseOutcome> {
-  await ensureDataRequestSchema();
   const records = await exportPatientData(phone);
   if (records.length === 0) return { ok: false, reason: "not-found" };
 
@@ -321,7 +268,6 @@ export async function resolveDataRequest(input: {
   resolution: string;
   affectedCount?: number;
 }): Promise<boolean> {
-  await ensureDataRequestSchema();
   try {
     const result = await database()
       .prepare(

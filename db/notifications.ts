@@ -1,4 +1,4 @@
-import { env } from "cloudflare:workers";
+import { database, type Database, type Statement } from "@/db/client";
 import {
   channelsForNotification,
   retryDelayMs,
@@ -72,95 +72,23 @@ export type DataRequestNotificationSubject = {
   createdAt: string;
 };
 
-const JOB_COLUMNS = `id, dedupe_key AS dedupeKey, kind,
-  subject_type AS subjectType, subject_id AS subjectId, channel,
-  context_json AS contextJson, status, attempts, max_attempts AS maxAttempts,
-  next_attempt_at AS nextAttemptAt, locked_at AS lockedAt, locked_by AS lockedBy,
-  provider, provider_message_id AS providerMessageId,
-  last_error_code AS lastErrorCode, last_error_message AS lastErrorMessage,
-  created_at AS createdAt, updated_at AS updatedAt, delivered_at AS deliveredAt`;
+const JOB_COLUMNS = `id, dedupe_key AS "dedupeKey", kind,
+  subject_type AS "subjectType", subject_id AS "subjectId", channel,
+  context_json AS "contextJson", status, attempts, max_attempts AS "maxAttempts",
+  next_attempt_at AS "nextAttemptAt", locked_at AS "lockedAt", locked_by AS "lockedBy",
+  provider, provider_message_id AS "providerMessageId",
+  last_error_code AS "lastErrorCode", last_error_message AS "lastErrorMessage",
+  created_at AS "createdAt", updated_at AS "updatedAt", delivered_at AS "deliveredAt"`;
 
 const MAX_ATTEMPTS = 6;
 const LOCK_TIMEOUT_MS = 5 * 60_000;
-
-function database() {
-  if (!env.DB) throw new Error("The notification database is not available.");
-  return env.DB;
-}
 
 function iso(date = new Date()) {
   return date.toISOString();
 }
 
-let schemaReady: Promise<void> | null = null;
-
-export function ensureNotificationSchema(): Promise<void> {
-  schemaReady ??= createSchema().catch((error) => {
-    schemaReady = null;
-    throw error;
-  });
-  return schemaReady;
-}
-
-async function createSchema() {
-  const db = database();
-  await db.batch([
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS notification_jobs (
-        id TEXT PRIMARY KEY,
-        dedupe_key TEXT NOT NULL UNIQUE,
-        kind TEXT NOT NULL,
-        subject_type TEXT NOT NULL,
-        subject_id TEXT NOT NULL,
-        channel TEXT NOT NULL,
-        context_json TEXT,
-        status TEXT NOT NULL DEFAULT 'pending',
-        attempts INTEGER NOT NULL DEFAULT 0,
-        max_attempts INTEGER NOT NULL DEFAULT ${MAX_ATTEMPTS},
-        next_attempt_at TEXT NOT NULL,
-        locked_at TEXT,
-        locked_by TEXT,
-        provider TEXT,
-        provider_message_id TEXT,
-        last_error_code TEXT,
-        last_error_message TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        delivered_at TEXT
-      )
-    `),
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS notification_attempts (
-        id TEXT PRIMARY KEY,
-        job_id TEXT NOT NULL
-          REFERENCES notification_jobs(id) ON DELETE CASCADE,
-        attempt_number INTEGER NOT NULL,
-        outcome TEXT NOT NULL,
-        provider TEXT,
-        status_code INTEGER,
-        error_code TEXT,
-        error_message TEXT,
-        started_at TEXT NOT NULL,
-        finished_at TEXT NOT NULL
-      )
-    `),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS notification_jobs_due ON notification_jobs (status, next_attempt_at)",
-    ),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS notification_jobs_subject ON notification_jobs (subject_type, subject_id)",
-    ),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS notification_jobs_created ON notification_jobs (created_at)",
-    ),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS notification_attempts_job ON notification_attempts (job_id, attempt_number)",
-    ),
-  ]);
-}
-
 export function notificationJobStatements(
-  db: D1Database,
+  db: Database,
   input: {
     kind: NotificationKind;
     subjectType: NotificationSubjectType;
@@ -172,7 +100,7 @@ export function notificationJobStatements(
     expectedStatusUpdatedAt?: string;
     requiredStatus?: string;
   },
-): D1PreparedStatement[] {
+): Statement[] {
   const contextJson = input.context ? JSON.stringify(input.context) : null;
   return channelsForNotification(input.kind).map((channel) => {
     const values = [
@@ -196,12 +124,13 @@ export function notificationJobStatements(
           : "id = ? AND status <> 'held'";
       return db
         .prepare(
-          `INSERT OR IGNORE INTO notification_jobs
+          `INSERT INTO notification_jobs
            (id, dedupe_key, kind, subject_type, subject_id, channel,
             context_json, status, attempts, max_attempts, next_attempt_at,
             created_at, updated_at)
            SELECT ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ${MAX_ATTEMPTS}, ?, ?, ?
-           FROM appointments WHERE ${condition}`,
+           FROM appointments WHERE ${condition}
+           ON CONFLICT DO NOTHING`,
         )
         .bind(
           ...values,
@@ -216,12 +145,13 @@ export function notificationJobStatements(
 
     return db
       .prepare(
-        `INSERT OR IGNORE INTO notification_jobs
+        `INSERT INTO notification_jobs
          (id, dedupe_key, kind, subject_type, subject_id, channel,
           context_json, status, attempts, max_attempts, next_attempt_at,
           created_at, updated_at)
          SELECT ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ${MAX_ATTEMPTS}, ?, ?, ?
-         FROM data_requests WHERE id = ?`,
+         FROM data_requests WHERE id = ?
+         ON CONFLICT DO NOTHING`,
       )
       .bind(...values, input.subjectId);
   });
@@ -234,7 +164,6 @@ export async function queueReminder(input: {
   branch: string;
   service: string;
 }) {
-  await ensureNotificationSchema();
   const db = database();
   const timestamp = iso();
   await db.batch([
@@ -262,7 +191,6 @@ export async function queueReminder(input: {
 }
 
 export async function claimDueNotificationJobs(limit = 25): Promise<NotificationJob[]> {
-  await ensureNotificationSchema();
   const db = database();
   const workerId = crypto.randomUUID();
   const timestamp = iso();
@@ -296,16 +224,15 @@ export async function claimDueNotificationJobs(limit = 25): Promise<Notification
 }
 
 export async function loadNotificationSubject(job: NotificationJob) {
-  await ensureNotificationSchema();
   const db = database();
   if (job.subjectType === "appointment") {
     return db
       .prepare(
         `SELECT id, branch, service, practitioner,
-          slot_date AS slotDate, slot_time AS slotTime,
-          patient_name AS patientName, patient_phone AS patientPhone,
-          patient_email AS patientEmail, patient_note AS patientNote,
-          language, manage_token AS manageToken
+          slot_date AS "slotDate", slot_time AS "slotTime",
+          patient_name AS "patientName", patient_phone AS "patientPhone",
+          patient_email AS "patientEmail", patient_note AS "patientNote",
+          language, manage_token AS "manageToken"
          FROM appointments WHERE id = ?`,
       )
       .bind(job.subjectId)
@@ -313,10 +240,11 @@ export async function loadNotificationSubject(job: NotificationJob) {
   }
   return db
     .prepare(
-      `SELECT id, kind, requester_name AS requesterName,
-        requester_phone AS requesterPhone, requester_email AS requesterEmail,
-        note, language, created_at AS createdAt
-       FROM data_requests WHERE id = ?`,
+      `SELECT id, kind, requester_name AS "requesterName",
+        requester_phone AS "requesterPhone", requester_email AS "requesterEmail",
+        note, language, created_at AS "createdAt"
+       FROM data_requests WHERE id = ?
+         ON CONFLICT DO NOTHING`,
     )
     .bind(job.subjectId)
     .first<DataRequestNotificationSubject>();
@@ -333,7 +261,6 @@ type AttemptResult = {
 };
 
 export async function finishNotificationJob(job: NotificationJob, result: AttemptResult) {
-  await ensureNotificationSchema();
   const db = database();
   const finishedAt = iso();
   const providerAttempted = result.outcome === "delivered" || result.outcome === "retrying" || result.outcome === "dead";
@@ -351,7 +278,7 @@ export async function finishNotificationJob(job: NotificationJob, result: Attemp
       ? iso(new Date(Date.now() + retryDelayMs(attempts)))
       : finishedAt;
 
-  const statements: D1PreparedStatement[] = [
+  const statements: Statement[] = [
     db
       .prepare(
         `INSERT INTO notification_attempts
@@ -415,7 +342,6 @@ export async function finishNotificationJob(job: NotificationJob, result: Attemp
 }
 
 export async function notificationQueueSummary() {
-  await ensureNotificationSchema();
   const since = iso(new Date(Date.now() - 24 * 60 * 60_000));
   const row = await database()
     .prepare(
@@ -424,7 +350,7 @@ export async function notificationQueueSummary() {
         SUM(CASE WHEN status = 'blocked' THEN 1 ELSE 0 END) AS blocked,
         SUM(CASE WHEN status = 'dead' THEN 1 ELSE 0 END) AS dead,
         SUM(CASE WHEN status = 'delivered' AND delivered_at >= ? THEN 1 ELSE 0 END) AS delivered24h,
-        MIN(CASE WHEN status IN ('pending', 'processing', 'retrying', 'blocked') THEN created_at END) AS oldestOpenAt
+        MIN(CASE WHEN status IN ('pending', 'processing', 'retrying', 'blocked') THEN created_at END) AS "oldestOpenAt"
        FROM notification_jobs`,
     )
     .bind(since)
@@ -445,7 +371,6 @@ export async function notificationQueueSummary() {
 }
 
 export async function listNotificationJobs(status?: NotificationStatus, limit = 100) {
-  await ensureNotificationSchema();
   const safeLimit = Math.min(Math.max(limit, 1), 200);
   const result = status
     ? await database()
@@ -463,7 +388,6 @@ export async function listNotificationJobs(status?: NotificationStatus, limit = 
 }
 
 export async function retryNotificationJob(id: string) {
-  await ensureNotificationSchema();
   const timestamp = iso();
   const result = await database()
     .prepare(
@@ -484,7 +408,6 @@ export async function retryNotificationJob(id: string) {
  */
 export async function releaseConfiguredNotificationJobs(channels: NotificationChannel[]) {
   if (channels.length === 0) return 0;
-  await ensureNotificationSchema();
   const timestamp = iso();
   const placeholders = channels.map(() => "?").join(", ");
   const result = await database()
@@ -499,7 +422,6 @@ export async function releaseConfiguredNotificationJobs(channels: NotificationCh
 }
 
 export async function purgeNotificationHistory(retentionDays = 180) {
-  await ensureNotificationSchema();
   const db = database();
   const cutoff = iso(new Date(Date.now() - retentionDays * 86_400_000));
   const [, jobs] = await db.batch([

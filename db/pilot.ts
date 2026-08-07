@@ -1,4 +1,4 @@
-import { env } from "cloudflare:workers";
+import { database } from "@/db/client";
 import { addDays, clinicToday, isDateKey, weekdayIndex } from "@/lib/dates";
 
 export const PILOT_CHECKLIST = [
@@ -103,86 +103,6 @@ const VALID_DECISIONS: PilotDecision[] = ["pending", "go", "extend", "stop"];
 const VALID_RECOMMENDATIONS: PilotRecommendation[] = ["continue", "investigate", "stop"];
 const VALID_SEVERITIES: PilotSeverity[] = ["low", "medium", "high", "critical"];
 
-function database() {
-  if (!env.DB) throw new Error("The appointment database is not available.");
-  return env.DB;
-}
-
-let pilotReady: Promise<void> | null = null;
-
-export function ensurePilotSchema(): Promise<void> {
-  pilotReady ??= createSchema().catch((error) => {
-    pilotReady = null;
-    throw error;
-  });
-  return pilotReady;
-}
-
-async function createSchema() {
-  const db = database();
-  await db.batch([
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS pilot_settings (
-        id TEXT PRIMARY KEY,
-        status TEXT NOT NULL DEFAULT 'setup',
-        branch_id TEXT,
-        start_date TEXT,
-        end_date TEXT,
-        decision TEXT NOT NULL DEFAULT 'pending',
-        decision_note TEXT,
-        updated_by TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `),
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS pilot_checklist (
-        item_key TEXT PRIMARY KEY,
-        completed INTEGER NOT NULL DEFAULT 0,
-        note TEXT,
-        updated_by TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `),
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS pilot_incidents (
-        id TEXT PRIMARY KEY,
-        summary TEXT NOT NULL,
-        severity TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'open',
-        opened_by TEXT NOT NULL,
-        opened_at TEXT NOT NULL,
-        resolved_by TEXT,
-        resolved_at TEXT
-      )
-    `),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS pilot_incidents_status ON pilot_incidents (status, opened_at)",
-    ),
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS pilot_reviews (
-        id TEXT PRIMARY KEY,
-        week_start TEXT NOT NULL,
-        branch_id TEXT,
-        bookings INTEGER NOT NULL,
-        completed INTEGER NOT NULL,
-        no_shows INTEGER NOT NULL,
-        cancelled INTEGER NOT NULL,
-        notification_total INTEGER NOT NULL,
-        notification_failed INTEGER NOT NULL,
-        open_incidents INTEGER NOT NULL,
-        recommendation TEXT NOT NULL,
-        note TEXT,
-        created_by TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      )
-    `),
-    db.prepare("CREATE INDEX IF NOT EXISTS pilot_reviews_week ON pilot_reviews (week_start)"),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS pilot_reviews_created ON pilot_reviews (created_at)",
-    ),
-  ]);
-}
-
 type SettingsRow = {
   status: PilotStatus;
   branchId: string | null;
@@ -195,12 +115,11 @@ type SettingsRow = {
 };
 
 export async function getPilotSettings(): Promise<PilotSettings> {
-  await ensurePilotSchema();
   const row = await database()
     .prepare(
-      `SELECT status, branch_id AS branchId, start_date AS startDate,
-              end_date AS endDate, decision, decision_note AS decisionNote,
-              updated_by AS updatedBy, updated_at AS updatedAt
+      `SELECT status, branch_id AS "branchId", start_date AS "startDate",
+              end_date AS "endDate", decision, decision_note AS "decisionNote",
+              updated_by AS "updatedBy", updated_at AS "updatedAt"
        FROM pilot_settings WHERE id = 'primary'`,
     )
     .first<SettingsRow>();
@@ -243,11 +162,10 @@ export async function getPilotPolicy() {
 }
 
 export async function getPilotChecklist() {
-  await ensurePilotSchema();
   const result = await database()
     .prepare(
-      `SELECT item_key AS itemKey, completed, note,
-              updated_by AS updatedBy, updated_at AS updatedAt
+      `SELECT item_key AS "itemKey", completed, note,
+              updated_by AS "updatedBy", updated_at AS "updatedAt"
        FROM pilot_checklist`,
     )
     .all<{
@@ -279,7 +197,6 @@ export async function updatePilotChecklist(input: {
   if (!PILOT_CHECKLIST.some((item) => item.key === input.key)) {
     throw new Error("Unknown pilot checklist item.");
   }
-  await ensurePilotSchema();
   const timestamp = new Date().toISOString();
   await database()
     .prepare(
@@ -294,7 +211,7 @@ export async function updatePilotChecklist(input: {
     )
     .bind(
       input.key,
-      input.completed ? 1 : 0,
+      input.completed,
       input.note?.trim().slice(0, 500) || null,
       input.actor,
       timestamp,
@@ -342,7 +259,6 @@ export async function updatePilotSettings(input: {
     }
   }
 
-  await ensurePilotSchema();
   const timestamp = new Date().toISOString();
   await database()
     .prepare(
@@ -382,7 +298,6 @@ function weekStart(date = clinicToday()) {
 
 export async function getPilotMetrics(settings?: PilotSettings): Promise<PilotMetrics> {
   const resolvedSettings = settings ?? (await getPilotSettings());
-  await ensurePilotSchema();
   const db = database();
   const start = weekStart();
   const startIso = `${start}T00:00:00.000Z`;
@@ -394,9 +309,9 @@ export async function getPilotMetrics(settings?: PilotSettings): Promise<PilotMe
       .prepare(
         `SELECT
            SUM(CASE WHEN confirmed_at >= ? THEN 1 ELSE 0 END) AS bookings,
-           SUM(CASE WHEN confirmed_at >= ? AND source = 'website' THEN 1 ELSE 0 END) AS websiteBookings,
+           SUM(CASE WHEN confirmed_at >= ? AND source = 'website' THEN 1 ELSE 0 END) AS "websiteBookings",
            SUM(CASE WHEN slot_date >= ? AND status = 'completed' THEN 1 ELSE 0 END) AS completed,
-           SUM(CASE WHEN slot_date >= ? AND status = 'no_show' THEN 1 ELSE 0 END) AS noShows,
+           SUM(CASE WHEN slot_date >= ? AND status = 'no_show' THEN 1 ELSE 0 END) AS "noShows",
            SUM(CASE WHEN slot_date >= ? AND status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled
          FROM appointments
          WHERE status <> 'held'${branchClause}`,
@@ -422,8 +337,8 @@ export async function getPilotMetrics(settings?: PilotSettings): Promise<PilotMe
       .first<{ total: number; failed: number | null }>(),
     db
       .prepare(
-        `SELECT COUNT(*) AS openIncidents,
-                SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) AS criticalIncidents
+        `SELECT COUNT(*) AS "openIncidents",
+                SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) AS "criticalIncidents"
          FROM pilot_incidents WHERE status = 'open'`,
       )
       .first<{ openIncidents: number; criticalIncidents: number | null }>(),
@@ -615,12 +530,11 @@ export function evaluatePilot(
 }
 
 export async function listPilotIncidents() {
-  await ensurePilotSchema();
   const result = await database()
     .prepare(
-      `SELECT id, summary, severity, status, opened_by AS openedBy,
-              opened_at AS openedAt, resolved_by AS resolvedBy,
-              resolved_at AS resolvedAt
+      `SELECT id, summary, severity, status, opened_by AS "openedBy",
+              opened_at AS "openedAt", resolved_by AS "resolvedBy",
+              resolved_at AS "resolvedAt"
        FROM pilot_incidents ORDER BY
          CASE status WHEN 'open' THEN 0 ELSE 1 END,
          opened_at DESC LIMIT 50`,
@@ -637,7 +551,6 @@ export async function createPilotIncident(input: {
   const summary = input.summary.trim();
   if (!summary || summary.length > 240) throw new Error("Incident summary is required.");
   if (!VALID_SEVERITIES.includes(input.severity)) throw new Error("Invalid incident severity.");
-  await ensurePilotSchema();
   await database()
     .prepare(
       `INSERT INTO pilot_incidents
@@ -650,7 +563,6 @@ export async function createPilotIncident(input: {
 }
 
 export async function resolvePilotIncident(id: string, actor: string) {
-  await ensurePilotSchema();
   const result = await database()
     .prepare(
       `UPDATE pilot_incidents SET status = 'resolved', resolved_by = ?, resolved_at = ?
@@ -662,15 +574,14 @@ export async function resolvePilotIncident(id: string, actor: string) {
 }
 
 export async function listPilotReviews() {
-  await ensurePilotSchema();
   const result = await database()
     .prepare(
-      `SELECT id, week_start AS weekStart, branch_id AS branchId, bookings,
-              completed, no_shows AS noShows, cancelled,
-              notification_total AS notificationTotal,
-              notification_failed AS notificationFailed,
-              open_incidents AS openIncidents, recommendation, note,
-              created_by AS createdBy, created_at AS createdAt
+      `SELECT id, week_start AS "weekStart", branch_id AS "branchId", bookings,
+              completed, no_shows AS "noShows", cancelled,
+              notification_total AS "notificationTotal",
+              notification_failed AS "notificationFailed",
+              open_incidents AS "openIncidents", recommendation, note,
+              created_by AS "createdBy", created_at AS "createdAt"
        FROM pilot_reviews ORDER BY created_at DESC LIMIT 20`,
     )
     .all();

@@ -1,4 +1,4 @@
-import { env } from "cloudflare:workers";
+import { database } from "@/db/client";
 import { AUDIT_RETENTION_DAYS } from "@/lib/clinic";
 import { addDays, clinicToday } from "@/lib/dates";
 import { reportError } from "@/lib/observability";
@@ -35,44 +35,6 @@ export type AuditEntry = {
   detail?: string | null;
 };
 
-function database() {
-  if (!env.DB) throw new Error("The appointment database is not available.");
-  return env.DB;
-}
-
-let auditReady: Promise<void> | null = null;
-
-export function ensureAuditSchema(): Promise<void> {
-  auditReady ??= createSchema().catch((error) => {
-    auditReady = null;
-    throw error;
-  });
-  return auditReady;
-}
-
-async function createSchema() {
-  const db = database();
-  await db.batch([
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS access_log (
-        id TEXT PRIMARY KEY,
-        actor TEXT NOT NULL,
-        action TEXT NOT NULL,
-        subject_id TEXT,
-        subject_count INTEGER NOT NULL DEFAULT 1,
-        client_hash TEXT,
-        detail TEXT,
-        at TEXT NOT NULL
-      )
-    `),
-    db.prepare(
-      "CREATE INDEX IF NOT EXISTS access_log_actor_at ON access_log (actor, at)",
-    ),
-    db.prepare("CREATE INDEX IF NOT EXISTS access_log_subject ON access_log (subject_id)"),
-    db.prepare("CREATE INDEX IF NOT EXISTS access_log_at ON access_log (at)"),
-  ]);
-}
-
 /**
  * Records one access. Never throws.
  *
@@ -81,7 +43,6 @@ async function createSchema() {
  */
 export async function recordAccess(entry: AuditEntry): Promise<void> {
   try {
-    await ensureAuditSchema();
     await database()
       .prepare(
         `INSERT INTO access_log
@@ -125,7 +86,6 @@ export async function listAccessLog(options: {
   actor?: string;
   subjectId?: string;
 } = {}) {
-  await ensureAuditSchema();
   const limit = Math.min(Math.max(options.limit ?? 100, 1), 500);
   const clauses: string[] = [];
   const bindings: string[] = [];
@@ -142,8 +102,8 @@ export async function listAccessLog(options: {
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const result = await database()
     .prepare(
-      `SELECT id, actor, action, subject_id AS subjectId,
-              subject_count AS subjectCount, detail, at
+      `SELECT id, actor, action, subject_id AS "subjectId",
+              subject_count AS "subjectCount", detail, at
        FROM access_log ${where}
        ORDER BY at DESC LIMIT ?`,
     )
@@ -161,7 +121,6 @@ export async function listAccessLog(options: {
  * forever, because it identifies staff.
  */
 export async function purgeExpiredAuditLog(): Promise<number> {
-  await ensureAuditSchema();
   const cutoff = addDays(clinicToday(), -AUDIT_RETENTION_DAYS);
   const result = await database()
     .prepare("DELETE FROM access_log WHERE at < ?")
