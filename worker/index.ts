@@ -25,7 +25,8 @@ import { processNotificationQueue } from "../lib/notification-worker";
 
 interface Env {
   ASSETS: Fetcher;
-  DB: D1Database;
+  /** Neon Postgres connection string. A secret — see docs/ADR-001-postgres.md. */
+  DATABASE_URL: string;
   /** `patient` and `clinic` are deployed independently; local dev uses `combined`. */
   APP_SURFACE?: string;
   PUBLIC_SITE_URL?: string;

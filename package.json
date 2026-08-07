@@ -33,9 +33,11 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "deploy": "cross-env WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext deploy",
-    "test:scrub": "node --experimental-strip-types --test tests/observability.test.mts"
+    "test:scrub": "node --experimental-strip-types --test tests/observability.test.mts",
+    "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "@react-three/fiber": "^9.6.1",
     "drizzle-orm": "0.45.2",
     "gsap": "^3.15.0",
