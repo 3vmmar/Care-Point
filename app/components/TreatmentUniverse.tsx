@@ -1,5 +1,11 @@
 "use client";
 
+// CareLens's own styling, in CareLens's own chunk. Imported here — never from
+// a page — so the ~1,500 lines that style this explorer download only when
+// the explorer itself does. Importing it at page level is how 47KB of Clinic
+// OS styling once shipped to every patient, and the rule from that incident
+// applies unchanged.
+import "./carelens.css";
 import {
   ArrowLeft,
   ArrowRight,

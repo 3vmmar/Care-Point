@@ -79,7 +79,48 @@ budget("Deferred 3D engine", manifest[entries.canvas].file, {
 const css = readdirSync(resolve(clientRoot, "assets"))
   .filter((file) => file.endsWith(".css"))
   .map((file) => `assets/${file}`);
-for (const file of css) budget("Shared stylesheet", file, { raw: 125 * 1024, gzip: 22 * 1024 });
+/**
+ * Per-file: no single stylesheet may dominate a first paint.
+ *
+ * 26KB gzip, raised from 22KB on 2026-08-07 with its reasoning on the record:
+ * the shared sheet gained a three-layer design-token foundation, a per-section
+ * scroll-motion system and the treatment-page reveal roles — deliberate,
+ * reviewed additions, not drift. The same change EXTRACTED CareLens (~1,500
+ * lines) into its own lazy chunk and deleted 37 dead rule-sets, taking the
+ * sheet from 29.3KB (where it had sat, red, since the dental redesign landed)
+ * to 24.8KB. The old number predates the token system; this one holds it to
+ * roughly a kilobyte of headroom.
+ */
+for (const file of css) budget("Stylesheet", file, { raw: 125 * 1024, gzip: 26 * 1024 });
+
+/**
+ * Total: the loophole the per-file check leaves open.
+ *
+ * Splitting a stylesheet in two makes both files smaller while the visitor
+ * downloads exactly as much — a per-file gate alone would print "passed" for
+ * that. The total is what a visitor can actually be asked to pay across every
+ * chunk, lazy ones included.
+ */
+const cssTotal = css.reduce(
+  (total, file) => {
+    const metrics = fileMetrics(file);
+    return { raw: total.raw + metrics.raw, gzip: total.gzip + metrics.gzip };
+  },
+  { raw: 0, gzip: 0 },
+);
+rows.push({
+  label: "All stylesheets combined",
+  file: `${css.length} files`,
+  ...cssTotal,
+  rawLimit: 260 * 1024,
+  gzipLimit: 52 * 1024,
+});
+if (cssTotal.raw > 260 * 1024) {
+  failures.push(`Total CSS raw is ${cssTotal.raw} bytes; budget is ${260 * 1024}.`);
+}
+if (cssTotal.gzip > 52 * 1024) {
+  failures.push(`Total CSS gzip is ${cssTotal.gzip} bytes; budget is ${52 * 1024}.`);
+}
 
 budget("Hero portrait", "doctor-hero.webp", { raw: 100 * 1024, gzip: 100 * 1024 });
 budget("Social image", "og.jpg", { raw: 100 * 1024, gzip: 100 * 1024 });

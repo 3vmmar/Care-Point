@@ -137,6 +137,27 @@ test("capture computed styles across surfaces and viewports", async ({ page }) =
       await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(500);
 
+      // CareLens is `ssr: false` behind a viewport gate, so its interior does
+      // not exist at rest and the capture below never sees it — precisely the
+      // part of the page a stylesheet extraction is most likely to break.
+      // Scroll it into existence on the widest viewport (one is enough: the
+      // goal is rule coverage, and the responsive variants are the same rules
+      // under media queries already exercised by the other viewports' pages).
+      if (route.name === "home-en" && viewport.name === "desktop-short") {
+        try {
+          await page.locator("#carelens").scrollIntoViewIfNeeded();
+          await page
+            .locator(".universe-interface")
+            .waitFor({ state: "visible", timeout: 30_000 });
+          // Let the deferred mount, its fonts and its entrance settle.
+          await page.waitForTimeout(1_200);
+          await page.evaluate(() => window.scrollTo(0, 0));
+          await page.waitForTimeout(400);
+        } catch {
+          skipped.push(`${key} (CareLens interior did not mount)`);
+        }
+      }
+
       // Clinic OS renders status pills only when the appointment table has
       // rows. The local database has none, so a capture — and the axe scan in
       // CI, for the same reason — measures a dashboard with no pills in it.

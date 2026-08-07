@@ -254,6 +254,51 @@ test.describe("every section answers the scroll", () => {
     ).toBeLessThanOrEqual(overflow.viewport + 1);
   });
 
+  test("focus rings inside the mounted explorer stay unified", async ({ page }) => {
+    // The extraction audit found the one defect a resting computed-style diff
+    // cannot see: the chunk stylesheet loads after globals.css, so a colour it
+    // declares on :focus-visible now wins ties it used to lose — and it won
+    // them on only two of the four CareLens controls, splitting the focus
+    // vocabulary. The chunk sheet now declares ring geometry only; the
+    // interaction layer in globals.css owns the colour. This holds it there.
+    await page.locator("#carelens").scrollIntoViewIfNeeded();
+    await page.locator(".universe-interface").waitFor({ state: "visible", timeout: 30_000 });
+    await page.waitForTimeout(800);
+
+    // Establish keyboard modality first: Chromium only lets a scripted
+    // .focus() match :focus-visible when the last interaction was a key.
+    // Without it the pseudo-class may never engage, every control reads its
+    // UNFOCUSED outline colour, and "all rings equal" passes vacuously. The
+    // engagement assertions below make that failure mode loud instead of
+    // silent.
+    await page.keyboard.press("Tab");
+
+    const ringOf = async (selector: string) => {
+      const target = page.locator(selector).first();
+      await target.focus();
+      const state = await target.evaluate((el) => ({
+        engaged: el.matches(":focus-visible"),
+        color: window.getComputedStyle(el).outlineColor,
+        style: window.getComputedStyle(el).outlineStyle,
+      }));
+      // A guard that cannot tell "same colour" from "never focused" is not a
+      // guard. Hard-fail if the mechanism did not engage.
+      expect(state.engaged, `${selector} never matched :focus-visible`).toBe(true);
+      expect(state.style, `${selector} has no visible ring`).toBe("solid");
+      return state.color;
+    };
+
+    const rings = {
+      tabs: await ringOf(".universe-tabs button"),
+      toolbar: await ringOf(".anatomy-system-toolbar button"),
+      dock: await ringOf(".universe-layer-dock button"),
+    };
+
+    // One vocabulary: whatever the interaction layer says, everyone says.
+    expect(rings.toolbar, `toolbar ring ${rings.toolbar} vs tabs ${rings.tabs}`).toBe(rings.tabs);
+    expect(rings.dock, `dock ring ${rings.dock} vs tabs ${rings.tabs}`).toBe(rings.tabs);
+  });
+
   test("no always-on blur rides the sticky header for the whole page", async ({ page }) => {
     // A backdrop-filter on a sticky, full-width bar is recomposited every
     // frame of every scroll, on every page.

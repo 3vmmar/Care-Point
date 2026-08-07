@@ -595,8 +595,7 @@ a {
  * taller than the screen, and holding it would trap the visitor. Under reduced
  * motion the hold collapses too — a frozen hero with no exit choreography reads
  * as the page being stuck, not as a moment.
- */
-@media (min-width: 981px) and (min-height: 620px) {
+ */@media (min-width: 981px) and (min-height: 620px) {
   .hero-stage {
     height: calc(185svh - 104px);
   }
@@ -605,9 +604,7 @@ a {
     position: sticky;
     top: 104px;
   }
-}
-
-@media (prefers-reduced-motion: reduce) {
+}@media (prefers-reduced-motion: reduce) {
   .hero-stage {
     height: auto !important;
   }
@@ -691,8 +688,7 @@ a {
  * mobile lab: 2.3s bare, 3.45s with the mask, against a 2.5s budget. A visitor
  * on Egyptian 4G gets the words immediately; the theatre is for screens with
  * bandwidth to spare.
- */
-@media (min-width: 981px) {
+ */@media (min-width: 981px) {
   .hero h1 > span,
   .hero h1 em {
     animation: lineMaskRise 1.1s var(--ease-out) both;
@@ -1406,8 +1402,7 @@ a {
 }
 
 /* The scroll context never runs under reduced motion, so the resting
-   scaleY(0) would otherwise hide the dividers forever. */
-@media (prefers-reduced-motion: reduce) {
+   scaleY(0) would otherwise hide the dividers forever. */@media (prefers-reduced-motion: reduce) {
   .stat-rule {
     transform: scaleY(1);
   }
@@ -1489,156 +1484,6 @@ a {
   }
 }
 
-.universe-canvas {
-  min-height: 720px;
-  position: relative;
-  overflow: hidden;
-  background: var(--black-900);
-  cursor: crosshair;
-}
-
-.universe-canvas-mount,
-.universe-canvas-placeholder {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-}
-
-.universe-canvas-placeholder {
-  background:
-    radial-gradient(circle at 50% 45%, rgba(123, 38, 60, 0.2), transparent 34%),
-    linear-gradient(120deg, var(--black-900), #1d191a, var(--black-900));
-  background-size: 100% 100%, 220% 100%;
-  animation: universeShimmer 1.6s var(--ease-smooth) infinite;
-}
-
-.universe-canvas::before,
-.universe-canvas::after {
-  content: "";
-  position: absolute;
-  z-index: 1;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  pointer-events: none;
-}
-
-.universe-canvas::before {
-  width: 620px;
-  height: 620px;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.universe-canvas::after {
-  width: 440px;
-  height: 440px;
-  left: 50%;
-  top: 50%;
-  border-color: rgba(201, 175, 134, 0.13);
-  transform: translate(-50%, -50%);
-}
-
-.universe-canvas canvas {
-  position: relative;
-  z-index: 2;
-}
-
-.universe-scan-line {
-  position: absolute;
-  z-index: 3;
-  left: 12%;
-  right: 12%;
-  top: 30%;
-  height: 1px;
-  background: rgba(201, 175, 134, 0.5);
-  box-shadow: 0 0 16px rgba(201, 175, 134, 0.4);
-  pointer-events: none;
-  animation: scanModel 4.8s ease-in-out infinite;
-}
-
-@keyframes scanModel {
-  0%, 100% { transform: translateY(-170px); opacity: 0; }
-  15%, 85% { opacity: 0.8; }
-  50% { transform: translateY(330px); }
-}
-
-.universe-corner {
-  position: absolute;
-  z-index: 3;
-  width: 44px;
-  height: 44px;
-  pointer-events: none;
-}
-
-.universe-corner--one {
-  left: 24px;
-  top: 24px;
-  border-left: 1px solid rgba(255, 255, 255, 0.2);
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.universe-corner--two {
-  right: 24px;
-  bottom: 24px;
-  border-right: 1px solid rgba(255, 255, 255, 0.2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.universe-canvas-label,
-.universe-rotate {
-  position: absolute;
-  z-index: 4;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: #8e8983;
-  font-size: 7px;
-  letter-spacing: 0.14em;
-  pointer-events: none;
-}
-
-.universe-canvas-label { left: 31px; bottom: 30px; }
-.universe-rotate { right: 31px; top: 31px; }
-.universe-canvas-label svg,
-.universe-rotate svg { color: var(--champagne); }
-
-.universe-interface {
-  min-width: 0;
-  background: var(--sand-200);
-  display: grid;
-  grid-template-rows: auto 1fr;
-}
-
-.universe-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border-bottom: 1px solid rgba(35, 35, 32, 0.13);
-}
-
-.universe-tabs button {
-  min-height: 85px;
-  border: 0;
-  border-right: 1px solid rgba(35, 35, 32, 0.12);
-  border-bottom: 1px solid rgba(35, 35, 32, 0.12);
-  background: transparent;
-  padding: 17px;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 9px;
-  align-items: center;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.25s ease, color 0.25s ease;
-}
-
-.site-shell[dir="rtl"] .universe-tabs button {
-  text-align: right;
-}
-
-.universe-tabs button:nth-child(even) { border-right: 0; }
-.universe-tabs button:nth-child(n+5) { border-bottom: 0; }
-
 /**
  * The odd tab out spans the row.
  *
@@ -1647,46 +1492,7 @@ a {
  * odd child span both columns closes the block — and it happens to give Dental,
  * the newest area, the widest target.
  */
-.universe-tabs button:nth-child(odd):last-child {
-  grid-column: 1 / -1;
-  border-right: 0;
-}
 
-.universe-tabs button.active {
-  color: white;
-  background: var(--burgundy);
-}
-
-.universe-tabs button:not(.active):hover {
-  background: rgba(123, 38, 60, 0.06);
-}
-
-.universe-tabs button > span {
-  color: var(--burgundy-300);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  align-self: start;
-}
-
-.universe-tabs button.active > span { color: #e4b8c4; }
-.universe-tabs strong {
-  font-family: var(--font-display), Georgia, serif;
-  font-size: 19px;
-  font-weight: 500;
-}
-
-.universe-detail {
-  padding: 48px 42px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  animation: universeDetail 0.45s ease both;
-}
-
-@keyframes universeDetail {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 
 /**
  * "AREA SELECTED" — a state label, not decoration, so it has to be legible.
@@ -1696,30 +1502,6 @@ a {
  * fine on its own (7.95:1 against the panel); the size was the defect, and an
  * automated contrast check cannot catch it.
  */
-.universe-signal {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--burgundy);
-  font-size: 11px;
-  letter-spacing: 0.16em;
-}
-
-.universe-signal i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--champagne);
-  box-shadow: 0 0 0 5px rgba(201, 175, 134, 0.14);
-}
-
-.universe-detail h3 {
-  margin: 25px 0 18px;
-  font-family: var(--font-display), Georgia, serif;
-  font-size: clamp(38px, 3.5vw, 55px);
-  line-height: 0.98;
-  font-weight: 400;
-}
 
 /**
  * Body prose, at a size a body can read.
@@ -1729,182 +1511,11 @@ a {
  * this file uses for every other small label. An explorer whose whole purpose
  * is to explain anatomy cannot set the explanation in type nobody can read.
  */
-.universe-detail > p {
-  color: var(--warm-grey-600);
-  font-size: 14px;
-  line-height: 1.7;
-  max-width: 52ch;
-}
-
-.universe-depth-hint {
-  margin-top: 10px;
-  color: var(--burgundy-300);
-  font-style: italic;
-}
-
-.universe-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-top: 10px;
-}
-
-.universe-tags span {
-  border: 1px solid rgba(35, 35, 32, 0.15);
-  padding: 6px 10px;
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  color: var(--warm-grey-700);
-}
 
 /* Bookable, and marked as such — these are an offer, the neighbouring tags are
    description, and the two must not look identical. */
-.universe-tags--offer span {
-  border-color: rgba(123, 38, 60, 0.35);
-  background: rgba(123, 38, 60, 0.06);
-  color: var(--burgundy);
-  font-weight: 600;
-}
-
-/* ── Depth control, over the canvas ───────────────────────────────────────── */
-
-.universe-depth {
-  position: absolute;
-  left: 31px;
-  top: 31px;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  max-width: calc(100% - 62px);
-}
-
-.site-shell[dir="rtl"] .universe-depth { left: auto; right: 31px; }
-
-.universe-depth-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-inline-end: 4px;
-  color: var(--champagne);
-  font-size: 10px;
-  letter-spacing: 0.18em;
-}
-
-.universe-depth button {
-  border: 1px solid rgba(201, 175, 134, 0.34);
-  /* Over a live 3D scene, so the plate has to carry its own contrast rather
-     than borrowing it from whatever happens to be behind it. */
-  background: rgba(14, 14, 13, 0.62);
-  backdrop-filter: blur(9px);
-  color: #ddd6ca;
-  padding: 7px 13px;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  transition: background 0.22s ease, color 0.22s ease, border-color 0.22s ease;
-}
-
-.universe-depth button:hover { color: #fff8ec; border-color: var(--champagne); }
-
-.universe-depth button.active {
-  background: var(--burgundy);
-  border-color: var(--burgundy-lift, #a84560);
-  color: var(--white);
-}
 
 /* ── Region rail ──────────────────────────────────────────────────────────── */
-
-.universe-regions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-top: 22px;
-}
-
-.universe-regions button {
-  border: 1px solid rgba(35, 35, 32, 0.18);
-  background: transparent;
-  padding: 9px 13px;
-  /* 40px keeps every region reachable with a thumb; the rail is the primary
-     control on a phone, where the canvas markers are hardest to hit. */
-  min-height: 40px;
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  color: var(--warm-grey-700);
-  cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-}
-
-.universe-regions button:hover {
-  border-color: rgba(123, 38, 60, 0.5);
-  color: var(--burgundy);
-}
-
-.universe-regions button.active {
-  background: var(--charcoal);
-  border-color: var(--charcoal);
-  color: var(--white);
-}
-
-.universe-region-card {
-  margin-top: 20px;
-  padding: 20px 22px;
-  border: 1px solid rgba(35, 35, 32, 0.13);
-  background: rgba(255, 255, 255, 0.55);
-  animation: universeDetail 0.35s ease both;
-}
-
-.universe-region-card h4 {
-  margin: 0 0 10px;
-  font-family: var(--font-display), Georgia, serif;
-  font-size: 21px;
-  font-weight: 500;
-}
-
-.universe-region-card > p {
-  margin: 0;
-  color: var(--warm-grey-600);
-  font-size: 13.5px;
-  line-height: 1.72;
-}
-
-.universe-region-meta {
-  margin-top: 16px;
-}
-
-.universe-region-meta > span {
-  color: var(--burgundy-300);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-}
-
-.universe-actions {
-  display: flex;
-  gap: 15px;
-  margin-top: 28px;
-}
-
-.universe-actions button {
-  min-height: 46px;
-  border: 1px solid rgba(35, 35, 32, 0.17);
-  background: transparent;
-  padding: 0 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  font-weight: 700;
-}
-
-.universe-actions .universe-primary {
-  color: white;
-  background: var(--charcoal);
-  border-color: var(--charcoal);
-}
 
 .specialty-layer {
   position: fixed;
@@ -1912,211 +1523,10 @@ a {
   z-index: 160;
 }
 
-.specialty-deep-dive {
-  position: absolute;
-  inset: 18px;
-  z-index: 2;
-  overflow-y: auto;
-  color: white;
-  background: var(--charcoal);
-  animation: deepDiveIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
 
-@keyframes deepDiveIn {
-  from { opacity: 0; transform: scale(0.97); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-.specialty-deep-dive > header {
-  height: 76px;
-  padding: 0 28px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-}
-
-.specialty-deep-dive > header button {
-  width: fit-content;
-  border: 0;
-  color: var(--warm-grey-300);
-  background: transparent;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-  font-size: 8px;
-}
-
-.specialty-deep-dive > header > span {
-  color: var(--champagne);
-  font-size: 7px;
-  letter-spacing: 0.16em;
-}
-
-.specialty-deep-dive > header button:last-child {
-  justify-self: end;
-  width: 34px;
-  height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  justify-content: center;
-}
-
-.deep-dive-grid {
-  min-height: calc(100vh - 112px);
-  display: grid;
-  grid-template-columns: 0.85fr 1.15fr;
-}
-
-.deep-dive-intro {
-  min-height: 620px;
-  padding: 8vh 5vw;
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
-  position: relative;
-  overflow: hidden;
-}
-
-.deep-dive-intro > span,
-.deep-dive-block > span {
-  color: var(--champagne);
-  font-size: 7px;
-  letter-spacing: 0.18em;
-}
-
-.deep-dive-intro h2 {
-  margin: 24px 0;
-  font-family: var(--font-display), Georgia, serif;
-  font-size: clamp(62px, 7vw, 112px);
-  line-height: 0.82;
-  font-weight: 400;
-  letter-spacing: -0.045em;
-}
-
-.deep-dive-intro > p {
-  max-width: 450px;
-  color: var(--warm-grey-300);
-  font-size: 11px;
-  line-height: 1.85;
-}
-
-.deep-dive-orb {
-  position: absolute;
-  width: 340px;
-  height: 340px;
-  right: -80px;
-  bottom: -70px;
-  border-radius: 48% 52% 43% 57%;
-  background: var(--burgundy);
-  box-shadow: 0 0 120px rgba(155, 65, 91, 0.28);
-  animation: deepOrb 8s ease-in-out infinite alternate;
-}
-
-@keyframes deepOrb {
-  to { transform: rotate(30deg) scale(1.12); }
-}
-
-.deep-dive-orb::before,
-.deep-dive-orb span,
-.deep-dive-orb i {
-  content: "";
-  position: absolute;
-  border-radius: 50%;
-}
-
-.deep-dive-orb::before {
-  inset: 23%;
-  background: #d9a1b1;
-  filter: blur(13px);
-}
-
-.deep-dive-orb i:first-child {
-  inset: -14%;
-  border: 1px solid rgba(255, 255, 255, 0.13);
-}
-
-.deep-dive-orb i:nth-child(2) {
-  width: 30%;
-  height: 30%;
-  top: 14%;
-  left: 15%;
-  background: rgba(255, 255, 255, 0.74);
-  filter: blur(12px);
-}
-
-.deep-dive-content {
-  padding: 7vh 5vw;
-}
-
-.deep-dive-block {
-  padding-bottom: 35px;
-  margin-bottom: 35px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.deep-checks {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-top: 22px;
-}
-
-.deep-checks p {
-  min-height: 74px;
-  margin: 0;
-  padding: 16px;
-  color: #cdc7c2;
-  background: #211f1e;
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  font-size: 12.5px;
-  line-height: 1.6;
-}
-
-.deep-checks svg { color: var(--rose); flex: 0 0 auto; }
 
 /* Conversation topics, not an offer. Dimmer and outlined rather than filled, so
    the difference from the bookable list is visible before the label is read. */
-.deep-checks--muted p {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.13);
-  color: #a8a29c;
-}
-
-.deep-checks--muted svg { color: var(--champagne); }
-
-.deep-dive-region {
-  margin: 16px 0 0;
-  font-family: var(--font-display), Georgia, serif;
-  font-size: 27px;
-  font-weight: 400;
-  color: #f3efe9;
-}
-
-.deep-dive-copy {
-  margin: 14px 0 0;
-  max-width: 62ch;
-  color: #c4beba;
-  font-size: 14px;
-  line-height: 1.75;
-}
-
-.deep-dive-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  color: var(--warm-grey-400);
-  margin-bottom: 28px;
-}
-
-.deep-dive-note svg { color: var(--champagne); flex: 0 0 auto; }
-.deep-dive-note p { margin: 0; font-size: 12px; line-height: 1.7; }
-
-.carelens-stage {
-  display: grid;
-  grid-template-columns: 0.78fr 1.22fr;
-  border-top: 1px solid var(--line);
-}
 
 .area-list {
   border-right: 1px solid var(--line);
@@ -2192,14 +1602,6 @@ a {
   transform: translateX(3px);
 }
 
-.carelens-panel {
-  min-height: 550px;
-  position: relative;
-  background: #e7dfd3;
-  overflow: hidden;
-  animation: softIn 0.45s ease both;
-}
-
 @keyframes softIn {
   from {
     opacity: 0.65;
@@ -2207,113 +1609,6 @@ a {
   to {
     opacity: 1;
   }
-}
-
-.anatomy-shape {
-  position: absolute;
-  right: -7%;
-  top: 3%;
-  width: 58%;
-  height: 94%;
-  opacity: 0.88;
-}
-
-.site-shell[dir="rtl"] .anatomy-shape {
-  right: auto;
-  left: -7%;
-}
-
-.anatomy-shape::before,
-.anatomy-shape::after,
-.anatomy-shape span {
-  content: "";
-  position: absolute;
-  border-radius: 48% 52% 44% 56%;
-  border: 1px solid rgba(105, 64, 70, 0.22);
-}
-
-.anatomy-shape::before {
-  inset: 10% 12% 7% 8%;
-  background: #cab7ad;
-  transform: rotate(12deg);
-}
-
-.anatomy-shape::after {
-  inset: 18% 7% 16% 22%;
-  background: #a9797c;
-  transform: rotate(-9deg);
-}
-
-.anatomy-shape span:nth-child(1) {
-  inset: 28% 23% 25% 10%;
-  background: #6f3847;
-  transform: rotate(18deg);
-}
-
-.anatomy-shape span:nth-child(2) {
-  width: 130px;
-  height: 130px;
-  left: 3%;
-  top: 8%;
-  background: #dbcabc;
-}
-
-.anatomy-shape span:nth-child(3) {
-  width: 80px;
-  height: 80px;
-  right: 6%;
-  bottom: 10%;
-  background: var(--champagne);
-}
-
-.anatomy-shape--nose::after {
-  border-radius: 70% 30% 64% 36%;
-  transform: rotate(22deg);
-}
-
-.anatomy-shape--body::before {
-  border-radius: 38% 62% 32% 68%;
-  transform: rotate(-8deg);
-}
-
-.anatomy-shape--breast::after {
-  border-radius: 50%;
-}
-
-.carelens-panel-content {
-  position: relative;
-  z-index: 2;
-  width: 58%;
-  height: 100%;
-  padding: 70px 30px 50px 55px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.site-shell[dir="rtl"] .carelens-panel-content {
-  padding: 70px 55px 50px 30px;
-}
-
-.carelens-panel-content > small {
-  color: var(--burgundy);
-  font-size: 8px;
-  letter-spacing: 0.17em;
-  text-transform: uppercase;
-}
-
-.carelens-panel-content h3 {
-  font-family: var(--font-display), Georgia, serif;
-  font-size: clamp(34px, 3.5vw, 52px);
-  font-weight: 400;
-  line-height: 1.04;
-  margin: 20px 0;
-}
-
-.carelens-panel-content > p {
-  color: #655d56;
-  font-size: 11px;
-  line-height: 1.8;
 }
 
 .option-tags,
@@ -3035,8 +2330,7 @@ footer {
  * GSAP. The whole scroll context returns early under reduced motion, so
  * everything else simply renders normally — this one would stay at scaleX(0)
  * forever without saying so.
- */
-@media (prefers-reduced-motion: reduce) {
+ */@media (prefers-reduced-motion: reduce) {
   .footer-rule {
     transform: scaleX(1);
   }
@@ -3675,30 +2969,6 @@ footer p {
 }
 
 /* Shown when WebGL is unavailable or the CareLens scene fails to initialise. */
-.universe-fallback {
-  height: 100%;
-  min-height: 420px;
-  display: grid;
-  place-content: center;
-  gap: 8px;
-  padding: 30px;
-  text-align: center;
-  color: #b9b0a6;
-}
-
-.universe-fallback strong {
-  font-family: var(--font-display), Georgia, serif;
-  font-weight: 500;
-  font-size: 20px;
-  color: #f1e7dc;
-}
-
-.universe-fallback p {
-  margin: 0;
-  max-width: 34ch;
-  font-size: 10px;
-  line-height: 1.7;
-}
 
 .hold-countdown {
   margin: 0;
@@ -3794,9 +3064,7 @@ footer p {
   color: var(--burgundy);
   font-size: 9px;
   font-weight: 700;
-}
-
-@media (max-width: 1100px) {
+}@media (max-width: 1100px) {
   .nav {
     gap: 20px;
   }
@@ -3827,54 +3095,18 @@ footer p {
     max-width: 320px;
   }
 
-  .carelens-stage {
-    grid-template-columns: 1fr;
-  }
-
   .treatment-universe {
     grid-template-columns: 1fr;
-  }
-
-  .universe-canvas {
-    min-height: 610px;
-  }
-
-  .universe-interface {
-    grid-template-columns: 0.75fr 1.25fr;
-    grid-template-rows: 1fr;
-  }
-
-  .universe-tabs {
-    grid-template-columns: 1fr;
-    border-right: 1px solid var(--line);
-    border-bottom: 0;
-  }
-
-  .universe-tabs button,
-  .universe-tabs button:nth-child(even),
-  .universe-tabs button:nth-child(n+5),
-  .universe-tabs button:nth-child(odd):last-child {
-    /* One column here, so the desktop row-span and its border exceptions have
-       to be undone or the last tab keeps a stale edge. */
-    grid-column: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
   }
 
   .area-list {
     border-right: 0;
   }
 
-  .carelens-panel {
-    min-height: 510px;
-  }
-
   .journey-grid article {
     padding: 22px;
   }
-}
-
-@media (min-width: 861px) and (max-height: 820px) {
+}@media (min-width: 861px) and (max-height: 820px) {
   .hero {
     padding-top: 26px;
     padding-bottom: 26px;
@@ -3899,9 +3131,7 @@ footer p {
     margin-top: 20px;
     padding-top: 14px;
   }
-}
-
-@media (min-width: 861px) and (max-width: 980px) {
+}@media (min-width: 861px) and (max-width: 980px) {
   .hero {
     min-height: auto;
     grid-template-columns: 1fr;
@@ -3928,9 +3158,7 @@ footer p {
   .hero-rail {
     display: none;
   }
-}
-
-@media (max-width: 860px) {
+}@media (max-width: 860px) {
   .site-header {
     height: 76px;
   }
@@ -3991,16 +3219,6 @@ footer p {
 
   .intro-copy h1 {
     font-size: clamp(60px, 11vw, 90px);
-  }
-
-  .deep-dive-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .deep-dive-intro {
-    min-height: 480px;
-    border-right: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
 
   .hero {
@@ -4090,9 +3308,7 @@ footer p {
   footer p {
     display: none;
   }
-}
-
-@media (max-width: 600px) {
+}@media (max-width: 600px) {
   .site-header {
     padding: 0 18px;
   }
@@ -4341,97 +3557,15 @@ footer p {
     display: none;
   }
 
-  .carelens-panel {
-    min-height: 600px;
-  }
-
   .treatment-universe {
     min-height: 0;
   }
 
-  .universe-canvas {
-    min-height: 520px;
-  }
-
-  .universe-interface {
-    grid-template-columns: 1fr;
-  }
-
-  .universe-tabs {
-    grid-template-columns: 1fr 1fr;
-    border-right: 0;
-  }
-
-  .universe-tabs button {
-    min-height: 76px;
-  }
-
   /* Two columns again at this width, so the fifth tab spans the row as it does
      on desktop. The single-column rule above this breakpoint had to flatten it. */
-  .universe-tabs button:nth-child(odd):last-child {
-    grid-column: 1 / -1;
-  }
 
   /* The depth control shares the canvas with the corner label; stacked on a
      phone it would sit on top of it. Pulled in tight and left-aligned instead. */
-  .universe-depth {
-    left: 18px;
-    top: 18px;
-    gap: 5px;
-    max-width: calc(100% - 36px);
-  }
-
-  .site-shell[dir="rtl"] .universe-depth { left: auto; right: 18px; }
-
-  .universe-depth button { padding: 7px 10px; }
-
-  .universe-detail {
-    padding: 38px 22px;
-  }
-
-  .universe-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .specialty-deep-dive {
-    inset: 0;
-  }
-
-  .specialty-deep-dive > header {
-    padding: 0 16px;
-  }
-
-  .specialty-deep-dive > header > span {
-    display: none;
-  }
-
-  .specialty-deep-dive > header {
-    grid-template-columns: 1fr auto;
-  }
-
-  .deep-dive-intro,
-  .deep-dive-content {
-    padding: 55px 22px;
-  }
-
-  .deep-checks {
-    grid-template-columns: 1fr;
-  }
-
-  .carelens-panel-content {
-    width: 100%;
-    justify-content: flex-end;
-    padding: 230px 25px 38px;
-    background: rgba(231, 223, 211, 0.62);
-  }
-
-  .anatomy-shape {
-    top: -4%;
-    right: 0;
-    width: 88%;
-    height: 62%;
-  }
 
   .noor-feature {
     padding-top: 60px;
@@ -4561,9 +3695,7 @@ footer p {
     align-items: stretch;
     flex-direction: column;
   }
-}
-
-@media (prefers-reduced-motion: reduce) {
+}@media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
@@ -5215,15 +4347,11 @@ footer {
 
 /* ==========================================================================
    Responsive
-   ========================================================================== */
-
-@media (max-width: 1100px) {
+   ========================================================================== */@media (max-width: 1100px) {
   .locations-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
-
-@media (max-width: 860px) {
+}@media (max-width: 860px) {
   .locations-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -5240,17 +4368,13 @@ footer {
     grid-template-columns: 1fr;
     gap: 6px;
   }
-}
-
-@media (max-width: 600px) {
+}@media (max-width: 600px) {
   .location-actions a,
   .location-actions button,
   .success-links a {
     flex: 1 1 100%;
   }
-}
-
-@media (prefers-reduced-motion: reduce) {
+}@media (prefers-reduced-motion: reduce) {
   .floating-noor,
   .floating-noor--docked {
     transition: opacity 0.001ms linear !important;
@@ -5663,9 +4787,7 @@ footer {
 
 .treatment-more a:hover {
   border-color: var(--burgundy);
-}
-
-@media (max-width: 900px) {
+}@media (max-width: 900px) {
   .treatment-links {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -5673,9 +4795,7 @@ footer {
   .treatment-phases {
     grid-template-columns: minmax(0, 1fr);
   }
-}
-
-@media (max-width: 600px) {
+}@media (max-width: 600px) {
   .treatment-links {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -5854,71 +4974,13 @@ footer {
  * looked broken (reported from a 1920×748 window). The floor exists to protect
  * the panel's content on tall screens; below it, the viewport must win, and the
  * chrome inside the canvas tightens to match.
- */
-@media (min-width: 861px) and (max-height: 840px) {
+ */@media (min-width: 861px) and (max-height: 840px) {
   .treatment-universe {
     min-height: 540px;
     height: calc(100svh - 118px);
   }
-
-  .universe-layer-dock {
-    bottom: 12px;
-  }
-
-  .universe-safety-note {
-    max-width: min(46ch, 44%);
-    font-size: 10.5px;
-  }
-
-  .anatomy-system-toolbar {
-    gap: 4px;
-    padding: 8px 6px;
-  }
-
-  .anatomy-system-toolbar button {
-    padding: 7px 6px 6px;
-  }
 }
 
-.universe-canvas {
-  height: 100%;
-  min-height: 0;
-  background:
-    radial-gradient(circle at 55% 30%, rgba(120, 85, 75, 0.18), transparent 30%),
-    radial-gradient(circle at 50% 62%, rgba(196, 31, 84, 0.08), transparent 42%),
-    linear-gradient(180deg, #121212 0%, var(--black-950) 100%);
-  cursor: grab;
-}
-
-.universe-canvas:active {
-  cursor: grabbing;
-}
-
-.universe-canvas canvas {
-  touch-action: pan-y;
-}
-
-.universe-canvas::before,
-.universe-canvas::after {
-  display: none;
-}
-
-.universe-canvas-mount {
-  animation: anatomyModelIn 0.7s var(--ease-smooth) both;
-}
-
-@keyframes anatomyModelIn {
-  from { opacity: 0; transform: scale(0.985); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-.universe-rings {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
 
 /**
  * The vignette that used to live here laid rgba(0,0,0,0.78) over the bottom
@@ -5927,389 +4989,10 @@ footer {
  * like a different website. The rings keep their drift; the floor does not
  * need to be crushed to sell it.
  */
-.universe-rings::after {
-  content: "";
-  position: absolute;
-  inset: auto 0 0;
-  height: 32%;
-  background: linear-gradient(180deg, transparent, rgba(7, 7, 7, 0.45));
-}
 
-.universe-rings i {
-  position: absolute;
-  left: 52%;
-  top: 44%;
-  width: min(74vw, 640px);
-  aspect-ratio: 1;
-  border: 1px solid rgba(255, 255, 255, 0.055);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.universe-rings i:nth-child(2) {
-  width: min(56vw, 480px);
-  border-color: rgba(196, 31, 84, 0.11);
-}
-
-.universe-rings i:nth-child(3) {
-  width: min(38vw, 330px);
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
-.anatomy-system-toolbar {
-  position: absolute;
-  z-index: 6;
-  left: 12px;
-  top: 50%;
-  display: grid;
-  gap: 3px;
-  width: 64px;
-  padding: 8px 0;
-  transform: translateY(-50%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  /* Square, like every other plate on the site. Of the non-circular radii in
-     this stylesheet, all of them belonged to CareLens — which is what made it
-     the only rounded object on a squared page. */
-  border-radius: 0;
-  background: rgba(8, 8, 8, 0.34);
-  backdrop-filter: blur(9px);
-}
-
-.site-shell[dir="rtl"] .anatomy-system-toolbar {
-  right: 12px;
-  left: auto;
-}
-
-.anatomy-system-toolbar button {
-  position: relative;
-  width: 100%;
-  min-height: 52px;
-  display: grid;
-  place-items: center;
-  gap: 3px;
-  border: 0;
-  border-radius: 0;
-  padding: 6px 4px;
-  color: rgba(255, 255, 255, 0.58);
-  background: transparent;
-  cursor: pointer;
-  transition: color 0.2s ease, background 0.2s ease, transform 0.2s ease;
-}
-
-.anatomy-system-toolbar button::before {
-  content: "";
-  position: absolute;
-  left: -1px;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--rose);
-  box-shadow: 0 0 14px rgba(180, 105, 120, 0.7);
-  opacity: 0;
-  transform: scaleY(0.4);
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.site-shell[dir="rtl"] .anatomy-system-toolbar button::before {
-  right: -1px;
-  left: auto;
-}
-
-.anatomy-system-toolbar button span {
-  width: 100%;
-  overflow: hidden;
-  font-size: 8px;
-  line-height: 1.15;
-  text-align: center;
-  text-overflow: ellipsis;
-}
-
-.anatomy-system-toolbar button:hover,
-.anatomy-system-toolbar button.active {
-  color: var(--white);
-  background: rgba(255, 255, 255, 0.055);
-}
-
-.anatomy-system-toolbar button.active::before {
-  opacity: 1;
-  transform: scaleY(1);
-}
-
-.anatomy-system-toolbar button:focus-visible,
-.universe-layer-dock button:focus-visible,
-.universe-info-trigger:focus-visible,
-.universe-sheet-close:focus-visible {
-  outline: 2px solid #f2a5bc;
-  outline-offset: 2px;
-}
-
-.universe-layer-dock {
-  position: absolute;
-  z-index: 6;
-  left: 50%;
-  bottom: 22px;
-  width: min(88%, 510px);
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  transform: translateX(-50%);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 0;
-  background: rgba(10, 10, 10, 0.82);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.42);
-  backdrop-filter: blur(16px);
-}
-
-.layer-dock-title {
-  min-height: 48px;
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 11px 0 4px;
-  border-right: 1px solid rgba(255, 255, 255, 0.12);
-  color: var(--white);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.site-shell[dir="rtl"] .layer-dock-title {
-  padding: 0 4px 0 11px;
-  border-right: 0;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.layer-dock-track {
-  min-width: 0;
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  overflow-x: auto;
-  overscroll-behavior-inline: contain;
-  scrollbar-width: none;
-}
-
-.layer-dock-track::-webkit-scrollbar {
-  display: none;
-}
-
-.universe-layer-dock button {
-  min-width: 66px;
-  min-height: 64px;
-  flex: 0 0 auto;
-  display: grid;
-  justify-items: center;
-  gap: 5px;
-  border: 0;
-  padding: 0 3px;
-  color: rgba(255, 255, 255, 0.55);
-  background: transparent;
-  cursor: pointer;
-  transition: color 0.22s ease, transform 0.22s ease;
-}
-
-.layer-dock-orb {
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 50%;
-  color: rgba(255, 255, 255, 0.72);
-  background:
-    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.14), transparent 36%),
-    #171616;
-  transition: border-color 0.22s ease, box-shadow 0.22s ease, color 0.22s ease;
-}
-
-.layer-dock-label {
-  max-width: 72px;
-  overflow: hidden;
-  font-size: 9px;
-  line-height: 1.1;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.universe-layer-dock button:hover,
-.universe-layer-dock button.active {
-  color: var(--white);
-}
-
-.universe-layer-dock button.active {
-  transform: translateY(-3px);
-}
-
-.universe-layer-dock button.active .layer-dock-orb {
-  color: var(--white);
-  border-color: var(--rose);
-  box-shadow: 0 0 0 2px rgba(180, 105, 120, 0.16), 0 0 22px rgba(180, 105, 120, 0.38);
-}
-
-.universe-rotate {
-  right: auto;
-  top: auto;
-  left: 50%;
-  bottom: 116px;
-  z-index: 6;
-  transform: translateX(-50%);
-  color: rgba(255, 255, 255, 0.68);
-  font-size: 9px;
-  letter-spacing: 0.18em;
-  white-space: nowrap;
-}
-
-.universe-safety-note {
-  position: absolute;
-  z-index: 6;
-  top: 16px;
-  right: 16px;
-  max-width: min(360px, 48%);
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 0;
-  padding: 9px 11px;
-  color: rgba(255, 255, 255, 0.72);
-  background: rgba(8, 8, 8, 0.56);
-  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.24);
-  backdrop-filter: blur(12px);
-  pointer-events: none;
-}
-
-.site-shell[dir="rtl"] .universe-safety-note {
-  right: auto;
-  left: 16px;
-}
-
-.universe-safety-note svg {
-  flex: 0 0 auto;
-  margin-top: 1px;
-  color: #e29ab0;
-}
-
-.universe-safety-note span {
-  font-size: 11px;
-  line-height: 1.5;
-  letter-spacing: 0.015em;
-}
-
-.universe-info-trigger,
-.universe-sheet-backdrop,
-.universe-sheet-close,
-.universe-sheet-handle {
-  display: none;
-}
-
-.universe-model-loading {
-  position: absolute;
-  z-index: 3;
-  inset: 0;
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 9px;
-  color: var(--white);
-  background:
-    radial-gradient(circle at 52% 40%, rgba(196, 31, 84, 0.15), transparent 30%),
-    #090909;
-}
-
-.universe-model-loading strong {
-  font-size: 12px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.universe-model-loading small {
-  color: rgba(255, 255, 255, 0.46);
-  font-size: 10px;
-}
-
-.model-loading-ring {
-  width: 34px;
-  height: 34px;
-  margin-bottom: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-top-color: var(--rose);
-  border-radius: 50%;
-  animation: modelLoadingSpin 0.9s linear infinite;
-}
-
-@keyframes modelLoadingSpin {
-  to { transform: rotate(360deg); }
-}
-
-.universe-interface {
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--sand-200);
-}
-
-.universe-tabs {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-}
-
-.universe-tabs button,
-.universe-tabs button:nth-child(even),
-.universe-tabs button:nth-child(n+5),
-.universe-tabs button:nth-child(odd):last-child {
-  grid-column: auto;
-  min-height: 74px;
-  border-right: 1px solid rgba(35, 35, 32, 0.12);
-  border-bottom: 1px solid rgba(35, 35, 32, 0.12);
-  padding: 12px 8px;
-  display: grid;
-  grid-template-columns: 1fr;
-  text-align: center;
-}
-
-.universe-tabs button:last-child {
-  border-right: 0;
-}
-
-.universe-tabs button > span {
-  display: none;
-}
-
-.universe-tabs strong {
-  font-family: inherit;
-  font-size: clamp(11px, 1vw, 14px);
-  font-weight: 500;
-}
-
-.universe-detail {
-  min-height: 0;
-  justify-content: flex-start;
-  /**
-   * Not `overflow-y: auto`.
-   *
-   * A nested scroller here meant that putting the pointer over the right half
-   * of CareLens stopped scrolling the page — on a site whose entire identity
-   * is scroll choreography, the section literally took the scroll away and
-   * then gave it back. That is the mechanism behind "while you are in it, the
-   * website stops". The panel now grows to its content and the page keeps the
-   * wheel.
-   */
-  overflow-y: clip;
-  padding: 38px 36px 42px;
-}
-
-.universe-detail h3 {
-  margin: 20px 0 14px;
-  font-size: clamp(31px, 2.7vw, 46px);
-  line-height: 1.04;
-}
 
 /* The immersive two-column view needs real width. Tablet layouts stack the
-   model and information so neither is compressed into a narrow strip. */
-@media (min-width: 769px) and (max-width: 1100px) {
+   model and information so neither is compressed into a narrow strip. */@media (min-width: 769px) and (max-width: 1100px) {
   .treatment-universe {
     height: auto;
     min-height: 0;
@@ -6317,33 +5000,7 @@ footer {
     grid-template-rows: minmax(620px, 72svh) auto;
     overflow: visible;
   }
-
-  .universe-canvas {
-    height: min(760px, 72svh);
-    min-height: 620px;
-  }
-
-  .universe-interface {
-    height: auto;
-    min-height: 620px;
-    overflow: visible;
-  }
-
-  .universe-tabs {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .universe-tabs button:nth-child(3n) {
-    border-right: 0;
-  }
-
-  .universe-detail {
-    max-height: none;
-    overflow: visible;
-  }
-}
-
-@media (max-width: 768px) {
+}@media (max-width: 768px) {
   .carelens.section-pad {
     padding-right: 0;
     padding-left: 0;
@@ -6361,268 +5018,6 @@ footer {
     min-height: 620px;
     display: block;
     overflow: hidden;
-  }
-
-  .universe-canvas {
-    width: 100%;
-    height: 100%;
-    min-height: 620px;
-  }
-
-  .universe-rings i {
-    left: 57%;
-    top: 39%;
-    width: min(145vw, 620px);
-  }
-
-  .universe-rings i:nth-child(2) {
-    width: min(112vw, 480px);
-  }
-
-  .universe-rings i:nth-child(3) {
-    width: min(78vw, 330px);
-  }
-
-  .anatomy-system-toolbar {
-    left: max(8px, env(safe-area-inset-left));
-    width: 54px;
-    padding: 5px 0;
-    border-color: rgba(255, 255, 255, 0.06);
-    background: rgba(7, 7, 7, 0.22);
-  }
-
-  .site-shell[dir="rtl"] .anatomy-system-toolbar {
-    right: max(8px, env(safe-area-inset-right));
-    left: auto;
-  }
-
-  .anatomy-system-toolbar button {
-    min-height: 48px;
-    padding: 4px 2px;
-  }
-
-  .anatomy-system-toolbar button span {
-    font-size: 7px;
-  }
-
-  .universe-layer-dock {
-    right: max(10px, env(safe-area-inset-right));
-    bottom: max(10px, env(safe-area-inset-bottom));
-    left: max(68px, calc(env(safe-area-inset-left) + 66px));
-    width: auto;
-    gap: 8px;
-    padding: 8px 9px;
-    transform: none;
-  }
-
-  .site-shell[dir="rtl"] .universe-layer-dock {
-    right: max(68px, calc(env(safe-area-inset-right) + 66px));
-    left: max(10px, env(safe-area-inset-left));
-  }
-
-  .layer-dock-title {
-    min-height: 44px;
-    padding-right: 9px;
-  }
-
-  .layer-dock-track {
-    justify-content: flex-start;
-    gap: 5px;
-  }
-
-  .universe-layer-dock button {
-    min-width: 58px;
-    min-height: 58px;
-  }
-
-  .layer-dock-orb {
-    width: 40px;
-    height: 40px;
-  }
-
-  .universe-rotate {
-    bottom: calc(max(10px, env(safe-area-inset-bottom)) + 158px);
-    font-size: 9px;
-  }
-
-  .universe-safety-note {
-    top: max(10px, env(safe-area-inset-top));
-    right: max(10px, env(safe-area-inset-right));
-    max-width: calc(100% - 88px - env(safe-area-inset-left) - env(safe-area-inset-right));
-    padding: 8px 10px;
-  }
-
-  .site-shell[dir="rtl"] .universe-safety-note {
-    right: auto;
-    left: max(10px, env(safe-area-inset-left));
-  }
-
-  .universe-safety-note span {
-    font-size: 11px;
-  }
-
-  .universe-info-trigger {
-    position: absolute;
-    z-index: 7;
-    right: max(12px, env(safe-area-inset-right));
-    bottom: calc(max(10px, env(safe-area-inset-bottom)) + 102px);
-    max-width: 176px;
-    min-height: 42px;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 999px;
-    padding: 0 13px;
-    color: var(--white);
-    background: rgba(9, 9, 9, 0.76);
-    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.28);
-    backdrop-filter: blur(12px);
-  }
-
-  .site-shell[dir="rtl"] .universe-info-trigger {
-    right: auto;
-    left: max(12px, env(safe-area-inset-left));
-  }
-
-  .universe-info-trigger span {
-    overflow: hidden;
-    font-size: 10px;
-    font-weight: 700;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-
-  .universe-sheet-backdrop {
-    position: absolute;
-    z-index: 8;
-    inset: 0;
-    width: 100%;
-    border: 0;
-    padding: 0;
-    background: rgba(0, 0, 0, 0.52);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s ease;
-  }
-
-  .mobile-info-open .universe-sheet-backdrop {
-    display: block;
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .universe-interface {
-    position: absolute;
-    z-index: 9;
-    right: max(8px, env(safe-area-inset-right));
-    bottom: max(8px, env(safe-area-inset-bottom));
-    left: max(8px, env(safe-area-inset-left));
-    width: auto;
-    height: auto;
-    max-height: min(78svh, 720px);
-    display: block;
-    overflow-y: auto;
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    border-radius: 22px 22px 14px 14px;
-    box-shadow: 0 -28px 80px rgba(0, 0, 0, 0.42);
-    transform: translateY(calc(100% + 20px));
-    visibility: hidden;
-    transition:
-      transform 0.38s cubic-bezier(0.2, 0.8, 0.2, 1),
-      visibility 0s linear 0.38s;
-  }
-
-  .mobile-info-open .universe-interface {
-    transform: translateY(0);
-    visibility: visible;
-    transition:
-      transform 0.38s cubic-bezier(0.2, 0.8, 0.2, 1),
-      visibility 0s;
-  }
-
-  .universe-sheet-handle {
-    position: sticky;
-    z-index: 2;
-    top: 9px;
-    width: 42px;
-    height: 4px;
-    margin: 9px auto 0;
-    display: block;
-    border-radius: 999px;
-    background: rgba(30, 28, 25, 0.24);
-  }
-
-  .universe-sheet-close {
-    position: sticky;
-    z-index: 3;
-    top: 12px;
-    margin: -4px 14px -36px auto;
-    width: 42px;
-    height: 42px;
-    display: grid;
-    place-items: center;
-    border: 1px solid rgba(35, 35, 32, 0.13);
-    border-radius: 50%;
-    color: #24221f;
-    background: rgba(255, 255, 255, 0.72);
-    backdrop-filter: blur(10px);
-  }
-
-  .site-shell[dir="rtl"] .universe-sheet-close {
-    margin-right: 14px;
-    margin-left: auto;
-  }
-
-  .universe-tabs {
-    display: none;
-  }
-
-  .universe-detail {
-    display: block;
-    overflow: visible;
-    padding: 44px 20px calc(28px + env(safe-area-inset-bottom));
-  }
-
-  .universe-detail h3 {
-    margin: 18px 0 13px;
-    padding-right: 40px;
-    font-size: clamp(28px, 8.2vw, 38px);
-  }
-
-  .site-shell[dir="rtl"] .universe-detail h3 {
-    padding-right: 0;
-    padding-left: 40px;
-  }
-
-  .universe-actions {
-    flex-direction: column;
-  }
-}
-
-@media (max-width: 380px) {
-  .layer-dock-title span {
-    display: none;
-  }
-
-  .layer-dock-title {
-    padding-right: 8px;
-  }
-
-  .universe-info-trigger {
-    max-width: 148px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .universe-canvas-mount,
-  .model-loading-ring,
-  .universe-layer-dock button,
-  .anatomy-system-toolbar button,
-  .universe-interface,
-  .universe-sheet-backdrop {
-    animation: none;
-    transition: none;
   }
 }
 
@@ -6934,8 +5329,7 @@ footer {
  * asks for less motion is asking not to be moved, not to be given a flatter
  * interface — stripping the affordances along with the animation would make the
  * site harder to use for the people most likely to need it legible.
- */
-@media (prefers-reduced-motion: reduce) {
+ */@media (prefers-reduced-motion: reduce) {
   .button:active:not(:disabled),
   .text-button:active,
   .nav-book:active,
@@ -7059,9 +5453,7 @@ footer {
     rgba(123, 38, 60, 0.3),
     transparent 58%
   );
-}
-
-@media (prefers-reduced-motion: reduce) {
+}@media (prefers-reduced-motion: reduce) {
   .site-header {
     transition: none;
   }
@@ -7297,8 +5689,7 @@ html[data-reveal-ready] [data-reveal="list"].in-view :is(.treatment-checks li, .
  *
  * The global 0.001ms rule collapses the animations; these make the reveal
  * system inert outright so nothing depends on a transition firing.
- */
-@media (prefers-reduced-motion: reduce) {
+ */@media (prefers-reduced-motion: reduce) {
   html[data-reveal-ready] [data-reveal],
   html[data-reveal-ready] [data-reveal] :is(.treatment-checks li, .treatment-phases article, .treatment-clinics a, .treatment-faq details) {
     opacity: 1 !important;
@@ -7424,67 +5815,11 @@ html {
  * finish the family. The region card re-mounts per region, so each selection
  * slides its clinical copy in; the tag chips ride the same move.
  */
-.universe-region-card {
-  animation: regionCardIn 0.5s var(--ease-out) both;
-}
 
-@keyframes regionCardIn {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 
 /** Area tabs: a sweep that draws under the choice instead of a colour snap. */
-.universe-tabs button {
-  position: relative;
-  transition: background 0.4s var(--ease-out), color 0.4s var(--ease-out);
-}
-
-.universe-tabs button::after {
-  content: "";
-  position: absolute;
-  inset: auto 0 -1px 0;
-  height: 2px;
-  background: var(--burgundy);
-  transform: scaleX(0);
-  transform-origin: center;
-  transition: transform 0.45s var(--ease-out);
-}
-
-.universe-tabs button:hover:not(.active) {
-  background: rgba(123, 38, 60, 0.05);
-}
-
-.universe-tabs button.active::after {
-  transform: scaleX(1);
-}
 
 /** Region rail: choices settle rather than flip. */
-.universe-regions button {
-  transition:
-    background 0.35s var(--ease-out),
-    color 0.35s var(--ease-out),
-    border-color 0.35s var(--ease-out),
-    transform 0.35s var(--ease-out);
-}
-
-.universe-regions button:hover {
-  transform: translateY(-1px);
-}
-
-.universe-regions button:active {
-  transform: translateY(0) scale(0.97);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .universe-regions button:hover,
-  .universe-regions button:active {
-    transform: none;
-  }
-
-  .universe-tabs button::after {
-    transition: none;
-  }
-}
 
 /**
  * CareLens, folded into the page instead of framed as an app.
@@ -7495,35 +5830,6 @@ html {
  * quiet labels on a single hairline, the active one carried by colour and the
  * underline sweep, which is how the rest of the site marks selection.
  */
-.universe-tabs {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  border-bottom: 1px solid rgba(35, 35, 32, 0.14);
-  background: transparent;
-}
-
-.universe-tabs button,
-.universe-tabs button:nth-child(even),
-.universe-tabs button:nth-child(n + 5),
-.universe-tabs button:nth-child(odd):last-child,
-.universe-tabs button:last-child {
-  border-right: 0;
-  border-bottom: 0;
-  min-height: 64px;
-  background: transparent;
-  color: #565049;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-}
-
-.universe-tabs button.active {
-  background: transparent;
-  color: var(--burgundy);
-}
-
-.universe-tabs button:not(.active):hover {
-  background: rgba(123, 38, 60, 0.045);
-  color: #262320;
-}
 
 /** The section wears its name the way the portal wears BEYOND. */
 .carelens {
@@ -7558,10 +5864,4 @@ html {
  * instrument and a still image. Compositor-only, and gone under reduced motion
  * with the rest of the animation layer.
  */
-.universe-rings::after {
-  animation: ringsDrift 120s linear infinite;
-}
-
-@keyframes ringsDrift {
-  to { transform: rotate(360deg); }
-}
+
