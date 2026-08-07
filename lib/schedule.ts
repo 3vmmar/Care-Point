@@ -20,6 +20,7 @@ import {
   BRANCHES,
   CLINIC_TURNAROUND_MINUTES,
   DEFAULT_APPOINTMENT_MINUTES,
+  PRACTITIONERS_MAY_SPAN_BRANCHES,
   findService,
   serviceDuration,
   type Branch,
@@ -253,6 +254,28 @@ export function overlaps(
 /* -------------------------------------------------------------------------- */
 
 /**
+ * One representative service per independent care track.
+ *
+ * Surgical/non-surgical and Dental run in parallel, in different rooms, often
+ * at different hours — so a day's true capacity is the sum of both tracks.
+ * Counting only the aesthetic track made a busy dental day look overbooked.
+ *
+ * Extracted so the booking dashboard and the growth analytics cannot drift
+ * apart on what "capacity" means; two definitions of a denominator produce two
+ * different utilisation figures for the same day, and no way to tell which is
+ * wrong.
+ */
+export function capacityServiceIds(services: readonly Service[]): string[] {
+  const clinical =
+    services.find((service) => service.category === "surgical") ??
+    services.find((service) => service.category === "nonsurgical");
+  const dental = services.find((service) => service.category === "dental");
+  return [clinical, dental]
+    .filter((service): service is Service => Boolean(service))
+    .map((service) => service.id);
+}
+
+/**
  * How many appointments of a given service a day could hold at full occupancy.
  *
  * Used by the dashboard so "how full are we" is measured against what the
@@ -295,7 +318,17 @@ export type ScheduleProblem = { branch: string; message: string };
  */
 export function validateSchedule(
   branches: readonly Branch[] = BRANCHES,
+  options: {
+    /**
+     * Allow one practitioner to be rostered at more than one branch at the same
+     * time. Defaults to the clinic's own setting, so a caller that passes a
+     * proposed rota gets the same answer the live one is judged by.
+     */
+    allowBranchSpanning?: boolean;
+  } = {},
 ): ScheduleProblem[] {
+  const allowBranchSpanning =
+    options.allowBranchSpanning ?? PRACTITIONERS_MAY_SPAN_BRANCHES;
   const problems: ScheduleProblem[] = [];
 
   for (const branch of branches) {
@@ -355,9 +388,11 @@ export function validateSchedule(
     }
   }
 
-  // A practitioner cannot be at two branches at once either.
+  // A practitioner cannot be at two branches at once either — unless the
+  // practice has said they may. The within-branch overlap check above still
+  // applies in both cases; that one is never anything but a mistake.
   const seen = new Map<string, { branch: string; start: number; end: number }[]>();
-  for (const branch of branches) {
+  for (const branch of allowBranchSpanning ? [] : branches) {
     for (const session of branch.sessions) {
       const key = `${session.practitioner}|${session.weekday}`;
       const existing = seen.get(key) ?? [];

@@ -163,12 +163,73 @@ test("appointment management and Clinic OS pass automated WCAG checks", async ({
     await expect(page.getByRole("heading", { name: /Good .+/ })).toBeVisible();
     await expectAccessible(page, testInfo, "Clinic OS dashboard");
 
+    /**
+     * Status pills render only when the appointment table has rows, so this
+     * scan has been measuring a dashboard with no pills in it. That is how the
+     * confirmed pill sat at 3.81:1 and the cancelled at 3.82:1 while this suite
+     * reported a clean pass — a green result over less surface than it looked.
+     *
+     * Mounting one of every variant makes the contrast of all five observable
+     * on every run, independent of what happens to be in the local database.
+     */
+    await page.evaluate(() => {
+      const host = document.createElement("div");
+      host.style.cssText = "display:flex;gap:8px;padding:12px";
+      for (const variant of [
+        "confirmed", "checked", "completed", "missed", "cancelled",
+      ]) {
+        const pill = document.createElement("span");
+        pill.className = `status-pill status-pill--${variant}`;
+        pill.textContent = variant;
+        host.appendChild(pill);
+      }
+      (document.querySelector(".command-main") ?? document.body).appendChild(host);
+    });
+    await expectAccessible(page, testInfo, "Clinic OS status pills");
+
     await page.getByRole("button", { name: /Pilot/ }).click();
     await expect(page.getByRole("heading", { name: "Pilot Control" })).toBeVisible();
     await expectAccessible(page, testInfo, "Clinic OS Pilot Control");
   } finally {
     await cancelTestBooking(request, booking);
   }
+});
+
+/**
+ * The practice overview, audited on its own.
+ *
+ * SVG is where accessibility quietly disappears: a picture carrying the whole
+ * message, with no text alternative, and axis labels sized for density rather
+ * than for reading. So the charts are audited mounted, and again with their
+ * data tables open — those tables are the non-visual route to the same numbers
+ * and are worthless if they are themselves inaccessible.
+ *
+ * Its own test rather than an addition to the Clinic OS one: five axe scans in
+ * a single test exceeds the 60s timeout, and a slow test that fails on time
+ * tells you nothing about accessibility.
+ */
+test("the practice overview and its charts pass automated WCAG 2.1 AA checks", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/command-center");
+  await page.waitForLoadState("networkidle");
+
+  await page.getByRole("button", { name: /^Overview/ }).click();
+  await expect(page.getByRole("heading", { name: /Is the practice growing/ })).toBeVisible();
+  await expectAccessible(page, testInfo, "Clinic OS practice overview");
+
+  // Each click renames the button to "Hide numbers", so a snapshot taken by
+  // `.all()` goes stale after the first one and the rest never resolve. Open
+  // whichever is still closed, until none are.
+  let opened = 0;
+  for (let guard = 0; guard < 20; guard += 1) {
+    const next = page.getByRole("button", { name: "Show numbers" }).first();
+    if ((await next.count()) === 0) break;
+    await next.click();
+    opened += 1;
+  }
+  expect(opened, "no chart offered its numbers as a table").toBeGreaterThan(0);
+  await expectAccessible(page, testInfo, "Clinic OS overview data tables");
 });
 
 /**

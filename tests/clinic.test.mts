@@ -7,6 +7,7 @@ import {
   CLINIC_CLOSURES,
   PII_RETENTION_DAYS,
   REPORTING_CATEGORIES,
+  PRACTITIONERS,
   SERVICES,
   SERVICE_IDS,
   branchLabel,
@@ -234,15 +235,30 @@ test("hold validation rejects a time the branch does not run that day", () => {
   );
 });
 
-test("a surgical service cannot be booked into a dental session", () => {
+test("dental and surgical are routed to different people, not merely different hours", () => {
   const dental = firstOffer("Maadi", "dental-check");
   assert.ok(dental, "Maadi must offer dental within the window");
-  // The dental session runs earlier than the surgeon's, so its start time is
-  // not a valid surgical offer even though the clinic is open that day.
+
+  // Until 2026-08-07 the two lines of care ran at different times of day, so a
+  // time was enough to tell them apart. They now share one 11:00–19:00 window,
+  // which makes the separation entirely a matter of who is in the room — and
+  // that is the property actually worth asserting.
+  const branch = findBranch("Maadi")!;
+  const dentalSlots = generateSlots(branch, dental!.date, "dental-check");
+  const surgicalSlots = generateSlots(branch, dental!.date, "nose");
+
+  assert.ok(dentalSlots.length > 0 && surgicalSlots.length > 0);
   assert.ok(
-    !isOfferedSlot(findBranch("Maadi")!, dental!.date, "nose", dental!.time),
-    "dental start time must not be bookable as a rhinoplasty consultation",
+    dentalSlots.every((slot) => slot.practitioner === PRACTITIONERS.dental),
+    "a dental service must only ever be offered by the dental team",
   );
+  assert.ok(
+    surgicalSlots.every((slot) => slot.practitioner === PRACTITIONERS.surgeon),
+    "a surgical service must only ever be offered by the surgeon",
+  );
+
+  // A service in no session's categories is still offered by nobody.
+  assert.deepEqual(generateSlots(branch, dental!.date, "not-a-service"), []);
 });
 
 test("hold validation respects the notice period", () => {

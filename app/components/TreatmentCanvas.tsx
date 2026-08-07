@@ -1477,6 +1477,36 @@ export default function TreatmentCanvas({
   }, []);
 
   /**
+   * Whether the scene is anywhere near the viewport.
+   *
+   * Until this existed the canvas ran `frameloop="always"` from the moment it
+   * mounted until the visitor left the site — sixty renders a second for the
+   * whole of the rest of the page, competing with scrolling for the main
+   * thread and the GPU.
+   *
+   * It was measurable: on a 4×-throttled Pixel 5, every dropped frame past the
+   * first landed at or after the depth where this component mounts, the worst
+   * a 217ms freeze two thirds of the page later, in a section made of three
+   * text cards that cannot possibly cost that. Suspending the loop off-screen
+   * is the fix, and `npm run test:performance:lab` is where it is checked.
+   *
+   * A 300px margin means the scene is already running by the time it is worth
+   * looking at, so nobody sees it start.
+   */
+  const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
+  const [nearViewport, setNearViewport] = useState(true);
+
+  useEffect(() => {
+    if (!canvasElement || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setNearViewport(entry.isIntersecting),
+      { rootMargin: "300px 0px" },
+    );
+    observer.observe(canvasElement);
+    return () => observer.disconnect();
+  }, [canvasElement]);
+
+  /**
    * Which tooth is lit.
    *
    * Local to the canvas because it is a property of the picture, not of the
@@ -1513,11 +1543,16 @@ export default function TreatmentCanvas({
          */
         dpr={[1, 1.5]}
         /**
-         * With motion reduced the scene is a still image, so the loop runs on
-         * demand instead of sixty times a second. Interaction invalidates it
-         * explicitly below.
+         * Sixty renders a second only while the scene is worth rendering.
+         *
+         * With motion reduced it is a still image, so the loop runs on demand
+         * and interaction invalidates it explicitly below. Scrolled away, it is
+         * not even that — a continuous loop behind a section nobody is looking
+         * at is pure cost, and was the measured cause of the page's scroll
+         * stutter.
          */
-        frameloop={reducedMotion ? "demand" : "always"}
+        frameloop={reducedMotion || !nearViewport ? "demand" : "always"}
+        onCreated={({ gl }) => setCanvasElement(gl.domElement)}
         gl={{
           antialias: true,
           alpha: true,

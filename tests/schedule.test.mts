@@ -57,25 +57,40 @@ test("minutes and times round-trip", () => {
 /* Sessions                                                                    */
 /* -------------------------------------------------------------------------- */
 
-test("sessions are day-specific, not the same every day", () => {
-  // The whole point of the rebuild: Maadi runs on Sunday, not on Monday.
-  assert.ok(sessionsOn(maadi, SUNDAY).length > 0);
-  assert.equal(sessionsOn(maadi, MONDAY).length, 0);
-  assert.ok(sessionsOn(mohandessin, MONDAY).length > 0);
-  assert.equal(sessionsOn(mohandessin, SUNDAY).length, 0);
+test("every branch consults every day, and they differ by hours rather than by day", () => {
+  // Changed on 2026-08-07: the rota used to rotate the surgeon between
+  // branches by weekday. It no longer does — all three run daily, and what
+  // separates them is the window.
+  for (const day of [SUNDAY, MONDAY, FRIDAY]) {
+    for (const branch of BRANCHES) {
+      assert.ok(
+        sessionsOn(branch, day).length > 0,
+        `${branch.id} has no session on weekday ${day}`,
+      );
+    }
+  }
+  assert.equal(sessionsOn(maadi, SUNDAY)[0].start, "11:00");
+  assert.equal(sessionsOn(maadi, SUNDAY)[0].end, "19:00");
+  assert.equal(sessionsOn(mohandessin, SUNDAY)[0].start, "18:00");
+  assert.equal(sessionsOn(mohandessin, SUNDAY)[0].end, "22:00");
 });
 
-test("no sessions run on a closed day", () => {
+test("Friday now runs, and a one-off closure still clears the day", () => {
   for (const branch of BRANCHES) {
-    assert.equal(sessionsOn(branch, FRIDAY).length, 0, `${branch.id} runs on a Friday`);
+    assert.ok(sessionsOn(branch, FRIDAY).length > 0, `${branch.id} should now run on Friday`);
   }
+  // The weekly closure is gone; the holiday mechanism it used to share is not,
+  // and is what Eid and planned leave still run through.
+  const closures = [{ date: FRIDAY, en: "Eid al-Fitr", ar: "عيد الفطر" }];
+  assert.deepEqual(generateSlots(maadi, FRIDAY, "aesthetic", { closures }), []);
 });
 
 test("practitioners are reported per branch per day", () => {
   const sunday = practitionersOn(maadi, SUNDAY);
   assert.ok(sunday.includes(PRACTITIONERS.surgeon));
   assert.ok(sunday.includes(PRACTITIONERS.dental));
-  assert.deepEqual(practitionersOn(maadi, MONDAY), []);
+  // Both lines of care now run daily, so every day reports the same pair.
+  assert.deepEqual(practitionersOn(maadi, MONDAY), sunday);
 });
 
 /* -------------------------------------------------------------------------- */
@@ -85,8 +100,8 @@ test("practitioners are reported per branch per day", () => {
 test("slots are generated from sessions, not from a fixed list", () => {
   const slots = generateSlots(maadi, SUNDAY, "aesthetic");
   assert.ok(slots.length > 0);
-  // Surgeon session is 16:00–21:00 at 30-minute intervals.
-  assert.equal(slots.find((s) => s.practitioner === PRACTITIONERS.surgeon)!.time, "16:00");
+  // Surgeon session is 11:00–19:00 at 30-minute intervals.
+  assert.equal(slots.find((s) => s.practitioner === PRACTITIONERS.surgeon)!.time, "11:00");
 });
 
 test("a longer service yields fewer slots than a shorter one", () => {
@@ -125,8 +140,9 @@ test("dental cannot be booked into the surgeon's session", () => {
   }
 });
 
-test("no slots on a closed day, or for an unknown service", () => {
-  assert.deepEqual(generateSlots(maadi, FRIDAY, "aesthetic"), []);
+test("no slots on a closure, or for an unknown service", () => {
+  const closures = [{ date: SUNDAY, en: "Planned leave", ar: "إجازة" }];
+  assert.deepEqual(generateSlots(maadi, SUNDAY, "aesthetic", { closures }), []);
   assert.deepEqual(generateSlots(maadi, SUNDAY, "not-a-service"), []);
 });
 
@@ -212,11 +228,24 @@ test("every occupied cell falls on the grid", () => {
 /* Capacity                                                                    */
 /* -------------------------------------------------------------------------- */
 
-test("capacity reflects the day, not a constant", () => {
-  assert.equal(dayCapacity(FRIDAY), 0, "a closed day has no capacity");
+test("capacity is derived from the rota, and a closure empties it", () => {
   assert.ok(dayCapacity(SUNDAY) > 0);
-  // Different days run different branches, so capacity genuinely differs.
-  assert.notEqual(dayCapacity(SUNDAY), dayCapacity(MONDAY));
+  // The rota is the same every day now, so capacity no longer varies by
+  // weekday — it varies by BRANCH, because the windows differ in length.
+  assert.equal(dayCapacity(SUNDAY), dayCapacity(MONDAY));
+  const maadiCapacity = dayCapacity(SUNDAY, "aesthetic", "Maadi");
+  const mohandessinCapacity = dayCapacity(SUNDAY, "aesthetic", "Mohandessin");
+  assert.ok(
+    maadiCapacity > mohandessinCapacity,
+    `Maadi's 8-hour window should out-hold Mohandessin's 4 (${maadiCapacity} vs ${mohandessinCapacity})`,
+  );
+  assert.equal(
+    dayCapacity(SUNDAY, "aesthetic", undefined, {
+      closures: [{ date: SUNDAY, en: "Eid al-Fitr", ar: "عيد الفطر" }],
+    }),
+    0,
+    "a closure has no capacity",
+  );
 });
 
 test("capacity can be scoped to one branch", () => {
@@ -280,7 +309,10 @@ test("validation catches one practitioner in two places at once", () => {
       ],
     },
   ];
-  const problems = validateSchedule(clashing);
+  // Asked for explicitly, because the practice has since turned this guard off
+  // for its own rota (PRACTITIONERS_MAY_SPAN_BRANCHES). The check itself must
+  // still work — a clinic that turns it back on has to get a real answer.
+  const problems = validateSchedule(clashing, { allowBranchSpanning: false });
   assert.ok(
     problems.some((p) => /cannot be at .+ and .+ at the same time/.test(p.message)),
     "a practitioner double-booked across branches must be reported",

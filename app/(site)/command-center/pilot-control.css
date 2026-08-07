@@ -9,7 +9,7 @@
   margin: 0;
   padding: 42px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   color: var(--cc-muted);
   text-align: center;
 }
@@ -21,10 +21,10 @@
   align-items: end;
   justify-content: space-between;
   gap: 30px;
-  color: #fff;
+  color: var(--white);
   background:
     radial-gradient(circle at 78% 18%, rgba(190, 135, 155, 0.25), transparent 34%),
-    linear-gradient(125deg, #171716, #282321 62%, #432a32);
+    linear-gradient(125deg, var(--charcoal), #282321 62%, #432a32);
 }
 
 .pilot-hero > div:first-child > span,
@@ -68,7 +68,7 @@
   min-height: 42px;
   padding: 0 14px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   color: var(--cc-ink);
   font: inherit;
   font-size: 12.5px;
@@ -81,7 +81,7 @@
   gap: 7px;
   border-color: rgba(255, 255, 255, 0.25);
   background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  color: var(--white);
 }
 
 .pilot-hero-actions .pilot-pause {
@@ -122,7 +122,7 @@
   display: grid;
   align-content: space-between;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
 }
 
 .pilot-metrics article[data-alert] {
@@ -153,7 +153,7 @@
   min-width: 0;
   padding: 24px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
 }
 
 .pilot-panel-heading {
@@ -186,7 +186,7 @@
 
 .pilot-panel-heading > strong[data-recommendation="continue"] { color: #2f6e48; background: #eef8f1; }
 .pilot-panel-heading > strong[data-recommendation="investigate"] { color: #80561f; background: #fff7e9; }
-.pilot-panel-heading > strong[data-recommendation="stop"] { color: #87213d; background: #fff0f4; }
+.pilot-panel-heading > strong[data-recommendation="stop"] { color: #87213d; background: var(--status-stop-bg); }
 
 .pilot-form-grid {
   display: grid;
@@ -235,7 +235,7 @@
 .pilot-incident-form button,
 .pilot-review-form button {
   background: var(--cc-dark);
-  color: #fff;
+  color: var(--white);
 }
 
 .pilot-checklist {
@@ -325,7 +325,7 @@
   grid-template-columns: 70px minmax(0, 1fr) auto auto;
   gap: 10px;
   align-items: center;
-  background: #fff;
+  background: var(--white);
 }
 
 .pilot-incidents article > span {
@@ -338,7 +338,7 @@
 }
 
 .pilot-incidents article[data-severity="critical"] > span,
-.pilot-incidents article[data-severity="high"] > span { color: #84233e; background: #fff0f4; }
+.pilot-incidents article[data-severity="high"] > span { color: #84233e; background: var(--status-stop-bg); }
 .pilot-incidents article[data-resolved] { opacity: 0.68; }
 .pilot-incidents small { color: var(--cc-muted); font-size: 10px; }
 .pilot-incidents em { color: var(--cc-green); font-size: 11px; font-style: normal; }
@@ -348,7 +348,7 @@
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 4px 12px;
-  background: #fff;
+  background: var(--white);
 }
 
 .pilot-reviews article > span,
@@ -389,14 +389,14 @@
    does not exist; showing it as a pass would hide a gate nobody has measured. */
 .pilot-checks span[data-state="pass"] {
   color: #2f5d40;
-  background: #e2ede5;
+  background: var(--status-confirmed-bg);
   border-color: #bcd7c6;
 }
 
 .pilot-checks span[data-state="fail"] {
   color: #7a3b28;
-  background: #f4e0d8;
-  border-color: #e0b9a9;
+  background: var(--status-missed-bg);
+  border-color: var(--feedback-danger-border);
 }
 
 .pilot-checks span[data-state="unknown"] {

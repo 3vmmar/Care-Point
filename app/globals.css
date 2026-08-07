@@ -1,23 +1,9 @@
 @import "tailwindcss";
-
-:root {
-  --ivory: #f2eee6;
-  --paper: #fbf9f4;
-  --charcoal: #171716;
-  --ink: #282624;
-  /* Small supporting copy still has to clear 4.5:1 on the ivory canvas. */
-  --muted: #69645e;
-  --line: rgba(39, 36, 32, 0.14);
-  --burgundy: #7b263c;
-  --burgundy-dark: #511425;
-  --rose: #b46978;
-  --champagne: #c9af86;
-  --sage: #77857a;
-  --white: #ffffff;
-  --shadow: 0 22px 70px rgba(35, 28, 24, 0.13);
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-smooth: cubic-bezier(0.65, 0, 0.35, 1);
-}
+/* Primitives, scales and semantic aliases for both surfaces. Every value that
+   used to live in the two :root islands in this file now lives there, at the
+   same value. See app/tokens.css for the layering rules — and for why there is
+   deliberately no --font-heading alias. */
+@import "./tokens.css";
 
 * {
   box-sizing: border-box;
@@ -462,7 +448,7 @@ section[id] {
   min-height: 38px;
   border: 1px solid transparent;
   background: transparent;
-  color: #69645e;
+  color: var(--muted);
   padding: 0 10px;
   display: flex;
   align-items: center;
@@ -766,7 +752,7 @@ section[id] {
   display: flex;
   align-items: center;
   gap: 9px;
-  color: #69645e;
+  color: var(--muted);
   font-size: 9px;
   letter-spacing: 0.05em;
 }
@@ -957,7 +943,7 @@ section[id] {
 .hero-rail span {
   font-size: 7px;
   letter-spacing: 0.2em;
-  color: #69645e;
+  color: var(--muted);
 }
 
 .hero-rail i {
@@ -1307,7 +1293,7 @@ section[id] {
 
 .proof-intro p {
   max-width: 500px;
-  color: #aaa49c;
+  color: var(--warm-grey-300-alt);
   font-size: 12px;
   line-height: 1.8;
 }
@@ -1353,7 +1339,7 @@ section[id] {
 }
 
 .proof-stats span {
-  color: #aaa49c;
+  color: var(--warm-grey-300-alt);
   font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1398,14 +1384,14 @@ section[id] {
   min-height: 720px;
   display: grid;
   grid-template-columns: minmax(0, 1.16fr) minmax(390px, 0.84fr);
-  background: #171716;
+  background: var(--charcoal);
   box-shadow: 0 34px 90px rgba(37, 28, 25, 0.15);
 }
 
 /* Reserves the scene's footprint while its chunk loads, so nothing shifts. */
 .treatment-universe--loading {
   display: block;
-  background: linear-gradient(120deg, #171716, #201d1d, #171716);
+  background: linear-gradient(120deg, var(--charcoal), #201d1d, var(--charcoal));
   background-size: 220% 100%;
   animation: universeShimmer 1.6s var(--ease-smooth) infinite;
 }
@@ -1420,7 +1406,7 @@ section[id] {
   min-height: 720px;
   position: relative;
   overflow: hidden;
-  background: #151414;
+  background: var(--black-900);
   cursor: crosshair;
 }
 
@@ -1434,7 +1420,7 @@ section[id] {
 .universe-canvas-placeholder {
   background:
     radial-gradient(circle at 50% 45%, rgba(123, 38, 60, 0.2), transparent 34%),
-    linear-gradient(120deg, #151414, #1d191a, #151414);
+    linear-gradient(120deg, var(--black-900), #1d191a, var(--black-900));
   background-size: 100% 100%, 220% 100%;
   animation: universeShimmer 1.6s var(--ease-smooth) infinite;
 }
@@ -1532,7 +1518,7 @@ section[id] {
 
 .universe-interface {
   min-width: 0;
-  background: #eee9e1;
+  background: var(--sand-200);
   display: grid;
   grid-template-rows: auto 1fr;
 }
@@ -1589,7 +1575,7 @@ section[id] {
 }
 
 .universe-tabs button > span {
-  color: #7b4050;
+  color: var(--burgundy-300);
   font-size: 11px;
   letter-spacing: 0.08em;
   align-self: start;
@@ -1657,7 +1643,7 @@ section[id] {
  * is to explain anatomy cannot set the explanation in type nobody can read.
  */
 .universe-detail > p {
-  color: #5f5951;
+  color: var(--warm-grey-600);
   font-size: 14px;
   line-height: 1.7;
   max-width: 52ch;
@@ -1665,7 +1651,7 @@ section[id] {
 
 .universe-depth-hint {
   margin-top: 10px;
-  color: #7b4050;
+  color: var(--burgundy-300);
   font-style: italic;
 }
 
@@ -1681,7 +1667,7 @@ section[id] {
   padding: 6px 10px;
   font-size: 11px;
   letter-spacing: 0.04em;
-  color: #4b463f;
+  color: var(--warm-grey-700);
 }
 
 /* Bookable, and marked as such — these are an offer, the neighbouring tags are
@@ -1738,7 +1724,7 @@ section[id] {
 .universe-depth button.active {
   background: var(--burgundy);
   border-color: var(--burgundy-lift, #a84560);
-  color: #fff;
+  color: var(--white);
 }
 
 /* ── Region rail ──────────────────────────────────────────────────────────── */
@@ -1759,7 +1745,7 @@ section[id] {
   min-height: 40px;
   font-size: 12px;
   letter-spacing: 0.02em;
-  color: #4b463f;
+  color: var(--warm-grey-700);
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
@@ -1772,7 +1758,7 @@ section[id] {
 .universe-regions button.active {
   background: var(--charcoal);
   border-color: var(--charcoal);
-  color: #fff;
+  color: var(--white);
 }
 
 .universe-region-card {
@@ -1792,7 +1778,7 @@ section[id] {
 
 .universe-region-card > p {
   margin: 0;
-  color: #5f5951;
+  color: var(--warm-grey-600);
   font-size: 13.5px;
   line-height: 1.72;
 }
@@ -1802,7 +1788,7 @@ section[id] {
 }
 
 .universe-region-meta > span {
-  color: #7b4050;
+  color: var(--burgundy-300);
   font-size: 10px;
   letter-spacing: 0.16em;
 }
@@ -1845,7 +1831,7 @@ section[id] {
   z-index: 2;
   overflow-y: auto;
   color: white;
-  background: #171716;
+  background: var(--charcoal);
   animation: deepDiveIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
@@ -1866,7 +1852,7 @@ section[id] {
 .specialty-deep-dive > header button {
   width: fit-content;
   border: 0;
-  color: #aaa49e;
+  color: var(--warm-grey-300);
   background: transparent;
   display: flex;
   align-items: center;
@@ -1921,7 +1907,7 @@ section[id] {
 
 .deep-dive-intro > p {
   max-width: 450px;
-  color: #aaa49e;
+  color: var(--warm-grey-300);
   font-size: 11px;
   line-height: 1.85;
 }
@@ -2032,7 +2018,7 @@ section[id] {
   display: flex;
   align-items: flex-start;
   gap: 9px;
-  color: #8e8882;
+  color: var(--warm-grey-400);
   margin-bottom: 28px;
 }
 
@@ -2659,7 +2645,7 @@ section[id] {
   max-height: calc(100vh - 34px);
   overflow-y: auto;
   color: white;
-  background: #171716;
+  background: var(--charcoal);
   box-shadow: var(--shadow);
   animation: modalRise 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
@@ -2858,7 +2844,7 @@ section[id] {
 
 .journey-result-meta svg { color: var(--rose); }
 .journey-result-actions { display: flex; align-items: center; gap: 18px; }
-.result-restart { border: 0; color: #8e8882; background: transparent; cursor: pointer; font-size: 8px; }
+.result-restart { border: 0; color: var(--warm-grey-400); background: transparent; cursor: pointer; font-size: 8px; }
 .journey-result > small { margin-top: 28px; color: #6e6964; font-size: 7px; }
 
 .final-cta > div {
@@ -2909,7 +2895,7 @@ footer p {
 }
 
 .footer-links a {
-  color: #aaa49c;
+  color: var(--warm-grey-300-alt);
   font-size: 9px;
 }
 
@@ -3102,7 +3088,7 @@ footer p {
 }
 
 .chat-message--assistant p {
-  background: #ece6dd;
+  background: var(--sand-150);
 }
 
 .chat-message--user {
@@ -3207,9 +3193,9 @@ footer p {
 
 .noor-legal {
   margin: 0;
-  background: #ece6dd;
+  background: var(--sand-150);
   padding: 11px 20px;
-  color: #77716a;
+  color: var(--warm-grey-450);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -3273,7 +3259,7 @@ footer p {
 .booking-fields label > span,
 .form-grid label > span {
   font-size: 8px;
-  color: #69645e;
+  color: var(--muted);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 700;
@@ -3390,7 +3376,7 @@ footer p {
 
 .booking-footer p {
   margin: 0;
-  color: #77716a;
+  color: var(--warm-grey-450);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -3398,7 +3384,7 @@ footer p {
 }
 
 .held-slot {
-  background: #ece6dd;
+  background: var(--sand-150);
   padding: 18px;
   display: flex;
   align-items: center;
@@ -5121,11 +5107,11 @@ footer {
 }
 
 .booking-top .section-index {
-  color: #d59aab;
+  color: var(--rose-300);
 }
 
 .site-footer .footer-brand small {
-  color: #d59aab;
+  color: var(--rose-300);
 }
 
 .treatment-links strong {
@@ -5587,15 +5573,15 @@ footer {
   gap: 14px;
   padding: 18px 20px;
   margin: 0 0 12px;
-  background: #f6e7d3;
-  border: 1px solid #d9b98c;
-  color: #4a3a1b;
+  background: var(--notice-bg);
+  border: 1px solid var(--notice-border);
+  color: var(--notice-fg);
 }
 
 .legal-review svg {
   flex: 0 0 auto;
   margin-top: 3px;
-  color: #a9702f;
+  color: var(--amber-600);
 }
 
 .legal-review strong {
@@ -5649,7 +5635,7 @@ footer {
   min-height: 720px;
   grid-template-columns: minmax(0, 1.08fr) minmax(420px, 0.92fr);
   overflow: hidden;
-  background: #070707;
+  background: var(--black-950);
   isolation: isolate;
 }
 
@@ -5694,7 +5680,7 @@ footer {
   background:
     radial-gradient(circle at 55% 30%, rgba(120, 85, 75, 0.18), transparent 30%),
     radial-gradient(circle at 50% 62%, rgba(196, 31, 84, 0.08), transparent 42%),
-    linear-gradient(180deg, #121212 0%, #070707 100%);
+    linear-gradient(180deg, #121212 0%, var(--black-950) 100%);
   cursor: grab;
 }
 
@@ -5802,7 +5788,7 @@ footer {
   bottom: 8px;
   width: 2px;
   border-radius: 2px;
-  background: #c41f54;
+  background: var(--crimson-500);
   box-shadow: 0 0 14px rgba(196, 31, 84, 0.7);
   opacity: 0;
   transform: scaleY(0.4);
@@ -5825,7 +5811,7 @@ footer {
 
 .anatomy-system-toolbar button:hover,
 .anatomy-system-toolbar button.active {
-  color: #fff;
+  color: var(--white);
   background: rgba(255, 255, 255, 0.055);
 }
 
@@ -5869,7 +5855,7 @@ footer {
   gap: 7px;
   padding: 0 11px 0 4px;
   border-right: 1px solid rgba(255, 255, 255, 0.12);
-  color: #fff;
+  color: var(--white);
   font-size: 11px;
   font-weight: 700;
 }
@@ -5935,7 +5921,7 @@ footer {
 
 .universe-layer-dock button:hover,
 .universe-layer-dock button.active {
-  color: #fff;
+  color: var(--white);
 }
 
 .universe-layer-dock button.active {
@@ -5943,8 +5929,8 @@ footer {
 }
 
 .universe-layer-dock button.active .layer-dock-orb {
-  color: #fff;
-  border-color: #c41f54;
+  color: var(--white);
+  border-color: var(--crimson-500);
   box-shadow: 0 0 0 2px rgba(196, 31, 84, 0.16), 0 0 22px rgba(196, 31, 84, 0.38);
 }
 
@@ -6012,7 +5998,7 @@ footer {
   align-content: center;
   justify-items: center;
   gap: 9px;
-  color: #fff;
+  color: var(--white);
   background:
     radial-gradient(circle at 52% 40%, rgba(196, 31, 84, 0.15), transparent 30%),
     #090909;
@@ -6034,7 +6020,7 @@ footer {
   height: 34px;
   margin-bottom: 6px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-top-color: #c41f54;
+  border-top-color: var(--crimson-500);
   border-radius: 50%;
   animation: modelLoadingSpin 0.9s linear infinite;
 }
@@ -6047,7 +6033,7 @@ footer {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: #eee9e1;
+  background: var(--sand-200);
 }
 
 .universe-tabs {
@@ -6262,7 +6248,7 @@ footer {
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 999px;
     padding: 0 13px;
-    color: #fff;
+    color: var(--white);
     background: rgba(9, 9, 9, 0.76);
     box-shadow: 0 10px 32px rgba(0, 0, 0, 0.28);
     backdrop-filter: blur(12px);
@@ -6440,14 +6426,9 @@ footer {
  *    of individually plausible transitions.
  */
 
-:root {
-  /** Pointer-response timings. Fast enough to feel attached to the cursor. */
-  --tap: 90ms;
-  --lift: 260ms;
-  --settle: 520ms;
-  /** A softer overshoot for elements that travel, never for colour. */
-  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
-}
+/* The pointer-response timings (--tap, --lift, --settle) and --ease-spring
+   moved to app/tokens.css with the rest of the motion scale. They kept their
+   names and their values; only their address changed. */
 
 /* ── Press feedback ─────────────────────────────────────────────────────── */
 

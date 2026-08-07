@@ -14,8 +14,41 @@
 
 export const CLINIC_TIMEZONE = "Africa/Cairo";
 
-/** Days the clinic is closed, as JS day indices (0 = Sunday). Friday in Cairo. */
-export const CLOSED_WEEKDAYS = [5];
+/**
+ * Days the clinic is closed, as JS day indices (0 = Sunday).
+ *
+ * Empty at the practice's instruction: every branch consults seven days a week,
+ * including Friday, which is the customary closed day in Cairo and was coded as
+ * such until 2026-08-07. Put `5` back to restore it.
+ */
+export const CLOSED_WEEKDAYS: number[] = [];
+
+/**
+ * Whether one practitioner may be rostered at more than one branch at the same
+ * time.
+ *
+ * **This is off by default for a reason, and it is on at the practice's explicit
+ * instruction.** The rota now lists Dr. Ashraf Metwally at Maadi and Fifth
+ * Settlement 11:00–19:00 every day, and at Mohandessin 18:00–22:00, so the
+ * overlaps are deliberate rather than an editing slip.
+ *
+ * What this actually changes, and what it does not:
+ *
+ *  - `validateSchedule` stops reporting cross-branch concurrency. It still
+ *    refuses two overlapping sessions for the same person *at one branch*,
+ *    which is always a mistake.
+ *  - The database never enforced this anyway. `appointment_cells` is keyed on
+ *    (branch, practitioner, date, cell), so the same clinician at two branches
+ *    in the same fifteen minutes was always representable. The validator was
+ *    the only thing objecting, at configuration time.
+ *
+ * So the consequence is operational, not technical: the public booking page can
+ * now offer the same clinician in Maadi and New Cairo at 12:00 on the same day,
+ * and nothing downstream will catch it. Whoever runs the desk has to.
+ *
+ * Set this back to `false` and the guard returns immediately.
+ */
+export const PRACTITIONERS_MAY_SPAN_BRANCHES = true;
 
 /**
  * One-off closures: public holidays, Eid, conference travel, planned leave.
@@ -118,13 +151,40 @@ export type Branch = {
   addressAr: string;
   mapUrl: string;
   /**
-   * TODO(clinic): PLACEHOLDER HOURS. These have a realistic shape but are not
-   * the practice's real timetable. Replace with the confirmed schedule before
-   * launch — `validateSchedule` will catch structural mistakes, but it cannot
-   * know whether the clinic actually opens on a Tuesday.
+   * Set by the practice on 2026-08-07: every branch, every day. Maadi and Fifth
+   * Settlement 11:00–19:00, Mohandessin 18:00–22:00.
+   *
+   * These are the seed and the fallback. The live rota is in D1 and is edited
+   * from Clinic OS → Hours; a change there does not come back here, so treat
+   * this as the shape a fresh database starts from rather than as the current
+   * truth.
    */
   sessions: Session[];
 };
+
+/**
+ * The same sitting on every day of the week.
+ *
+ * The practice runs a single daily window per branch rather than a rotating
+ * rota, so writing forty-two literal rows would be seven chances per branch to
+ * fat-finger a time and no way to see at a glance that they match.
+ */
+function daily(
+  start: string,
+  end: string,
+  practitioner: string,
+  categories: ServiceCategory[],
+  interval = 30,
+): Session[] {
+  return [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+    weekday,
+    start,
+    end,
+    interval,
+    practitioner,
+    categories,
+  }));
+}
 
 export const BRANCHES: Branch[] = [
   {
@@ -134,15 +194,10 @@ export const BRANCHES: Branch[] = [
     addressEn: "Othman Towers, Maadi, Cairo",
     addressAr: "أبراج عثمان، المعادي، القاهرة",
     mapUrl: "https://maps.google.com/?q=Othman+Towers+Maadi+Cairo",
+    // 11:00–19:00, seven days. Dental runs the same window in its own room.
     sessions: [
-      // Surgeon: Sunday, Tuesday, Thursday evenings.
-      { weekday: 0, start: "16:00", end: "21:00", interval: 30, practitioner: PRACTITIONERS.surgeon, categories: ["surgical", "nonsurgical"] },
-      { weekday: 2, start: "16:00", end: "21:00", interval: 30, practitioner: PRACTITIONERS.surgeon, categories: ["surgical", "nonsurgical"] },
-      { weekday: 4, start: "16:00", end: "21:00", interval: 30, practitioner: PRACTITIONERS.surgeon, categories: ["surgical", "nonsurgical"] },
-      // Dental runs in parallel, in a different room, earlier in the day.
-      { weekday: 0, start: "12:00", end: "16:00", interval: 30, practitioner: PRACTITIONERS.dental, categories: ["dental"] },
-      { weekday: 2, start: "12:00", end: "16:00", interval: 30, practitioner: PRACTITIONERS.dental, categories: ["dental"] },
-      { weekday: 4, start: "12:00", end: "16:00", interval: 30, practitioner: PRACTITIONERS.dental, categories: ["dental"] },
+      ...daily("11:00", "19:00", PRACTITIONERS.surgeon, ["surgical", "nonsurgical"]),
+      ...daily("11:00", "19:00", PRACTITIONERS.dental, ["dental"]),
     ],
   },
   {
@@ -152,12 +207,10 @@ export const BRANCHES: Branch[] = [
     addressEn: "Syria Street, Mohandessin, Giza",
     addressAr: "شارع سوريا، المهندسين، الجيزة",
     mapUrl: "https://maps.google.com/?q=Syria+Street+Mohandessin+Giza",
+    // 18:00–22:00, seven days. The evening branch.
     sessions: [
-      // Surgeon: Monday and Wednesday mornings.
-      { weekday: 1, start: "10:00", end: "14:00", interval: 30, practitioner: PRACTITIONERS.surgeon, categories: ["surgical", "nonsurgical"] },
-      { weekday: 3, start: "10:00", end: "14:00", interval: 30, practitioner: PRACTITIONERS.surgeon, categories: ["surgical", "nonsurgical"] },
-      { weekday: 1, start: "14:00", end: "18:00", interval: 30, practitioner: PRACTITIONERS.dental, categories: ["dental"] },
-      { weekday: 3, start: "14:00", end: "18:00", interval: 30, practitioner: PRACTITIONERS.dental, categories: ["dental"] },
+      ...daily("18:00", "22:00", PRACTITIONERS.surgeon, ["surgical", "nonsurgical"]),
+      ...daily("18:00", "22:00", PRACTITIONERS.dental, ["dental"]),
     ],
   },
   {
@@ -167,11 +220,10 @@ export const BRANCHES: Branch[] = [
     addressEn: "North 95, Fifth Settlement, New Cairo",
     addressAr: "شمال ٩٥، التجمع الخامس، القاهرة الجديدة",
     mapUrl: "https://maps.google.com/?q=North+95+Fifth+Settlement+New+Cairo",
+    // 11:00–19:00, seven days, matching Maadi.
     sessions: [
-      // Surgeon: Saturday daytime and Monday evening.
-      { weekday: 6, start: "12:00", end: "17:00", interval: 30, practitioner: PRACTITIONERS.surgeon, categories: ["surgical", "nonsurgical"] },
-      { weekday: 1, start: "17:00", end: "21:00", interval: 30, practitioner: PRACTITIONERS.surgeon, categories: ["surgical", "nonsurgical"] },
-      { weekday: 6, start: "10:00", end: "12:00", interval: 30, practitioner: PRACTITIONERS.dental, categories: ["dental"] },
+      ...daily("11:00", "19:00", PRACTITIONERS.surgeon, ["surgical", "nonsurgical"]),
+      ...daily("11:00", "19:00", PRACTITIONERS.dental, ["dental"]),
     ],
   },
 ];

@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored agent tooling, not project source. These ship as CommonJS
+    // scripts and fail `no-require-imports` under this project's TypeScript
+    // rules; linting somebody else's toolchain to our conventions turns CI red
+    // for files we do not author and would not change.
+    ".claude/**",
   ]),
 ]);
 

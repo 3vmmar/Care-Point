@@ -27,6 +27,7 @@ import {
   BellRing,
   Search,
   ShieldCheck,
+  TrendingUp,
   UserX,
   X,
 } from "lucide-react";
@@ -55,6 +56,7 @@ type View =
   | "Today"
   | "Week"
   | "Schedule"
+  | "Overview"
   | "Insights"
   | "Requests"
   | "Notifications"
@@ -65,6 +67,7 @@ const ALL_VIEWS: View[] = [
   "Today",
   "Week",
   "Schedule",
+  "Overview",
   "Insights",
   "Requests",
   "Notifications",
@@ -84,6 +87,10 @@ const VIEW_PERMISSIONS: Record<View, string> = {
   Today: "patient:read",
   Week: "patient:read",
   Schedule: "patient:read",
+  // Aggregate only — no individual is identifiable — but knowing a named
+  // clinic's demand and first-time patient counts is commercially sensitive,
+  // so it sits behind the same permission as the register it is derived from.
+  Overview: "patient:read",
   Insights: "patient:read",
   Requests: "dsr:read",
   Notifications: "notifications:read",
@@ -113,6 +120,12 @@ const PilotControl = dynamic(() => import("./PilotControl"), {
 // view. Load both the interface and its API request only when Insights is opened.
 const Insights = dynamic(() => import("./Insights"), {
   loading: () => <p className="pilot-loading">Preparing clinic insights…</p>,
+});
+
+// The overview carries the chart primitives and their stylesheet. Neither is
+// needed by reception on the day view, so both stay behind this boundary.
+const Overview = dynamic(() => import("./Overview"), {
+  loading: () => <p className="pilot-loading">Preparing the practice overview…</p>,
 });
 
 function greeting(hour: number) {
@@ -487,6 +500,7 @@ export default function CommandCenter({
               {item === "Today" && <Activity size={18} />}
               {item === "Week" && <CalendarRange size={18} />}
               {item === "Schedule" && <CalendarCheck2 size={18} />}
+              {item === "Overview" && <TrendingUp size={18} />}
               {item === "Insights" && <ChartNoAxesColumn size={18} />}
               {item === "Requests" && <ShieldAlert size={18} />}
               {item === "Notifications" && <BellRing size={18} />}
@@ -889,6 +903,10 @@ export default function CommandCenter({
               </div>
             )}
           </section>
+        )}
+
+        {view === "Overview" && (
+          <Overview branchFilter={branchFilter} catalogue={catalogue} />
         )}
 
         {view === "Insights" && (

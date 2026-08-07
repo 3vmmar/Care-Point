@@ -1,0 +1,374 @@
+/* ==========================================================================
+   Care Point — design tokens
+   ==========================================================================
+
+   Three layers, in dependency order:
+
+     PRIMITIVE  raw values. Never referenced by a component rule directly.
+     SEMANTIC   what a value is *for*. The only layer a surface override touches.
+     COMPONENT  per-component tokens, defined next to the component that owns
+                them (--cc-* live in command-center.css).
+
+   Why this exists: the patient site and Clinic OS grew two disjoint palettes
+   for the same roles — --ivory/--cc-bg, --paper/--cc-panel, --ink/--cc-ink,
+   --muted/--cc-muted — none of them more than 2.7 ΔE apart. That is drift, not
+   design, and it is the mechanical reason the two surfaces read as two
+   products. The values are unified here as one vocabulary; where the surfaces
+   genuinely should differ (Clinic OS is a dense screen someone reads all day),
+   the difference is now a declared override instead of an accident.
+
+   RULES
+
+   1. Existing names are kept. --burgundy, --ivory, --ink and friends are
+      consumed 787 times; renaming them buys no pixels and costs every line.
+      New primitives follow the same house style: family-then-step, lowercase.
+
+   2. This file changes no rendering. Every token holds the value that was
+      already there. Accessibility corrections are a separate commit with their
+      own proof, so the neutrality diff of the refactor can be exactly empty
+      rather than "empty except for the parts we expected".
+
+   3. Do NOT add font aliases here. See the FONTS note below — it is a trap
+      that fails silently and wipes the brand typography off every page.
+
+   Proven by: npm run tokens:baseline → change → tokens:after → tokens:diff.
+   ========================================================================== */
+
+/* ==========================================================================
+   FONTS — read before touching
+   ==========================================================================
+
+   There is deliberately no --font-body / --font-heading alias in this file.
+
+   next/font declares --font-sans (Manrope), --font-display (Cormorant
+   Garamond) and --font-arabic (IBM Plex Sans Arabic) as a class on <body>
+   (app/root-shell.tsx). Tailwind's preflight independently declares
+   --font-sans on :root as the system stack.
+
+   So a `:root { --font-heading: var(--font-display) }` alias resolves against
+   :root, where --font-display does not exist and --font-sans is Tailwind's
+   system stack. The result is Cormorant silently replaced by nothing and
+   Manrope silently replaced by system-ui, with no error, no failing test, and
+   no visible symptom until someone looks at the page.
+
+   Consume var(--font-sans) / var(--font-display) directly, from a rule that
+   sits inside <body>. That is what the stylesheets already do, and it works.
+
+   Cormorant is loaded at 400/500/600 only. A display rule at 700 gets a
+   synthesised faux-bold, not a real weight.
+   ========================================================================== */
+
+:root {
+  /* ========================================================================
+     LAYER 1 — PRIMITIVES
+     ======================================================================== */
+
+  /* --- Brand. The practice's identity: do not retune these. --------------- */
+  --burgundy: #7b263c;
+  --burgundy-dark: #511425;
+  --rose: #b46978;
+  --champagne: #c9af86;
+  --sage: #77857a;
+
+  /* Burgundy as a family, so Clinic OS's accent stops being a second palette.
+     -400 and -600 are the values Clinic OS already uses (--cc-accent and
+     --cc-accent-deep); naming them here makes the difference a documented
+     step on one ramp rather than an unrelated colour. -400 is 16.2 ΔE from
+     -500, which is a real, deliberate softening for an all-day screen — not
+     drift, and not something Stage 0 changes. */
+  --burgundy-400: #8f4e61;
+  --burgundy-500: #7b263c;
+  --burgundy-600: #6c2639;
+  --burgundy-700: #511425;
+
+  /* --- Warm neutrals ------------------------------------------------------
+     The site and dashboard values sit 1.1–2.7 ΔE apart — at or below the
+     threshold where the eye can tell them apart side by side. Both are named
+     so the substitution stays neutral; collapsing them is a Stage 1 decision
+     with its own proof, and each collapse is then a one-line change. */
+  --ivory: #f2eee6;        /* site canvas                                    */
+  --ivory-dim: #eeece7;    /* Clinic OS canvas          (was --cc-bg)        */
+  --paper: #fbf9f4;        /* site raised surface                            */
+  --paper-dim: #f9f8f5;    /* Clinic OS panel           (was --cc-panel)     */
+  --sand-100: #f2f0ec;     /* Clinic OS sunken panel    (was --cc-panel-alt) */
+  --white: #ffffff;
+
+  /* --- Ink ---------------------------------------------------------------- */
+  --charcoal: #171716;     /* darkest surface, site                          */
+  --black-880: #1b1b1a;    /* darkest surface, Clinic OS (was --cc-dark)     */
+  --ink: #282624;          /* body text, site                                */
+  --black-800: #232322;    /* body text, Clinic OS      (was --cc-ink)       */
+
+  /* --muted was tuned deliberately to clear 4.5:1 on --ivory (5.06:1). Its
+     Clinic OS counterpart measures 4.54:1 on --ivory-dim — passing, but with
+     0.04 to spare. Treat --muted as the safer of the two. */
+  --muted: #69645e;
+  --warm-grey-500: #6f6a64; /* Clinic OS meta text      (was --cc-muted)     */
+
+  /* --- Hairlines. A three-step ramp; the site only ever used the middle. --- */
+  --line-soft: rgba(35, 35, 34, 0.06);  /* was --cc-line-soft */
+  --line-dim: rgba(35, 35, 34, 0.1);    /* was --cc-line      */
+  --line: rgba(39, 36, 32, 0.14);       /* site hairline      */
+
+  /* --- Status. Clinic OS only; the patient site has no use for these. ------
+     Both are flagged: --green-600 clears 4.5:1 by 0.02 and --amber-600 does
+     not clear it at all (3.92:1 on --paper-dim). Corrected in the
+     accessibility commit, not here. */
+  --green-600: #4a7d5c;    /* was --cc-green */
+  --amber-600: #a9702f;    /* was --cc-amber */
+
+  /* --- Text on dark surfaces ----------------------------------------------
+     A ramp that grew by accident rather than by design: twenty-six distinct
+     greys currently do "secondary text", many separated by one or two units
+     per channel. Only the ones used more than once are named — naming all
+     twenty-six would be a dictionary of mistakes, not a system.
+
+     -300 and -300-alt are two units apart and serve the same role on the same
+     backgrounds. That is the clearest single example of the drift, kept
+     visible rather than quietly merged: collapsing it changes a rendered
+     value and belongs to a design stage with its own before/after proof. */
+  --warm-grey-300: #aaa49e;
+  --warm-grey-300-alt: #aaa49c;  /* collapse candidate → --warm-grey-300 */
+  --warm-grey-400: #8e8882;
+  --warm-grey-450: #77716a;
+  --warm-grey-600: #5f5951;
+  --warm-grey-700: #4b463f;
+
+  /* --- Dark surfaces ------------------------------------------------------
+     Twenty-nine near-blacks exist between #070707 and #211f1e. Same rule:
+     only the repeated ones are named. */
+  --black-950: #070707;
+  --black-900: #151414;
+
+  /* --- Light surfaces below the canvas ------------------------------------ */
+  --sand-150: #ece6dd;   /* assistant chat bubble    */
+  --sand-200: #eee9e1;   /* CareLens interface panel */
+
+  /* --- Brand-adjacent decoratives -----------------------------------------
+     --crimson-500 is worth flagging: it is a brighter, more saturated red
+     than anything in the brand set, used on the CareLens toolbar indicator
+     and the active layer orb. It reads as a second accent rather than as the
+     house burgundy, and it was never a declared brand colour. */
+  --crimson-500: #c41f54;
+  --burgundy-300: #7b4050;   /* desaturated burgundy, small-label colour */
+  --rose-300: #d59aab;
+  --champagne-400: #c8a48f;
+
+  /* --- Notice / caution banner -------------------------------------------
+     Shared, and genuinely so: the patient site's legal-review banner
+     (globals.css) and Clinic OS's notices were found using byte-identical
+     values — ΔE 0.00, three colours, two surfaces, discovered by measuring
+     rather than by reading. One definition now serves both. */
+  --notice-bg: #f6e7d3;
+  --notice-border: #d9b98c;
+  --notice-fg: #4a3a1b;
+
+  /* ========================================================================
+     SPACING — 4px grid with 2px half-steps to 32px, coarser above.
+     Derived from what the stylesheets actually use: 20px is the site's most
+     common value (42 uses), 14px the dashboard's (44). Off-grid one-offs
+     (7px, 9px, 13px…) stay literal until a component is deliberately
+     migrated — snapping them silently would move the page.
+     ======================================================================== */
+  --space-0: 0;
+  --space-px: 1px;
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-3-5: 14px;
+  --space-4: 16px;
+  --space-4-5: 18px;
+  --space-5: 20px;
+  --space-5-5: 22px;
+  --space-6: 24px;
+  --space-6-5: 26px;
+  --space-7: 28px;
+  --space-7-5: 30px;
+  --space-8: 32px;
+  --space-9: 36px;
+  --space-10: 40px;
+  --space-11: 44px;
+  --space-12: 48px;
+  --space-14: 56px;
+  --space-15: 60px;
+  --space-16: 64px;
+  --space-18: 72px;
+  --space-20: 80px;
+  --space-22-5: 90px;
+
+  /* Page rhythm. The whole site's vertical cadence is one value. */
+  --space-section-y: clamp(128px, 15vh, 184px);
+  --space-gutter-page: max(5vw, calc((100vw - 1320px) / 2));
+  --space-gutter-hero: clamp(24px, 5vw, 92px);
+  --space-gutter-cta: max(5vw, calc((100vw - 1180px) / 2));
+
+  /* ========================================================================
+     RADIUS — Clinic OS is deliberately square: 4,245 lines carry three radius
+     declarations between them. The ramp is the site's.
+     ======================================================================== */
+  --radius-none: 0;
+  --radius-xs: 3px;
+  --radius-sm: 4px;     /* every focus ring on the site */
+  --radius-md: 9px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 14px;
+  --radius-3xl: 26px;   /* the CareLens frame */
+  --radius-pill: 999px;
+  --radius-circle: 50%;
+
+  /* ========================================================================
+     TYPE
+     ------------------------------------------------------------------------
+     ACCESSIBILITY FLAGS, recorded here so they are not rediscovered:
+       · --text-3xs (7px) is used on 20 site elements.
+       · --text-2xs (9px) carries incident severity and chart axis labels in
+         Clinic OS — the least legible combination in the product.
+       · 16px is Safari's no-zoom floor for inputs. Almost every text input on
+         both surfaces is 13–14px and will zoom on focus on iPhone.
+     None are changed here. Raising a type floor reflows the page and belongs
+     to the design stages, with their own before/after proof.
+     ======================================================================== */
+  --text-3xs: 7px;
+  --text-2xs-tight: 8px;
+  --text-2xs: 9px;
+  --text-xs: 10px;
+  --text-sm: 11px;
+  --text-md: 12px;
+  --text-base: 13px;    /* Clinic OS default control size */
+  --text-lg: 14px;      /* Clinic OS shell base           */
+  --text-xl: 15px;
+  --text-2xl: 16px;
+  --text-3xl: 17px;
+  --text-4xl: 18px;
+  --text-5xl: 20px;
+  --text-6xl: 21px;
+  --text-7xl: 24px;
+  --text-8xl: 26px;
+  --text-9xl: 30px;
+  --text-10xl: 32px;
+  --text-11xl: 34px;
+  --text-12xl: 40px;
+
+  /* Display sizes are per-heading clamps, not a ramp — 31 of them, each used
+     once. Only the shared ones are named; the rest stay with their component.
+     The Arabic hero is a SEPARATE clamp on purpose: Arabic glyphs overflow at
+     the Latin size. Never normalise the two together. */
+  --text-display-hero: clamp(68px, 6vw, 106px);
+  --text-display-hero-rtl: clamp(50px, 6.2vw, 92px);
+  --text-display-section: clamp(43px, 5.2vw, 75px);
+  --text-display-cta: clamp(48px, 5.5vw, 82px);
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;   /* the dominant weight on both surfaces */
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --leading-flat: 1;
+  --leading-tight: 1.15;
+  --leading-heading: 1.2;
+  --leading-snug: 1.5;
+  --leading-body: 1.7;         /* most-used on both surfaces */
+  --leading-relaxed: 1.8;
+  --leading-loose: 1.85;
+
+  /* ========================================================================
+     ELEVATION — two-layer shadows (contact + ambient) read as depth; a single
+     large blur reads as a smudge. --shadow keeps its name: it is the only
+     token-referenced shadow anywhere in Clinic OS.
+     ======================================================================== */
+  --shadow-none: none;
+  --shadow-sm: 0 2px 6px rgba(35, 28, 24, 0.05), 0 22px 48px -18px rgba(35, 28, 24, 0.16);
+  --shadow-md: 0 10px 26px rgba(35, 28, 24, 0.2);
+  --shadow-lg: 0 16px 44px rgba(25, 21, 18, 0.18);
+  --shadow-xl: 0 22px 70px rgba(35, 28, 24, 0.13);
+  --shadow-2xl: 0 36px 100px rgba(61, 49, 42, 0.17);
+  --shadow: var(--shadow-xl);
+
+  /* ========================================================================
+     MOTION — existing timings kept verbatim. Every consumer must still sit
+     behind prefers-reduced-motion; a duration token does not make motion
+     optional, and reduced-motion is enforced in globals.css, not here.
+     ======================================================================== */
+  --duration-tap: 90ms;
+  --duration-lift: 260ms;
+  --duration-settle: 520ms;
+  --tap: var(--duration-tap);
+  --lift: var(--duration-lift);
+  --settle: var(--duration-settle);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+
+  /* ========================================================================
+     LAYER 2 — SEMANTIC
+     ------------------------------------------------------------------------
+     What a value is for. Component rules should reach for these, not for the
+     primitives above. A surface that needs to differ overrides here — one
+     declaration — instead of forking the palette.
+     ======================================================================== */
+  --color-canvas: var(--ivory);
+  --color-canvas-inverse: var(--charcoal);
+  --color-surface: var(--paper);
+  --color-surface-sunken: var(--ivory);
+
+  --color-text: var(--ink);
+  --color-text-muted: var(--muted);
+  --color-text-on-dark: var(--white);
+  --color-text-on-primary: var(--white);
+
+  --color-border: var(--line);
+  --color-border-soft: var(--line-soft);
+  --color-border-strong: var(--line-dim);
+
+  --color-primary: var(--burgundy);
+  --color-primary-hover: var(--burgundy-dark);
+  --color-primary-soft: var(--rose);
+  --color-accent-gold: var(--champagne);
+
+  --color-success: var(--green-600);
+  --color-warning: var(--amber-600);
+
+  /* Burgundy reads well on light ground (7.95:1) and is invisible on dark. On
+     the four surfaces inside the Clinic OS sidebar it measures 1.53–1.79:1
+     against the 3:1 that SC 1.4.11 requires of a focus indicator — verified in
+     a browser by tabbing to the control, not inferred from the stylesheet.
+     --rose clears all four (3.67:1 on the worst, the nav hover state) without
+     introducing a colour from outside the brand set.
+     Applied per-surface, never on a container: a container rebind inherits
+     onto light descendants and produces a ring worse than the one it fixes. */
+  --color-focus-ring: var(--burgundy);
+  --color-focus-ring-on-dark: var(--rose);
+
+  --elevation-card: var(--shadow-xl);
+  --elevation-raised: var(--shadow-lg);
+  --elevation-hover: var(--shadow-md);
+}
+
+/* ==========================================================================
+   SURFACE OVERRIDE — Clinic OS
+   --------------------------------------------------------------------------
+   Where the dashboard genuinely differs from the patient site. This is the
+   whole point of the semantic layer: one block, seven declarations, instead
+   of a second palette. Scoped to .command-shell so a patient page that pulls
+   in a dashboard stylesheet cannot inherit an operational surface.
+
+   Values are the dashboard's current ones — this override is what keeps the
+   refactor neutral. Merging them into the site's values is Stage 1, and each
+   merge then becomes a single line deleted from here.
+   ========================================================================== */
+.command-shell {
+  --color-canvas: var(--ivory-dim);
+  --color-canvas-inverse: var(--black-880);
+  --color-surface: var(--paper-dim);
+  --color-surface-sunken: var(--sand-100);
+  --color-text: var(--black-800);
+  --color-text-muted: var(--warm-grey-500);
+  --color-border: var(--line-dim);
+  --color-primary: var(--burgundy-400);
+  --color-primary-hover: var(--burgundy-600);
+}

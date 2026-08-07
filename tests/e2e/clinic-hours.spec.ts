@@ -26,7 +26,7 @@ type Session = {
 };
 
 test.describe.serial("the clinic edits its own hours", () => {
-  /** The Maadi Sunday surgeon sitting, 16:00–21:00 in the seeded rota. */
+  /** The Maadi Sunday surgeon sitting, 11:00–19:00 in the seeded rota. */
   let original: Session | undefined;
 
   async function maadiSunday(request: import("@playwright/test").APIRequestContext) {
@@ -87,7 +87,9 @@ test.describe.serial("the clinic edits its own hours", () => {
     request,
   }) => {
     const before = await firstPublicSunday(request);
-    expect(before?.slots[0]).toBe("16:00");
+    // Read from the rota rather than hardcoded, so a booked early slot or a
+    // change of hours does not read as a broken calendar. Maadi opens at 11:00.
+    expect(before?.slots[0]).toBe(original!.start);
     const slotsBefore = before!.slots.length;
 
     const save = await request.post(CATALOGUE, {
@@ -118,9 +120,12 @@ test.describe.serial("the clinic edits its own hours", () => {
   }) => {
     const cases: Array<[Record<string, unknown>, RegExp]> = [
       [
-        // The surgeon is at Mohandessin on Monday 10:00–14:00.
-        { practitionerId: "surgeon", weekday: 1, start: "11:00", end: "13:00" },
-        /cannot be at Maadi and Mohandessin at the same time on Monday/i,
+        // The surgeon already sits at Maadi 11:00–19:00 on Monday. Two
+        // overlapping sittings for one person at one branch is always an
+        // editing slip, and is still refused — unlike the cross-branch case,
+        // which the practice deliberately turned off on 2026-08-07.
+        { practitionerId: "surgeon", weekday: 1, start: "12:00", end: "14:00" },
+        /overlapping sessions/i,
       ],
       [
         { practitionerId: "dental", weekday: 1, start: "09:07", end: "12:00" },

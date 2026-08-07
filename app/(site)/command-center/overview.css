@@ -1,0 +1,202 @@
+/* ==========================================================================
+   Clinic OS — practice overview
+   --------------------------------------------------------------------------
+   Imported by Overview.tsx, which is itself dynamically imported, so none of
+   this reaches a patient or a member of staff who never opens the tab.
+   ========================================================================== */
+
+.overview {
+  display: grid;
+  gap: 18px;
+  padding-bottom: 8px;
+}
+
+/* --- header -------------------------------------------------------------- */
+
+.overview-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.overview-header > div > span {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--cc-muted);
+}
+
+.overview-header h2 {
+  margin: 8px 0 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 1.1;
+  color: var(--cc-ink);
+}
+
+.overview-header p {
+  margin: 8px 0 0;
+  max-width: 62ch;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--cc-muted);
+}
+
+.overview-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.overview-controls label {
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cc-muted);
+}
+
+.overview-controls select,
+.overview-controls button {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--cc-line);
+  background: var(--white);
+  color: var(--cc-ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.overview-controls button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: border-color var(--tap) var(--ease-out);
+}
+
+.overview-controls button:hover:not(:disabled) { border-color: var(--cc-muted); }
+.overview-controls button:disabled { cursor: default; color: var(--cc-muted); }
+
+/* --- tiles --------------------------------------------------------------- */
+
+.overview-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+/* --- pairs --------------------------------------------------------------- */
+
+.overview-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.overview-meters {
+  display: grid;
+  gap: 16px;
+}
+
+.overview-meters .stat-tile {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+/* --- states -------------------------------------------------------------- */
+
+.overview-skeleton {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+.skeleton-tile,
+.skeleton-chart {
+  background: linear-gradient(
+    90deg,
+    var(--cc-panel) 0%,
+    var(--cc-panel-alt) 50%,
+    var(--cc-panel) 100%
+  );
+  background-size: 200% 100%;
+  border: 1px solid var(--cc-line);
+  animation: overview-shimmer 1.4s var(--ease-smooth) infinite;
+}
+
+.skeleton-tile { height: 132px; }
+
+.skeleton-chart {
+  grid-column: 1 / -1;
+  height: 280px;
+}
+
+@keyframes overview-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.overview-error {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  background: var(--status-missed-bg);
+  border: 1px solid var(--feedback-danger-border);
+  color: var(--status-missed-fg);
+}
+
+.overview-error strong { display: block; font-size: 14px; }
+.overview-error span { font-size: 12.5px; }
+.overview-error div { flex: 1 1 auto; }
+
+.overview-error button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+/* --- footnote ------------------------------------------------------------ */
+
+.overview-footnote {
+  margin: 4px 0 0;
+  padding: 14px 16px;
+  background: var(--cc-panel-alt);
+  border-left: 2px solid var(--cc-line);
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--cc-muted);
+}
+
+/* --- motion -------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-tile,
+  .skeleton-chart {
+    animation: none;
+  }
+  .overview-controls button { transition: none; }
+}
+
+/* --- narrow -------------------------------------------------------------- */
+
+@media (max-width: 860px) {
+  .overview-header { align-items: flex-start; }
+  .overview-header h2 { font-size: 26px; }
+  .overview-controls { width: 100%; }
+  .overview-controls label { flex: 1 1 auto; }
+}

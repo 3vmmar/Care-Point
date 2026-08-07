@@ -90,15 +90,19 @@ describe("editing the rota", () => {
       services: before.services,
       turnaround: before.turnaroundMinutes,
     });
-    // Maadi does not open on Monday in the seeded rota.
-    expect(slotsBefore).toHaveLength(0);
+    // Maadi runs 11:00–19:00 every day, so Monday already has slots and the
+    // earliest is 11:00. The edit below opens the morning ahead of it.
+    expect(slotsBefore.length).toBeGreaterThan(0);
+    expect(slotsBefore[0].time).toBe("11:00");
 
     await saveSession({
       branchId: "Maadi",
       practitionerId: "dental",
       weekday: 1,
-      start: "09:00",
-      end: "12:00",
+      // Ends before the standing 11:00 sitting begins: an overlapping session
+      // for the same person at one branch is refused, and rightly.
+      start: "08:00",
+      end: "10:00",
       interval: 30,
       categories: ["dental"],
       actor: OWNER,
@@ -110,9 +114,9 @@ describe("editing the rota", () => {
       services: after.services,
       turnaround: after.turnaroundMinutes,
     });
-    // 45-minute consultation + 10 turnaround inside three hours, on a 30 grid.
+    // 45-minute consultation + 10 turnaround inside two hours, on a 30 grid.
     expect(slotsAfter.length).toBeGreaterThan(0);
-    expect(slotsAfter[0].time).toBe("09:00");
+    expect(slotsAfter[0].time).toBe("08:00");
     expect(slotsAfter[0].practitioner).toBe(PRACTITIONERS.dental);
   });
 
@@ -122,8 +126,8 @@ describe("editing the rota", () => {
       branchId: "Maadi",
       practitionerId: "dental",
       weekday: 1,
-      start: "09:00",
-      end: "12:00",
+      start: "08:00",
+      end: "10:00",
       interval: 30,
       categories: ["dental"],
       actor: OWNER,
@@ -131,23 +135,44 @@ describe("editing the rota", () => {
     expect((await getCatalogue()).revision).not.toBe(before);
   });
 
-  it("refuses a session that would put one practitioner in two places at once", async () => {
-    // The seeded rota has the surgeon at Mohandessin on Monday 10:00–14:00, so
-    // adding him at Maadi across the same hours is physically impossible. The
-    // refusal has to name both places, because "he is also at Maadi" while you
-    // are editing Maadi tells the clinic nothing.
-    await expect(
-      saveSession({
-        branchId: "Maadi",
-        practitionerId: "surgeon",
-        weekday: 1,
-        start: "11:00",
-        end: "13:00",
-        interval: 30,
-        categories: ["surgical"],
-        actor: OWNER,
-      }),
-    ).rejects.toThrow(/cannot be at Maadi and Mohandessin at the same time on Monday/i);
+  it("permits one practitioner at two branches at once, because the practice asked for it", async () => {
+    // This was refused until 2026-08-07. The rota now runs the surgeon at Maadi
+    // and Fifth Settlement over the same 11:00–19:00 window every day, so the
+    // cross-branch guard is off (PRACTITIONERS_MAY_SPAN_BRANCHES in
+    // lib/clinic.ts) and a save that spans branches has to succeed.
+    //
+    // Mohandessin's own sitting is 18:00–22:00, so this adds a midday session
+    // that clashes with the other two branches and with nothing at this one.
+    // Resolving at all is the assertion — this call threw before the change.
+    await saveSession({
+      branchId: "Mohandessin",
+      practitionerId: "surgeon",
+      weekday: 1,
+      start: "12:00",
+      end: "14:00",
+      interval: 30,
+      categories: ["surgical"],
+      actor: OWNER,
+    });
+
+    // The consequence, asserted rather than assumed: the surgeon is now
+    // bookable at three branches at 12:00 on the same Monday, and nothing
+    // downstream will object. Whoever runs the desk has to.
+    const catalogue = await getCatalogue();
+    const noon = catalogue.branches.filter((branch) =>
+      branch.sessions.some(
+        (session) =>
+          session.weekday === 1 &&
+          session.practitioner === PRACTITIONERS.surgeon &&
+          session.start <= "12:00" &&
+          session.end > "12:00",
+      ),
+    );
+    expect(noon.map((branch) => branch.id).sort()).toEqual([
+      "Fifth Settlement",
+      "Maadi",
+      "Mohandessin",
+    ]);
   });
 
   it("refuses overlapping sessions for the same practitioner at one branch", async () => {

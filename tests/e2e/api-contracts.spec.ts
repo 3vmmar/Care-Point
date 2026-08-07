@@ -7,6 +7,8 @@ test.describe.serial("HTTP route contracts", () => {
     ["availability", "/api/availability", 200],
     ["bookings dashboard", "/api/bookings", 200],
     ["clinic analytics", "/api/clinic/analytics?days=30", 200],
+    ["clinic growth", "/api/clinic/growth?days=30", 200],
+    ["clinic growth rejects an unsupported window", "/api/clinic/growth?days=45", 400],
     ["audit", "/api/clinic/audit", 200],
     ["data request queue", "/api/clinic/data-requests", 200],
     ["notification operations", "/api/clinic/notifications", 200],

@@ -128,10 +128,13 @@ test("lead time is exact at the boundary", () => {
   assert.ok(isSlotBookable("2026-07-29", "15:00", new Date("2026-07-29T08:00:00.000Z")));
 });
 
-test("closed days are never bookable regardless of lead time", () => {
-  // 2026-07-31 is a Friday.
+test("Friday is bookable now, and an explicit closure still is not", () => {
+  // 2026-07-31 is a Friday. It was the clinic's weekly closed day until
+  // 2026-08-07, when the practice moved every branch to seven days.
   assert.equal(weekdayIndex("2026-07-31"), 5);
-  assert.ok(!isSlotBookable("2026-07-31", "15:00", new Date("2026-07-20T06:00:00.000Z")));
+  assert.ok(isSlotBookable("2026-07-31", "15:00", new Date("2026-07-20T06:00:00.000Z")));
+  // The one-off closure mechanism — Eid, holidays, planned leave — is untouched.
+  assert.ok(!isOpenDay("2026-07-31", [{ date: "2026-07-31" }]));
 });
 
 test("date keys and slot times are validated strictly", () => {

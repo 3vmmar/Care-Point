@@ -1,0 +1,394 @@
+/* ==========================================================================
+   Clinic OS — chart primitives
+   ==========================================================================
+
+   Imported by Charts.tsx, never by a page. A stylesheet imported at page level
+   is folded into the shared bundle and downloaded by every patient on the
+   marketing site; that has already happened twice on this project, once for
+   47KB of dashboard styling.
+
+   The palette is two steps of the brand burgundy hue, validated rather than
+   picked: OKLCH lightness inside the categorical band, chroma above the gray
+   floor, and CVD separation ΔE 15.9 under deuteranopia against a target of 8.
+   Do not substitute a red/green pair here — that combination measures ΔE 1.6
+   under the same simulation.
+   ========================================================================== */
+
+.chart {
+  /* --- series ---------------------------------------------------------- */
+  --chart-1: #9c1f46;   /* OKLCH L 0.46  C 0.15  h 9°  — primary series      */
+  --chart-2: #d35573;   /* OKLCH L 0.62  C 0.14  h 9°  — secondary series    */
+  --chart-area-from: rgba(156, 31, 70, 0.14);
+  --chart-area-to: rgba(156, 31, 70, 0);
+  /* Gridlines are one step off the surface, never a mid gray: a rule that
+     competes with a 2px data line has taken attention the data needed. */
+  --chart-grid: rgba(35, 35, 34, 0.09);
+  --chart-baseline: rgba(35, 35, 34, 0.22);
+
+  margin: 0;
+  padding: 20px 22px 18px;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+}
+
+/* --- head ---------------------------------------------------------------- */
+
+.chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.chart-head h3 {
+  margin: 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--cc-ink);
+}
+
+.chart-head p {
+  margin: 4px 0 0;
+  max-width: 52ch;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--cc-muted);
+}
+
+.chart-table-toggle {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--cc-line);
+  background: var(--white);
+  color: var(--cc-muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: color var(--tap) var(--ease-out), border-color var(--tap) var(--ease-out);
+}
+
+.chart-table-toggle:hover {
+  color: var(--cc-ink);
+  border-color: var(--cc-muted);
+}
+
+/* --- legend -------------------------------------------------------------- */
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  font-size: 11.5px;
+  /* Legend text wears an ink token. A label in the series colour makes the
+     text itself carry data, and it is the mark's job to do that. */
+  color: var(--cc-muted);
+}
+
+.chart-legend li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.chart-legend i {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+}
+
+/* --- plot ---------------------------------------------------------------- */
+
+.chart-plot {
+  /* A wide chart scrolls inside its own box rather than pushing the page
+     sideways; the dashboard must never scroll horizontally. */
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.chart-svg {
+  display: block;
+  width: 100%;
+  min-width: 420px;
+  height: auto;
+}
+
+.chart-grid {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.chart-baseline {
+  stroke: var(--chart-baseline);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.chart-tick,
+.chart-axis-label {
+  fill: var(--cc-muted);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 11px;
+  /* Tabular figures stop an axis jittering as digit widths change. */
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-line {
+  fill: none;
+  stroke: var(--chart-1);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart-area-top { stop-color: var(--chart-area-from); }
+.chart-area-bottom { stop-color: var(--chart-area-to); }
+
+.chart-endpoint {
+  fill: var(--chart-1);
+  /* A 2px ring in the surface colour, not a border — the ring separates the
+     dot from whatever it overlaps without introducing a new colour. */
+  stroke: var(--cc-panel);
+  stroke-width: 2;
+}
+
+.chart-bar {
+  fill: var(--chart-1);
+  transition: fill var(--tap) var(--ease-out);
+}
+
+.chart-bar--secondary { fill: var(--chart-2); }
+.chart-bar--primary { fill: var(--chart-1); }
+
+.chart-column.is-active .chart-bar { fill: var(--cc-accent-deep); }
+
+/* A month still running is not a collapse in demand. Hatching says "partial"
+   without needing a colour nobody has defined. */
+.chart-column.is-incomplete .chart-bar { opacity: 0.55; }
+
+.chart-hit {
+  fill: transparent;
+  cursor: default;
+}
+
+.chart-crosshair line {
+  stroke: var(--cc-muted);
+  stroke-width: 1;
+  opacity: 0.5;
+}
+
+.chart-crosshair circle {
+  fill: var(--chart-1);
+  stroke: var(--cc-panel);
+  stroke-width: 2;
+}
+
+/* --- insufficient -------------------------------------------------------- */
+
+.chart-insufficient {
+  margin: 0;
+  padding: 18px 20px;
+  background: var(--cc-panel-alt);
+  border: 1px solid var(--cc-line);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--cc-muted);
+}
+
+.chart-insufficient strong { color: var(--cc-ink); }
+
+.chart-insufficient span {
+  display: block;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- table --------------------------------------------------------------- */
+
+.chart-table {
+  margin-top: 14px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.chart-table[hidden] { display: none; }
+
+.chart-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-table th,
+.chart-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--cc-line-soft);
+  text-align: right;
+  color: var(--cc-ink);
+}
+
+.chart-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--cc-panel);
+  color: var(--cc-muted);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.chart-table tbody th,
+.chart-table thead th:first-child {
+  text-align: left;
+  font-weight: 500;
+}
+
+/* --- sparkline ----------------------------------------------------------- */
+
+.chart-sparkline {
+  display: block;
+  width: 96px;
+  height: 28px;
+  margin-top: 10px;
+}
+
+.chart-sparkline path {
+  fill: none;
+  stroke: var(--chart-2);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart-sparkline circle { fill: var(--chart-1); }
+
+/* --- stat tile ----------------------------------------------------------- */
+
+.stat-tile {
+  padding: 18px 20px 20px;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+}
+
+.stat-tile-label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cc-muted);
+}
+
+.stat-tile-value {
+  margin: 10px 0 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 34px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--cc-ink);
+  /* Proportional figures for the headline number — tabular only in columns. */
+  font-variant-numeric: proportional-nums;
+}
+
+.stat-tile--hero .stat-tile-value { font-size: 48px; }
+
+.stat-tile-unit {
+  margin-left: 3px;
+  font-size: 0.45em;
+  color: var(--cc-muted);
+}
+
+.stat-tile-delta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  /* Deliberately an ink colour, not a success/danger colour: growth is not
+     universally good news and a green number invites the wrong read. Direction
+     is carried by the glyph and the words. */
+  color: var(--cc-muted);
+}
+
+.stat-tile-delta span { font-size: 9px; }
+.stat-tile-delta--up span { color: var(--cc-green); }
+.stat-tile-delta--down span { color: var(--cc-accent); }
+
+.stat-tile-delta small {
+  font-size: 11.5px;
+  color: var(--cc-muted);
+}
+
+.stat-tile-note {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--cc-muted);
+}
+
+/* --- meter --------------------------------------------------------------- */
+
+.chart-meter { display: grid; gap: 8px; }
+
+.chart-meter-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: var(--cc-muted);
+}
+
+.chart-meter-head strong {
+  font-size: 17px;
+  color: var(--cc-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-meter-track {
+  height: 8px;
+  background: var(--cc-panel-alt);
+  border: 1px solid var(--cc-line-soft);
+}
+
+.chart-meter-track i {
+  display: block;
+  height: 100%;
+  background: var(--chart-1);
+  transition: width var(--settle) var(--ease-out);
+}
+
+.chart-meter p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--cc-muted);
+}
+
+/* --- motion -------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-bar,
+  .chart-meter-track i,
+  .chart-table-toggle {
+    transition: none;
+  }
+}
+
+/* --- narrow -------------------------------------------------------------- */
+
+@media (max-width: 720px) {
+  .chart { padding: 16px 14px 14px; }
+  .chart-head { flex-direction: column; gap: 10px; }
+  .stat-tile-value { font-size: 30px; }
+  .stat-tile--hero .stat-tile-value { font-size: 38px; }
+}

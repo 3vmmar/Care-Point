@@ -84,7 +84,7 @@
 .security-badge--on {
   border-color: rgba(31, 106, 74, 0.4);
   background: rgba(31, 106, 74, 0.08);
-  color: #14503a;
+  color: var(--feedback-success-fg);
 }
 
 .security-badge--off {
@@ -232,7 +232,7 @@
 .security-message--ok {
   border-color: rgba(31, 106, 74, 0.4);
   background: rgba(31, 106, 74, 0.07);
-  color: #14503a;
+  color: var(--feedback-success-fg);
 }
 
 /* Recovery codes. Printed or written down, so they are laid out to be copied. */

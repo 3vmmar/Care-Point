@@ -147,18 +147,26 @@ test("reception can book a slot that is too soon for the public site", () => {
   assert.equal(validateClinicBooking(deskBooking), 201);
 });
 
-test("reception still cannot book a closed day or an invented time", () => {
-  // 2026-07-31 is a Friday, the clinic's closed day.
-  assert.equal(validateClinicBooking({ ...deskBooking, slotDate: "2026-07-31" }), 400);
+test("reception still cannot book an invented time or an unknown branch", () => {
+  // 2026-07-31 is a Friday, which the clinic now consults on.
+  assert.equal(validateClinicBooking({ ...deskBooking, slotDate: "2026-07-31" }), 201);
   assert.equal(validateClinicBooking({ ...deskBooking, slotTime: "03:15" }), 400);
-  // 10:00 is a Mohandessin morning start, not a Maadi one.
+  // Maadi runs 11:00–19:00, so 10:00 is before the sitting starts.
   assert.equal(validateClinicBooking({ ...deskBooking, slotTime: "10:00" }), 400);
+  // And 19:00 is the end of the window, not a startable slot.
+  assert.equal(validateClinicBooking({ ...deskBooking, slotTime: "19:00" }), 400);
   assert.equal(validateClinicBooking({ ...deskBooking, branch: "Alexandria" }), 400);
 });
 
-test("reception cannot book a day the branch does not run at all", () => {
-  // 2026-08-03 is a Monday: Mohandessin and Fifth Settlement run, Maadi does not.
-  assert.equal(validateClinicBooking({ ...deskBooking, slotDate: "2026-08-03" }), 400);
+test("a time that belongs to another branch is still refused", () => {
+  // 21:00 is inside Mohandessin's 18:00–22:00 evening window and outside
+  // Maadi's. Every branch runs every day now, so the branches are separated by
+  // their hours rather than by which days they open.
+  assert.equal(validateClinicBooking({ ...deskBooking, slotTime: "21:00" }), 400);
+  assert.equal(
+    validateClinicBooking({ ...deskBooking, branch: "Mohandessin", slotTime: "21:00" }),
+    201,
+  );
 });
 
 /* -------------------------------------------------------------------------- */

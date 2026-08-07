@@ -9,18 +9,52 @@
  */
 
 :root {
-  --cc-bg: #eeece7;
-  --cc-panel: #f9f8f5;
-  --cc-panel-alt: #f2f0ec;
-  --cc-ink: #232322;
-  --cc-muted: #6f6a64;
-  --cc-line: rgba(35, 35, 34, 0.1);
-  --cc-line-soft: rgba(35, 35, 34, 0.06);
-  --cc-accent: #8f4e61;
-  --cc-accent-deep: #6c2639;
-  --cc-dark: #1b1b1a;
-  --cc-green: #4a7d5c;
-  --cc-amber: #a9702f;
+  /* Clinic OS component tokens, now expressed in the shared primitive
+     vocabulary from app/tokens.css rather than as a second palette. Every
+     value is unchanged — this is the same colour reached by name instead of
+     by literal, which is what lets Stage 1 merge a pair by deleting one line
+     instead of hunting hex across 4,245 lines.
+     Reachable because /command-center sits inside the (site) route group, so
+     RootShell loads globals.css → tokens.css before this chunk. */
+  --cc-bg: var(--ivory-dim);
+  --cc-panel: var(--paper-dim);
+  --cc-panel-alt: var(--sand-100);
+  --cc-ink: var(--black-800);
+  --cc-muted: var(--warm-grey-500);
+  --cc-line: var(--line-dim);
+  --cc-line-soft: var(--line-soft);
+  --cc-accent: var(--burgundy-400);
+  --cc-accent-deep: var(--burgundy-600);
+  --cc-dark: var(--black-880);
+  --cc-green: var(--green-600);
+  --cc-amber: var(--amber-600);
+
+  /* Status and feedback palette — Clinic OS only.
+     Defined here rather than in app/tokens.css on purpose: these ship in the
+     dashboard chunk, so a patient reading the marketing site does not download
+     the appointment-status colours. That is the same rule that took 47KB of
+     this stylesheet out of the shared bundle once already.
+
+     ACCESSIBILITY: the confirmed and cancelled pills failed SC 1.4.3 at
+     3.81:1 and 3.82:1. Both are 11px/600 — not "large text" — so 4.5:1
+     applies, and both foregrounds were darkened along their own hue by the
+     minimum that clears it. The other three variants were measured and pass
+     (checked 5.40:1, completed 5.64:1, missed 5.49:1) and are untouched. */
+  --status-confirmed-fg: #477356;  /* was #4f805f, 3.81:1 → 4.53:1 */
+  --status-cancelled-bg: #e8e6e2;
+  --status-cancelled-fg: #6b6761;  /* was #77726c, 3.82:1 → 4.51:1 */
+  --status-confirmed-bg: #e2ede5;
+  --status-completed-bg: #e0e7ef;
+  --status-completed-fg: #4a5a70;
+  --status-missed-bg: #f4e0d8;
+  --status-missed-fg: #8a4633;
+  --status-stop-bg: #fff0f4;
+
+  --feedback-warning-bg: #f0dcc0;
+  --feedback-warning-fg: #3a2c17;
+  --feedback-caution-fg: #7a5320;
+  --feedback-success-fg: #14503a;
+  --feedback-danger-border: #e0b9a9;
 }
 
 /* ==========================================================================
@@ -38,12 +72,21 @@
   grid-template-columns: 258px 1fr;
 }
 
+/* Every focusable in the sidebar sits on one of four near-black surfaces
+   (--cc-dark #1b1b1a, nav hover #292827, branch select #262524, status strip
+   #242322). The global burgundy ring measures 1.53–1.79:1 against all four,
+   below the 3:1 SC 1.4.11 requires. Scoped to the focusable elements rather
+   than to the container, so nothing light can inherit a pale ring. */
+.command-sidebar :is(a, button, select, input, summary, [tabindex]):focus-visible {
+  outline-color: var(--color-focus-ring-on-dark);
+}
+
 .command-sidebar {
   position: sticky;
   top: 0;
   height: 100vh;
   background: var(--cc-dark);
-  color: #fff;
+  color: var(--white);
   padding: 18px 16px;
   display: flex;
   flex-direction: column;
@@ -125,7 +168,7 @@
 
 .command-sidebar nav button:hover,
 .command-sidebar nav button.active {
-  color: #fff;
+  color: var(--white);
   background: #292827;
 }
 
@@ -151,7 +194,7 @@
 }
 
 .sidebar-label {
-  color: #aaa49e;
+  color: var(--warm-grey-300);
   font-size: 10px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -163,7 +206,7 @@
   padding: 0 10px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: #262524;
-  color: #fff;
+  color: var(--white);
   font: inherit;
   font-size: 13px;
   cursor: pointer;
@@ -173,7 +216,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: #c8a48f;
+  color: var(--champagne-400);
   font-size: 12px;
 }
 
@@ -218,7 +261,7 @@
 }
 
 .system-status small {
-  color: #aaa49e;
+  color: var(--warm-grey-300);
   font-size: 11px;
 }
 
@@ -237,7 +280,7 @@
 }
 
 .command-sidebar-bottom > a:hover {
-  color: #fff;
+  color: var(--white);
 }
 
 /**
@@ -258,7 +301,7 @@
   min-height: 40px;
   padding: 5px 9px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   font: inherit;
   font-size: 13px;
   color: var(--cc-ink);
@@ -317,7 +360,7 @@
 .command-search {
   width: 280px;
   min-height: 44px;
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--cc-line);
   display: flex;
   align-items: center;
@@ -349,7 +392,7 @@
 .icon-button {
   min-height: 44px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   color: var(--cc-ink);
   cursor: pointer;
   font: inherit;
@@ -383,7 +426,7 @@
   display: grid;
   place-items: center;
   background: var(--cc-accent-deep);
-  color: #fff;
+  color: var(--white);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -415,9 +458,9 @@
 }
 
 .command-alert--warn {
-  color: #3a2c17;
-  background: #f0dcc0;
-  border: 1px solid #d9b98c;
+  color: var(--feedback-warning-fg);
+  background: var(--feedback-warning-bg);
+  border: 1px solid var(--notice-border);
 }
 
 .command-alert p {
@@ -520,7 +563,7 @@
 .focus-card {
   padding: 22px;
   background: var(--cc-dark);
-  color: #fff;
+  color: var(--white);
   display: grid;
   gap: 8px;
   align-content: start;
@@ -536,7 +579,7 @@
   font-size: 11px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #c8a48f;
+  color: var(--champagne-400);
 }
 
 .focus-card--empty .focus-kind {
@@ -564,7 +607,7 @@
 
 .focus-empty {
   padding: 14px 0;
-  color: #69645e !important;
+  color: var(--muted) !important;
   font-size: 14px;
 }
 
@@ -584,7 +627,7 @@
   gap: 8px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: transparent;
-  color: #fff;
+  color: var(--white);
   cursor: pointer;
   font: inherit;
   font-size: 13px;
@@ -640,7 +683,7 @@
   min-height: 40px;
   padding: 0 13px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   color: inherit;
   cursor: pointer;
   font: inherit;
@@ -693,7 +736,7 @@
 }
 
 .table-row--open {
-  background: #fff;
+  background: var(--white);
 }
 
 .row-main {
@@ -742,8 +785,8 @@
 .soon-flag {
   width: fit-content;
   padding: 2px 6px;
-  background: #f0dcc0;
-  color: #7a5320;
+  background: var(--feedback-warning-bg);
+  color: var(--feedback-caution-fg);
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -796,28 +839,28 @@
 }
 
 .status-pill--confirmed {
-  color: #4f805f;
-  background: #e2ede5;
+  color: var(--status-confirmed-fg);
+  background: var(--status-confirmed-bg);
 }
 
 .status-pill--checked {
-  color: #7a5320;
+  color: var(--feedback-caution-fg);
   background: #f4e3c9;
 }
 
 .status-pill--completed {
-  color: #4a5a70;
-  background: #e0e7ef;
+  color: var(--status-completed-fg);
+  background: var(--status-completed-bg);
 }
 
 .status-pill--missed {
-  color: #8a4633;
-  background: #f4e0d8;
+  color: var(--status-missed-fg);
+  background: var(--status-missed-bg);
 }
 
 .status-pill--cancelled {
-  color: #77726c;
-  background: #e8e6e2;
+  color: var(--status-cancelled-fg);
+  background: var(--status-cancelled-bg);
   text-decoration: line-through;
 }
 
@@ -872,7 +915,7 @@
   align-items: center;
   gap: 8px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   color: inherit;
   cursor: pointer;
   font: inherit;
@@ -886,7 +929,7 @@
 .detail-actions button:hover:not(:disabled) {
   background: var(--cc-dark);
   border-color: var(--cc-dark);
-  color: #fff;
+  color: var(--white);
 }
 
 .detail-actions button.danger {
@@ -897,7 +940,7 @@
 .detail-actions button.danger:hover:not(:disabled) {
   background: var(--cc-accent-deep);
   border-color: var(--cc-accent-deep);
-  color: #fff;
+  color: var(--white);
 }
 
 .detail-actions button:disabled {
@@ -953,7 +996,7 @@
   min-height: 42px;
   padding: 0 13px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   font: inherit;
   font-size: 13px;
 }
@@ -966,7 +1009,7 @@
   gap: 8px;
   border: 1px solid var(--cc-dark);
   background: var(--cc-dark);
-  color: #fff;
+  color: var(--white);
   cursor: pointer;
   font: inherit;
   font-size: 13px;
@@ -998,7 +1041,7 @@
   align-items: center;
   gap: 7px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   color: var(--cc-ink);
   cursor: pointer;
   font: inherit;
@@ -1210,7 +1253,7 @@
 
 .attendance-grid > div {
   padding: 16px;
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--cc-line-soft);
   display: grid;
   gap: 5px;
@@ -1247,7 +1290,7 @@
 
 .mix-row > div {
   padding: 16px;
-  background: #fff;
+  background: var(--white);
   border: 1px solid var(--cc-line-soft);
   display: grid;
   gap: 6px;
@@ -1333,7 +1376,7 @@
 .analytics-error button {
   min-height: 42px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   color: var(--cc-ink);
   font: inherit;
   font-size: 13px;
@@ -1424,7 +1467,7 @@
   min-height: 116px;
   padding: 17px;
   border: 1px solid var(--cc-line-soft);
-  background: #fff;
+  background: var(--white);
   display: grid;
   align-content: end;
   gap: 5px;
@@ -1503,7 +1546,7 @@
   padding: 7px 9px;
   border-radius: 3px;
   background: #181716;
-  color: #fff;
+  color: var(--white);
   font-size: 11px;
   line-height: 1.35;
   opacity: 0;
@@ -1691,7 +1734,7 @@
   display: grid;
   place-items: center;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   cursor: pointer;
   color: inherit;
 }
@@ -1723,7 +1766,7 @@
   min-height: 46px;
   padding: 0 13px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   color: inherit;
   font: inherit;
   font-size: 14px;
@@ -1732,8 +1775,8 @@
 .add-error {
   margin: 0 26px;
   padding: 12px 15px;
-  background: #f4e0d8;
-  color: #8a4633;
+  background: var(--status-missed-bg);
+  color: var(--status-missed-fg);
   font-size: 13px;
 }
 
@@ -1755,7 +1798,7 @@
   align-items: center;
   gap: 8px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   color: inherit;
   cursor: pointer;
   font: inherit;
@@ -1765,7 +1808,7 @@
 .add-appointment footer .add-primary {
   background: var(--cc-accent-deep);
   border-color: var(--cc-accent-deep);
-  color: #fff;
+  color: var(--white);
 }
 
 .add-appointment footer button:disabled {
@@ -1960,7 +2003,7 @@
 
   .command-shell {
     display: block;
-    background: #fff;
+    background: var(--white);
   }
 
   .command-main {
@@ -1969,7 +2012,7 @@
 
   .schedule-card {
     border: 0;
-    background: #fff;
+    background: var(--white);
   }
 
   .table-head,
@@ -2135,7 +2178,7 @@
   min-width: 210px;
   padding: 11px 14px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   text-align: left;
   cursor: pointer;
   font: inherit;
@@ -2214,7 +2257,7 @@
 }
 
 .week-column--today {
-  background: #fff;
+  background: var(--white);
   box-shadow: inset 0 3px 0 var(--cc-accent);
 }
 
@@ -2272,7 +2315,7 @@
   gap: 2px;
   padding: 9px 10px;
   border: 1px solid var(--cc-line-soft);
-  background: #fff;
+  background: var(--white);
   text-align: left;
   cursor: pointer;
   font: inherit;
@@ -2370,7 +2413,7 @@
   align-items: center;
   gap: 8px 14px;
   padding: 9px 12px;
-  background: #fff;
+  background: var(--white);
   font-size: 12.5px;
 }
 
@@ -2420,7 +2463,7 @@
   gap: 24px;
   padding: 25px 27px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
 }
 
 .notification-heading > div:first-child > span,
@@ -2456,7 +2499,7 @@
   min-height: 42px;
   padding: 0 14px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   color: inherit;
   font: inherit;
   font-size: 12.5px;
@@ -2484,7 +2527,7 @@
   align-content: space-between;
   padding: 21px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
 }
 
 .notification-metrics article > svg {
@@ -2520,7 +2563,7 @@
   gap: 7px;
   padding: 8px 10px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   color: var(--cc-muted);
   font-size: 11px;
 }
@@ -2551,7 +2594,7 @@
   align-items: center;
   min-height: 67px;
   padding: 12px 17px;
-  background: #fff;
+  background: var(--white);
   border-bottom: 1px solid var(--cc-line);
   font-size: 12.5px;
 }
@@ -2619,7 +2662,7 @@
 .notification-empty {
   margin: 0;
   padding: 38px 20px;
-  background: #fff;
+  background: var(--white);
   color: var(--cc-muted);
   text-align: center;
 }
@@ -2730,7 +2773,7 @@
   min-width: 22px;
   padding: 2px 6px;
   background: var(--cc-accent-deep);
-  color: #fff;
+  color: var(--white);
   font-size: 11px;
   font-weight: 700;
   text-align: center;
@@ -2771,19 +2814,19 @@
 }
 
 .dsr-overdue {
-  background: #f6e7d3;
-  color: #4a3a1b;
+  background: var(--notice-bg);
+  color: var(--notice-fg);
 }
 
 .dsr-overdue svg {
   flex: 0 0 auto;
   margin-top: 1px;
-  color: #a9702f;
+  color: var(--amber-600);
 }
 
 .dsr-error {
-  background: #f4e0d8;
-  color: #8a4633;
+  background: var(--status-missed-bg);
+  color: var(--status-missed-fg);
 }
 
 .dsr-error svg {
@@ -2814,7 +2857,7 @@
 }
 
 .dsr-row--open {
-  background: #fff;
+  background: var(--white);
 }
 
 .dsr-main {
@@ -2834,13 +2877,13 @@
 }
 
 .dsr-kind--access {
-  color: #4a5a70;
-  background: #e0e7ef;
+  color: var(--status-completed-fg);
+  background: var(--status-completed-bg);
 }
 
 .dsr-kind--erase {
-  color: #8a4633;
-  background: #f4e0d8;
+  color: var(--status-missed-fg);
+  background: var(--status-missed-bg);
 }
 
 .dsr-who,
@@ -2876,7 +2919,7 @@
   min-height: 40px;
   padding: 0 16px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   color: inherit;
   cursor: pointer;
   font: inherit;
@@ -2947,7 +2990,7 @@
   min-height: 46px;
   padding: 0 13px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   font: inherit;
   font-size: 14px;
 }
@@ -2958,7 +3001,7 @@
   gap: 12px;
   padding: 16px;
   background: #f9ece7;
-  border: 1px solid #e0b9a9;
+  border: 1px solid var(--feedback-danger-border);
 }
 
 .dsr-confirm input {
@@ -2995,7 +3038,7 @@
   align-items: center;
   gap: 9px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   color: inherit;
   cursor: pointer;
   font: inherit;
@@ -3009,13 +3052,13 @@
 .dsr-buttons .dsr-primary {
   background: var(--cc-dark);
   border-color: var(--cc-dark);
-  color: #fff;
+  color: var(--white);
 }
 
 .dsr-buttons .dsr-danger {
   background: var(--cc-accent-deep);
   border-color: var(--cc-accent-deep);
-  color: #fff;
+  color: var(--white);
 }
 
 .dsr-buttons button:disabled {
@@ -3050,7 +3093,7 @@
   align-items: center;
   gap: 7px;
   border: 1px solid var(--cc-line);
-  background: #fff;
+  background: var(--white);
   cursor: pointer;
   font: inherit;
   font-size: 12.5px;
@@ -3071,7 +3114,7 @@
   grid-template-columns: 110px 90px minmax(0, 1fr) 130px 100px;
   gap: 12px;
   padding: 11px 13px;
-  background: #fff;
+  background: var(--white);
   font-size: 12.5px;
 }
 

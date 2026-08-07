@@ -13,7 +13,7 @@ import {
   type Catalogue,
 } from "@/db/catalogue";
 import { addDays, clinicTimeNow, clinicToday, isDateKey, isOpenDay } from "@/lib/dates";
-import { dayCapacity } from "@/lib/schedule";
+import { capacityServiceIds, dayCapacity } from "@/lib/schedule";
 import { reportError } from "@/lib/observability";
 import { recordAccess } from "@/db/audit";
 import { clientFingerprint } from "@/lib/request";
@@ -58,15 +58,8 @@ function buildCapacity(
   // Surgical/non-surgical and Dental sessions are independent care tracks.
   // A Dental booking must therefore contribute both load and capacity; the
   // former aesthetic-only denominator made busy dental days look overbooked.
-  const clinicalRepresentative =
-    catalogue.services.find((service) => service.category === "surgical")
-    ?? catalogue.services.find((service) => service.category === "nonsurgical");
-  const dentalRepresentative = catalogue.services.find(
-    (service) => service.category === "dental",
-  );
-  const capacityServices = [clinicalRepresentative, dentalRepresentative].filter(
-    (service): service is NonNullable<typeof service> => Boolean(service),
-  );
+  // Shared with the growth analytics so both measure against one denominator.
+  const capacityServices = capacityServiceIds(catalogue.services);
   return Array.from({ length: 14 }, (_, index) => {
     const date = addDays(today, index);
     const open = isOpenDay(date, catalogue.closures);
@@ -76,7 +69,7 @@ function buildCapacity(
     // Capacity varies by weekday, because the sessions do.
     const total = open
       ? capacityServices.reduce(
-          (sum, service) => sum + dayCapacity(date, service.id, branchFilter, context),
+          (sum, service) => sum + dayCapacity(date, service, branchFilter, context),
           0,
         )
       : 0;
