@@ -35,8 +35,14 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # The integration suite runs against a REAL Postgres — a Neon branch kept for
+      # CI, never production. Absent the secret it fails loudly rather than
+      # skipping: this project has already been bitten once by a suite that
+      # silently ran zero tests.
       - name: Test
         run: npm test
+        env:
+          DATABASE_URL: ${{ secrets.CI_DATABASE_URL }}
 
       - name: Install browser runtime
         run: npx playwright install --with-deps chromium
@@ -57,6 +63,7 @@ jobs:
       # the same table. If schema.ts changes without a matching migration, this
       # leaves a dirty tree and fails — which is the only reliable way to stop
       # the two drifting apart.
+      # Runs without a database: `drizzle-kit generate` reads the schema only.
       - name: Check migrations are up to date
         run: |
           npm run db:generate
