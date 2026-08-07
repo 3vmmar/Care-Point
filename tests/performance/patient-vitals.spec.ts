@@ -18,11 +18,20 @@ test("patient landing path stays within the mobile lab Core Web Vitals guardrail
 
   await page.addInitScript(() => {
     window.localStorage.setItem("carepoint:intro-seen", "1");
-    const vitals = { cls: 0, lcp: 0, longestInteraction: 0 };
+    const vitals = { cls: 0, lcp: 0, lcpElement: "", longestInteraction: 0 };
     Object.defineProperty(window, "__carePointVitals", { value: vitals });
 
     new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) vitals.lcp = Math.max(vitals.lcp, entry.startTime);
+      for (const entry of list.getEntries()) {
+        if (entry.startTime <= vitals.lcp) continue;
+        vitals.lcp = entry.startTime;
+        // Name the element, or a failure reports a number with no suspect —
+        // "LCP is 3088" cannot be acted on; "LCP is the hero <h1>" can.
+        const el = (entry as PerformanceEntry & { element?: Element }).element;
+        vitals.lcpElement = el
+          ? `${el.tagName.toLowerCase()}${el.className ? "." + String(el.className).split(" ").join(".") : ""}`
+          : "(detached)";
+      }
     }).observe({ type: "largest-contentful-paint", buffered: true });
 
     new PerformanceObserver((list) => {
@@ -54,7 +63,7 @@ test("patient landing path stays within the mobile lab Core Web Vitals guardrail
   const vitals = await page.evaluate(() => {
     const measured = (
       window as unknown as Window & {
-        __carePointVitals: { cls: number; lcp: number; longestInteraction: number };
+        __carePointVitals: { cls: number; lcp: number; lcpElement: string; longestInteraction: number };
       }
     ).__carePointVitals;
     const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming;
@@ -69,6 +78,9 @@ test("patient landing path stays within the mobile lab Core Web Vitals guardrail
     type: "mobile-lab",
     description: JSON.stringify(vitals),
   });
+  console.log(
+    `  mobile lab: LCP ${Math.round(vitals.lcp)}ms on <${vitals.lcpElement || "?"}> · CLS ${vitals.cls.toFixed(3)} · longest interaction ${Math.round(vitals.longestInteraction)}ms`,
+  );
 
   // Lab gates catch regressions. Production sign-off still uses p75 field data
   // from a real mid-range Android device and the clinic's Egyptian mobile users.

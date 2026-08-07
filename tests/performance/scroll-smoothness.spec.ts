@@ -61,6 +61,26 @@ test("the landing page scrolls without dropping frames on a throttled phone", as
   // is of scrolling rather than of the page still assembling itself.
   await page.waitForTimeout(3_000);
 
+  // Warm-up pass: one silent trip to the bottom and back before measuring.
+  // The first scroll after a cold server start pays one-off costs — module
+  // evaluation, image decode, the deferred CareLens mount, shader compiles —
+  // that belong to loading, not to scrolling. Unwarmed, the first measured
+  // run of a session reported frames of 1.8–4.4 SECONDS while the next run
+  // reported 0.1% dropped: same page, same code. A guardrail that noisy blocks
+  // nothing and teaches people to ignore it.
+  //
+  // Known trade: the warm-up also fires every `once: true` entrance, so the
+  // measured pass sees scrub-driven motion only. That is the deliberate
+  // contract — this lab guards steady-state scrolling; entrance cost is a
+  // loading concern and is bounded by the tweens' own sub-second durations.
+  await page.evaluate(async () => {
+    const distance = document.documentElement.scrollHeight - window.innerHeight;
+    window.scrollTo(0, distance);
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    window.scrollTo(0, 0);
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+  });
+
   const report = await page.evaluate<FrameReport>(async () => {
     const intervals: number[] = [];
     // Where each stall happened, not just that it happened. A sustained cost

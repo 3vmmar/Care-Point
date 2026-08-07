@@ -145,11 +145,12 @@
   --sand-200: #eee9e1;   /* CareLens interface panel */
 
   /* --- Brand-adjacent decoratives -----------------------------------------
-     --crimson-500 is worth flagging: it is a brighter, more saturated red
-     than anything in the brand set, used on the CareLens toolbar indicator
-     and the active layer orb. It reads as a second accent rather than as the
-     house burgundy, and it was never a declared brand colour. */
-  --crimson-500: #c41f54;
+     --crimson-500 (#c41f54) used to live here. It was a brighter, more
+     saturated red than anything in the brand set, carried the CareLens toolbar
+     indicator, the active layer orb and the loading ring, and was never a
+     declared brand colour — which is a large part of why that section read as
+     a different website. All three sites now use --rose. The token is deleted
+     rather than left unused so it cannot quietly come back. */
   --burgundy-300: #7b4050;   /* desaturated burgundy, small-label colour */
   --rose-300: #d59aab;
   --champagne-400: #c8a48f;
@@ -204,6 +205,10 @@
   --space-gutter-page: max(5vw, calc((100vw - 1320px) / 2));
   --space-gutter-hero: clamp(24px, 5vw, 92px);
   --space-gutter-cta: max(5vw, calc((100vw - 1180px) / 2));
+
+  /* The sticky header's height. Anchor offsets and any viewport-height sum
+     that has to clear it read from here rather than repeating the number. */
+  --header-h: 104px;
 
   /* ========================================================================
      RADIUS — Clinic OS is deliberately square: 4,245 lines carry three radius

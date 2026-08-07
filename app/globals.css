@@ -9,9 +9,16 @@
   box-sizing: border-box;
 }
 
-html {
-  scroll-behavior: smooth;
-}
+/**
+ * No `scroll-behavior: smooth` here.
+ *
+ * Lenis owns scrolling on this site and eases every movement itself. Declaring
+ * native smooth scrolling as well meant an in-page anchor — and this site's
+ * whole nav is in-page anchors — ran both at once: the browser animating the
+ * scroll position while Lenis animated toward the same target. The result is a
+ * stick-then-jump that reads exactly like lag. Lenis is given `anchors: true`
+ * instead, so one system handles it.
+ */
 
 
 body {
@@ -51,8 +58,9 @@ a {
   text-decoration: none;
 }
 
-section[id] {
-  scroll-margin-top: 104px;
+/* Every anchor target, not only the ones that happen to be a <section>. */
+[id] {
+  scroll-margin-top: var(--header-h);
 }
 
 .site-shell button svg,
@@ -365,9 +373,18 @@ section[id] {
   position: sticky;
   top: 0;
   z-index: 80;
-  background: rgba(242, 238, 230, 0.88);
+  /**
+   * Deliberately NOT backdrop-filter.
+   *
+   * This bar is sticky, so it is on screen for the whole scroll — a blur here
+   * is re-composited every single frame, at full width, for the entire page.
+   * A 22px radius over ~1900x104 CSS pixels at 2–3× DPR is the most expensive
+   * thing that can be asked of a scrolling page, and it buys an effect nobody
+   * can describe afterwards. A near-opaque ground reads the same at a glance
+   * and costs one paint.
+   */
+  background: rgba(242, 238, 230, 0.96);
   border-bottom: 1px solid rgba(39, 36, 32, 0.08);
-  backdrop-filter: blur(22px) saturate(130%);
 }
 
 .brand,
@@ -656,6 +673,49 @@ section[id] {
   letter-spacing: -0.035em;
 }
 
+/**
+ * The headline arrives line by line, each rising out of its own mask.
+ *
+ * It used to share the generic 16px `.reveal-item` nudge with everything else
+ * in the column. This is the largest type in the product and the first thing
+ * every visitor reads, so it gets the one entrance the rest of the page does
+ * not use. Self-clipped rather than wrapper-masked — the negative end insets
+ * stop the tight 0.84 line-height shearing ascenders and descenders once the
+ * line has landed. Pure CSS: it plays before hydration and without JS, and the
+ * global reduced-motion block collapses it to its end state.
+ */
+/**
+ * Desktop only, and not as a nicety: the headline is the page's LCP element on
+ * a phone, and the LCP clock does not stop for an element still at opacity 0 —
+ * so a 1.1s masked entrance is 1.1s added straight to LCP. Measured in the
+ * mobile lab: 2.3s bare, 3.45s with the mask, against a 2.5s budget. A visitor
+ * on Egyptian 4G gets the words immediately; the theatre is for screens with
+ * bandwidth to spare.
+ */
+@media (min-width: 981px) {
+  .hero h1 > span,
+  .hero h1 em {
+    animation: lineMaskRise 1.1s var(--ease-out) both;
+  }
+
+  .hero h1 em {
+    animation-delay: 0.16s;
+  }
+}
+
+@keyframes lineMaskRise {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(42%);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(-30% -10% -30% -10%);
+    transform: translateY(0);
+  }
+}
+
 .hero h1 em {
   display: block;
   color: var(--burgundy);
@@ -775,7 +835,6 @@ section[id] {
   background: #d8d1c7;
   box-shadow: 0 36px 100px rgba(61, 49, 42, 0.17);
   isolation: isolate;
-  will-change: clip-path;
 }
 
 .portrait-frame::after {
@@ -843,8 +902,9 @@ section[id] {
   min-height: 74px;
   border: 1px solid rgba(255, 255, 255, 0.32);
   color: var(--charcoal);
-  background: rgba(251, 249, 244, 0.9);
-  backdrop-filter: blur(24px) saturate(130%);
+  /* Near-opaque rather than blurred: this card sits inside the sticky hero, so
+     its backdrop-filter was the second always-on blur on the page. */
+  background: rgba(251, 249, 244, 0.94);
   padding: 13px 13px 13px 16px;
   box-shadow: 0 16px 44px rgba(25, 21, 18, 0.18);
   display: grid;
@@ -1309,8 +1369,8 @@ section[id] {
 }
 
 .proof-stats article {
+  position: relative;
   min-height: 180px;
-  border-left: 1px solid rgba(255, 255, 255, 0.13);
   padding: 18px 28px;
   display: flex;
   flex-direction: column;
@@ -1324,6 +1384,33 @@ section[id] {
 .proof-stats article:hover {
   background: rgba(255, 255, 255, 0.045);
   transform: translateY(-7px);
+}
+
+/**
+ * The ledger rules itself. What used to be border-left is an element now, so
+ * the scroll can draw each divider top-to-bottom before its figure counts up —
+ * the visual grammar of credibility is the ruled table, not the floating card.
+ */
+.stat-rule {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.13);
+  transform: scaleY(0);
+  transform-origin: top;
+  pointer-events: none;
+}
+
+[dir="rtl"] .stat-rule {
+  inset: 0 0 0 auto;
+}
+
+/* The scroll context never runs under reduced motion, so the resting
+   scaleY(0) would otherwise hide the dividers forever. */
+@media (prefers-reduced-motion: reduce) {
+  .stat-rule {
+    transform: scaleY(1);
+  }
 }
 
 .proof-stats strong {
@@ -1622,8 +1709,8 @@ section[id] {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #5a9b70;
-  box-shadow: 0 0 0 5px rgba(90, 155, 112, 0.1);
+  background: var(--champagne);
+  box-shadow: 0 0 0 5px rgba(201, 175, 134, 0.14);
 }
 
 .universe-detail h3 {
@@ -2401,6 +2488,25 @@ section[id] {
   border-radius: 50%;
 }
 
+/**
+ * A satellite on each ring. The rings counter-rotate on scroll, and a uniform
+ * circle rotating is invisible — the dot is what makes the orbit legible, and
+ * it is also the metaphor doing its work: something small in constant,
+ * attentive motion around the centre.
+ */
+.orbit::before {
+  content: "";
+  position: absolute;
+  top: -3.5px;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  border-radius: 50%;
+  background: var(--champagne);
+  opacity: 0.9;
+}
+
 .orbit-one {
   width: 390px;
   height: 390px;
@@ -2595,6 +2701,23 @@ section[id] {
   gap: 10px;
 }
 
+/**
+ * The two rings behind the closing statement converge as the section arrives.
+ *
+ * Registered so the browser interpolates it as a number rather than swapping
+ * strings — an unregistered custom property animates in discrete steps, which
+ * on a scrub reads as juddering rather than as movement.
+ */
+@property --final-ring-shift {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+.final-cta {
+  --final-ring-shift: 0;
+}
+
 .final-cta::before,
 .final-cta::after {
   content: "";
@@ -2613,7 +2736,15 @@ section[id] {
   box-shadow:
     0 0 0 70px rgba(123, 38, 60, 0.025),
     0 0 0 150px rgba(123, 38, 60, 0.018);
-  transform: translateY(-50%);
+  /**
+   * Travels inward toward the headline as the section resolves.
+   *
+   * Translate only, deliberately. This ring carries a 150px spread shadow, and
+   * scaling it re-rasterises that shadow on every scrubbed frame — measurably,
+   * it cost three dropped frames on a throttled phone for a size change nobody
+   * could see next to the movement.
+   */
+  transform: translateY(-50%) translateX(calc(var(--final-ring-shift) * -4vw));
 }
 
 .final-cta::after {
@@ -2630,7 +2761,8 @@ section[id] {
   );
   filter: blur(2px);
   opacity: 0.72;
-  transform: translateY(-50%);
+  /* The smaller orb counter-travels, so the two close on each other. */
+  transform: translateY(-50%) translateX(calc(var(--final-ring-shift) * 2.4vw));
 }
 
 .final-actions .button {
@@ -2866,6 +2998,7 @@ section[id] {
 }
 
 footer {
+  position: relative;
   min-height: 115px;
   background: var(--charcoal);
   color: white;
@@ -2874,6 +3007,39 @@ footer {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 30px;
+}
+
+/**
+ * A champagne hairline that draws across the footer's top edge as it arrives.
+ *
+ * The footer was the only section on the page with no scroll motion of any
+ * kind — no reveal batch reached it, no attribute, no trigger. It is also the
+ * last thing anyone sees, so arriving dead is the worst place to do it.
+ */
+.footer-rule {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--champagne), transparent);
+  transform: scaleX(0);
+  transform-origin: left;
+  pointer-events: none;
+}
+
+[dir="rtl"] .footer-rule {
+  transform-origin: right;
+}
+
+/**
+ * The only new element whose resting state is hidden in CSS rather than set by
+ * GSAP. The whole scroll context returns early under reduced motion, so
+ * everything else simply renders normally — this one would stay at scaleX(0)
+ * forever without saying so.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .footer-rule {
+    transform: scaleX(1);
+  }
 }
 
 footer p {
@@ -4462,7 +4628,6 @@ footer p {
 
 .floating-noor {
   bottom: max(clamp(18px, 2.2vw, 34px), env(safe-area-inset-bottom, 0px));
-  will-change: transform, opacity;
   transition:
     transform 0.55s var(--ease-out),
     opacity 0.4s var(--ease-out),
@@ -4495,8 +4660,37 @@ footer {
    ========================================================================== */
 
 .locations {
+  position: relative;
+  overflow: clip;
   background: var(--paper);
   border-top: 1px solid var(--line);
+}
+
+/**
+ * The site's watermark device, third instance.
+ *
+ * BEYOND, CARELENS and now CAIRO. The first had parallax and the others did
+ * not, which is how one deliberate device came to read as three unrelated
+ * accidents; all three are scrubbed now. This one bleeds off the LEADING edge
+ * so it reads as a counterpart to CARELENS rather than a repeat of it.
+ */
+.locations-word {
+  position: absolute;
+  z-index: 0;
+  bottom: 1vw;
+  inset-inline-start: -3vw;
+  color: rgba(24, 22, 20, 0.03);
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 13.5vw;
+  line-height: 0.8;
+  letter-spacing: -0.05em;
+  pointer-events: none;
+  user-select: none;
+}
+
+.locations > :not(.locations-word) {
+  position: relative;
+  z-index: 1;
 }
 
 .locations-grid {
@@ -5001,10 +5195,16 @@ footer {
    under reduced-motion.
    ========================================================================== */
 
-.portrait-frame img,
-.hero-copy,
-.portal-scene,
-.portal-orb-core,
+/**
+ * Only the progress bar.
+ *
+ * `will-change` promotes an element to its own compositor layer permanently,
+ * and five of these are large — the hero portrait is most of a viewport. On a
+ * machine with ~3.5GB free that is tens of megabytes of layer memory held for
+ * the whole visit, and a promoted layer also softens text rendering. GSAP
+ * promotes what it animates for the duration of a tween anyway, which is the
+ * behaviour this rule was trying to buy and already gets for free.
+ */
 .scroll-progress span {
   will-change: transform;
 }
@@ -5078,7 +5278,9 @@ footer {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 26px;
+  /* The instrument gets the same air below it as the heading gives it above.
+     26px here made the exit feel like the section ran out of page. */
+  margin-top: clamp(64px, 8vh, 92px);
 }
 
 .treatment-links a {
@@ -5625,7 +5827,11 @@ footer {
 
 .carelens {
   position: relative;
-  z-index: 46;
+  /* No z-index. `.floating-noor` sits at 45 and `.site-shell` creates no
+     stacking context, so a 46 here painted the site's one persistent piece of
+     furniture out of existence for this section's entire 820px height — the
+     NOOR button simply vanished while you scrolled through CareLens. The
+     section only needs `position: relative` for its watermark. */
   overflow: clip;
 }
 
@@ -5714,12 +5920,19 @@ footer {
   overflow: hidden;
 }
 
+/**
+ * The vignette that used to live here laid rgba(0,0,0,0.78) over the bottom
+ * third of the canvas, taking that strip to roughly #020202 — the darkest
+ * pixel anywhere on the site, in the one section already accused of looking
+ * like a different website. The rings keep their drift; the floor does not
+ * need to be crushed to sell it.
+ */
 .universe-rings::after {
   content: "";
   position: absolute;
   inset: auto 0 0;
   height: 32%;
-  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.78));
+  background: linear-gradient(180deg, transparent, rgba(7, 7, 7, 0.45));
 }
 
 .universe-rings i {
@@ -5754,7 +5967,10 @@ footer {
   padding: 8px 0;
   transform: translateY(-50%);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  /* Square, like every other plate on the site. Of the non-circular radii in
+     this stylesheet, all of them belonged to CareLens — which is what made it
+     the only rounded object on a squared page. */
+  border-radius: 0;
   background: rgba(8, 8, 8, 0.34);
   backdrop-filter: blur(9px);
 }
@@ -5788,8 +6004,8 @@ footer {
   bottom: 8px;
   width: 2px;
   border-radius: 2px;
-  background: var(--crimson-500);
-  box-shadow: 0 0 14px rgba(196, 31, 84, 0.7);
+  background: var(--rose);
+  box-shadow: 0 0 14px rgba(180, 105, 120, 0.7);
   opacity: 0;
   transform: scaleY(0.4);
   transition: opacity 0.2s ease, transform 0.2s ease;
@@ -5841,7 +6057,7 @@ footer {
   padding: 10px 12px;
   transform: translateX(-50%);
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 14px;
+  border-radius: 0;
   background: rgba(10, 10, 10, 0.82);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.42);
   backdrop-filter: blur(16px);
@@ -5930,8 +6146,8 @@ footer {
 
 .universe-layer-dock button.active .layer-dock-orb {
   color: var(--white);
-  border-color: var(--crimson-500);
-  box-shadow: 0 0 0 2px rgba(196, 31, 84, 0.16), 0 0 22px rgba(196, 31, 84, 0.38);
+  border-color: var(--rose);
+  box-shadow: 0 0 0 2px rgba(180, 105, 120, 0.16), 0 0 22px rgba(180, 105, 120, 0.38);
 }
 
 .universe-rotate {
@@ -5957,7 +6173,7 @@ footer {
   align-items: flex-start;
   gap: 8px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
+  border-radius: 0;
   padding: 9px 11px;
   color: rgba(255, 255, 255, 0.72);
   background: rgba(8, 8, 8, 0.56);
@@ -6020,7 +6236,7 @@ footer {
   height: 34px;
   margin-bottom: 6px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-top-color: var(--crimson-500);
+  border-top-color: var(--rose);
   border-radius: 50%;
   animation: modelLoadingSpin 0.9s linear infinite;
 }
@@ -6071,7 +6287,17 @@ footer {
 .universe-detail {
   min-height: 0;
   justify-content: flex-start;
-  overflow-y: auto;
+  /**
+   * Not `overflow-y: auto`.
+   *
+   * A nested scroller here meant that putting the pointer over the right half
+   * of CareLens stopped scrolling the page — on a site whose entire identity
+   * is scroll choreography, the section literally took the scroll away and
+   * then gave it back. That is the mechanism behind "while you are in it, the
+   * website stops". The panel now grows to its content and the page keeps the
+   * wheel.
+   */
+  overflow-y: clip;
   padding: 38px 36px 42px;
 }
 
@@ -6805,9 +7031,9 @@ footer {
 }
 
 .site-header--afloat {
-  background: rgba(242, 238, 230, 0.72);
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  /* The state change worth keeping is the lift — the shadow and the slightly
+     lighter ground. The second blur went with the first, for the same reason. */
+  background: rgba(242, 238, 230, 0.93);
   border-bottom-color: rgba(24, 22, 20, 0.07);
   box-shadow: 0 18px 44px -30px rgba(24, 22, 20, 0.35);
 }
@@ -6912,6 +7138,65 @@ html[data-reveal-ready] [data-reveal].in-view :is(.treatment-checks li, .treatme
 html[data-reveal-ready] [data-reveal].in-view :is(.treatment-checks li, .treatment-phases article, .treatment-clinics a, .treatment-faq details):nth-child(3) { transition-delay: 0.24s; }
 html[data-reveal-ready] [data-reveal].in-view :is(.treatment-checks li, .treatment-phases article, .treatment-clinics a, .treatment-faq details):nth-child(4) { transition-delay: 0.32s; }
 html[data-reveal-ready] [data-reveal].in-view :is(.treatment-checks li, .treatment-phases article, .treatment-clinics a, .treatment-faq details):nth-child(n + 5) { transition-delay: 0.4s; }
+
+/**
+ * Role variants. Every block on these pages used to get the identical 30px
+ * fade — the same one-verb monoculture the landing page had. The attribute now
+ * says what a block IS, and the CSS answers with a matching entrance:
+ *
+ *   statement  the closing claim — a masked rise, the editorial gesture
+ *   card       framed content — a settle from slightly small, children cascade
+ *   list       sequential content — items wipe in from the leading edge
+ *   quiet      wayfinding — opacity only; navigation should not perform
+ */
+html[data-reveal-ready] [data-reveal="statement"] {
+  transform: translateY(44px);
+  clip-path: inset(0 0 34% 0);
+  transition:
+    opacity 0.9s var(--ease-out),
+    transform 0.9s var(--ease-out),
+    clip-path 0.9s var(--ease-out);
+}
+
+html[data-reveal-ready] [data-reveal="statement"].in-view {
+  clip-path: inset(0 0 0% 0);
+}
+
+html[data-reveal-ready] [data-reveal="card"] {
+  transform: translateY(24px) scale(0.985);
+}
+
+html[data-reveal-ready] [data-reveal="card"].in-view {
+  transform: translateY(0) scale(1);
+}
+
+html[data-reveal-ready] [data-reveal="quiet"] {
+  transform: none;
+}
+
+/* List items enter along the reading axis instead of rising. */
+html[data-reveal-ready] [data-reveal="list"] :is(.treatment-checks li, .treatment-faq details, .treatment-tags span) {
+  opacity: 0;
+  transform: translateX(-16px);
+  transition:
+    opacity 0.6s var(--ease-out),
+    transform 0.6s var(--ease-out);
+}
+
+html[dir="rtl"][data-reveal-ready] [data-reveal="list"] :is(.treatment-checks li, .treatment-faq details, .treatment-tags span) {
+  transform: translateX(16px);
+}
+
+html[data-reveal-ready] [data-reveal="list"].in-view :is(.treatment-checks li, .treatment-faq details, .treatment-tags span) {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+html[data-reveal-ready] [data-reveal="list"].in-view :is(.treatment-checks li, .treatment-faq details, .treatment-tags span):nth-child(1) { transition-delay: 0.06s; }
+html[data-reveal-ready] [data-reveal="list"].in-view :is(.treatment-checks li, .treatment-faq details, .treatment-tags span):nth-child(2) { transition-delay: 0.12s; }
+html[data-reveal-ready] [data-reveal="list"].in-view :is(.treatment-checks li, .treatment-faq details, .treatment-tags span):nth-child(3) { transition-delay: 0.18s; }
+html[data-reveal-ready] [data-reveal="list"].in-view :is(.treatment-checks li, .treatment-faq details, .treatment-tags span):nth-child(4) { transition-delay: 0.24s; }
+html[data-reveal-ready] [data-reveal="list"].in-view :is(.treatment-checks li, .treatment-faq details, .treatment-tags span):nth-child(n + 5) { transition-delay: 0.3s; }
 
 /**
  * FAQ, opening like a considered answer.
@@ -7097,13 +7382,31 @@ html {
  * what it is. The glow underneath ties it to the section instead of leaving it
  * floating in space.
  */
+/**
+ * Full-bleed band, not a floating slab.
+ *
+ * The previous treatment framed this as a piece of equipment set down on the
+ * page — 26px radius, a hairline and two layered shadows. The intent was good
+ * and the result was the opposite: it made CareLens the only rounded, floating,
+ * shadowed object on a site that is otherwise square, ruled and flat, which is
+ * a large part of why the practice said it "feels isolated from the website".
+ *
+ * The site already knows how to host a dark section: `.proof-strip` and
+ * `.noor-feature` are both full-bleed bands with hairline edges. CareLens now
+ * uses the same device — edge to edge, square, no shadow, hairlines top and
+ * bottom only — so it reads as a section of this page rather than an embed
+ * inside it.
+ */
 .treatment-universe {
-  border-radius: 26px;
-  border: 1px solid rgba(23, 23, 22, 0.35);
-  box-shadow:
-    0 1px 2px rgba(24, 22, 20, 0.18),
-    0 32px 84px -32px rgba(24, 22, 20, 0.5),
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  border-radius: 0;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+  /* Break out of the section's 1320px measure to the full viewport width, in
+     both reading directions. */
+  width: 100vw;
+  margin-inline: calc(50% - 50vw);
 }
 
 .carelens {

@@ -323,6 +323,10 @@ export default function CarePointExperience({ language }: { language: Language }
 
     gsap.registerPlugin(ScrollTrigger);
     const lenis = new Lenis({
+      // Lenis handles in-page anchor clicks itself. `html { scroll-behavior:
+      // smooth }` used to do it too, and the two easing the same target at once
+      // produced a stick-then-jump on every nav click.
+      anchors: true,
       // A lerp reads smoother than a fixed duration: it eases toward the target
       // continuously instead of restarting a tween on every wheel event.
       lerp: 0.09,
@@ -454,9 +458,15 @@ export default function CarePointExperience({ language }: { language: Language }
       heroTimeline
         .to(".hero-rail", { autoAlpha: 0, y: 18, duration: 0.18 }, 0)
         .to(".portrait-frame img", { yPercent: 6, scale: 1.06, duration: 1 }, 0)
-        .to(".hero-copy", { yPercent: 10, opacity: 0.38, duration: 0.4 }, 0.3)
-        .to(".hero-visual", { yPercent: -3, opacity: 0.9, duration: 0.4 }, 0.34)
-        .to(".hero", { yPercent: -5, opacity: 0.85, duration: 0.3 }, 0.7);
+        // The dim lives on the two children that already fade rather than on
+        // `.hero` itself. An opacity below 1 on the parent forces the whole
+        // subtree into an offscreen buffer for the entire sticky hold — the
+        // longest-held moment on the page — and the hero contains a portrait,
+        // a clip-path frame and a translucent card. The children reach the
+        // same visual result compositing in place.
+        .to(".hero-copy", { yPercent: 10, opacity: 0.32, duration: 0.4 }, 0.3)
+        .to(".hero-visual", { yPercent: -3, opacity: 0.82, duration: 0.4 }, 0.34)
+        .to(".hero", { yPercent: -5, duration: 0.3 }, 0.7);
 
       /**
        * Two reveal families, so the page has cadence instead of a single verb.
@@ -488,8 +498,18 @@ export default function CarePointExperience({ language }: { language: Language }
           ),
       });
 
+      /**
+       * What is LEFT in the shared batch.
+       *
+       * This selector used to carry seven groups, which meant one 30px fade-up
+       * was the entire vocabulary for most of the page — the mechanical reason
+       * it read as generic. CareLens, Journey, Locations and the final CTA have
+       * their own signatures below; only the stat row and the NOOR panel still
+       * want a plain arrival, because both sit inside sections whose character
+       * is carried by something else (the counters, the orbiting orb).
+       */
       ScrollTrigger.batch(
-        ".proof-stats article, .treatment-universe, .journey-grid article, .location-card, .noor-feature > *, .final-cta > div, .final-cta .final-actions",
+        ".proof-stats article, .noor-feature > *",
         {
           start: "top 88%",
           once: true,
@@ -507,6 +527,198 @@ export default function CarePointExperience({ language }: { language: Language }
                 overwrite: true,
               },
             ),
+        },
+      );
+
+      /* ------------------------------------------------------------------ */
+      /* Per-section signatures                                              */
+      /* ------------------------------------------------------------------ */
+      /**
+       * One distinct, scroll-linked gesture per section.
+       *
+       * The point is not more motion — the page already had two genuinely
+       * authored instruments in its first two screens. The point is that
+       * everything after them shared a single fade-up and then froze, so the
+       * bottom half of the page read as a still image. Each signature below is
+       * driven by scroll position, so it is legible while scrolling and in a
+       * screenshot taken mid-scroll, which hover effects are not.
+       */
+
+      /**
+       * CareLens: an instrument powers on. A centre-out wipe rather than a
+       * fade — the one gesture on the page that says "device", which is what
+       * this is.
+       *
+       * clip-path and opacity ONLY, never scale: this element is the ancestor
+       * of five backdrop-filter children, and a transform on a backdrop-filter
+       * ancestor moves the backdrop root mid-tween and makes the docks flicker.
+       */
+      gsap.fromTo(
+        ".treatment-universe",
+        // autoAlpha 0, not a partial wash: the closed clip already hides
+        // everything, and a resting opacity between 0 and 1 makes axe measure
+        // every colour in the un-scrolled instrument against a blended
+        // background — 32 contrast violations from a section nobody had
+        // scrolled to yet. Fully hidden is skipped; partially hidden is judged.
+        { clipPath: "inset(0 50% 0 50%)", autoAlpha: 0 },
+        {
+          clipPath: "inset(0 0% 0 0%)",
+          autoAlpha: 1,
+          duration: 1.25,
+          ease: "power3.inOut",
+          scrollTrigger: { trigger: ".treatment-universe", start: "top 82%", once: true },
+        },
+      );
+
+      /** The CARELENS watermark finally gets the parallax its own comment
+       *  promised — the same device as BEYOND, treated the same way. */
+      gsap.fromTo(
+        ".carelens-word",
+        { yPercent: 10 },
+        {
+          yPercent: -10,
+          ease: "none",
+          scrollTrigger: {
+            trigger: ".carelens",
+            start: "top bottom",
+            end: "bottom top",
+            scrub: 1.2,
+          },
+        },
+      );
+
+      /**
+       * Journey: the content IS a sequence, so the cards assemble in order,
+       * keyed to scroll position rather than firing together. You watch the
+       * four steps arrive as you scroll them.
+       */
+      gsap.fromTo(
+        ".journey-grid article",
+        { autoAlpha: 0, y: 54, clipPath: "inset(0 0 40% 0)" },
+        {
+          autoAlpha: 1,
+          y: 0,
+          clipPath: "inset(0 0 0% 0)",
+          ease: "power2.out",
+          stagger: 0.18,
+          duration: 0.9,
+          scrollTrigger: { trigger: ".journey-grid", start: "top 88%", once: true },
+        },
+      );
+
+      /**
+       * Locations: the content is geography — three places across a city — so
+       * the cards arrive laterally from outside the measure rather than rising.
+       * Mirrored under RTL, where "outside" is the other way round.
+       */
+      const lateral = document.dir === "rtl" ? -1 : 1;
+      // One tween per card rather than a single call with a function-based
+      // from-state: GSAP resolves a per-index from lazily and will not apply
+      // it up front even with immediateRender, so the cards sat at rest and
+      // then popped when the trigger fired instead of travelling in.
+      gsap.utils.toArray<HTMLElement>(".location-card").forEach((card, index) => {
+        const middle = index === 1;
+        gsap.fromTo(
+          card,
+          {
+            autoAlpha: 0,
+            xPercent: middle ? 0 : (index === 0 ? -20 : 20) * lateral,
+            yPercent: middle ? 16 : 0,
+          },
+          {
+            autoAlpha: 1,
+            xPercent: 0,
+            yPercent: 0,
+            ease: "power3.out",
+            duration: 1.05,
+            delay: index * 0.12,
+            scrollTrigger: { trigger: ".locations-grid", start: "top 86%", once: true },
+          },
+        );
+      });
+
+      gsap.fromTo(
+        ".locations-word",
+        { yPercent: -8 },
+        {
+          yPercent: 8,
+          ease: "none",
+          scrollTrigger: {
+            trigger: ".locations",
+            start: "top bottom",
+            end: "bottom top",
+            scrub: 1.2,
+          },
+        },
+      );
+
+      /**
+       * Final CTA: the closing statement resolves out of a mask while the two
+       * decorative rings — previously completely static — converge behind it.
+       */
+      gsap.fromTo(
+        ".final-cta > div",
+        { autoAlpha: 0, clipPath: "inset(0 0 100% 0)", y: 26 },
+        {
+          autoAlpha: 1,
+          clipPath: "inset(0 0 0% 0)",
+          y: 0,
+          duration: 1.2,
+          ease: "expo.out",
+          scrollTrigger: { trigger: ".final-cta", start: "top 84%", once: true },
+        },
+      );
+
+      gsap.fromTo(
+        ".final-cta .final-actions",
+        { autoAlpha: 0, y: 24 },
+        {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.8,
+          ease: "power2.out",
+          scrollTrigger: { trigger: ".final-cta", start: "top 76%", once: true },
+        },
+      );
+
+      gsap.to(".final-cta", {
+        "--final-ring-shift": "1",
+        ease: "none",
+        scrollTrigger: {
+          trigger: ".final-cta",
+          start: "top bottom",
+          end: "bottom bottom",
+          scrub: 1,
+        },
+      });
+
+      /**
+       * Footer: the one section on the page that had no scroll motion at all —
+       * no batch selector reached it, no attribute, no trigger. A champagne
+       * hairline draws across its top edge, then the three blocks rise behind
+       * it.
+       */
+      gsap.fromTo(
+        ".footer-rule",
+        { scaleX: 0 },
+        {
+          scaleX: 1,
+          duration: 1.1,
+          ease: "power2.inOut",
+          scrollTrigger: { trigger: ".site-footer", start: "top 92%", once: true },
+        },
+      );
+
+      gsap.fromTo(
+        [".footer-brand", ".site-footer > p", ".footer-links"],
+        { autoAlpha: 0, y: 22 },
+        {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.85,
+          stagger: 0.13,
+          ease: "power2.out",
+          scrollTrigger: { trigger: ".site-footer", start: "top 88%", once: true },
         },
       );
 
@@ -556,9 +768,35 @@ export default function CarePointExperience({ language }: { language: Language }
         });
       });
 
+      /** The dividers draw just ahead of the counters, so the table rules
+       *  itself and then fills in — assembly, not apparition. */
+      gsap.fromTo(
+        ".stat-rule",
+        { scaleY: 0 },
+        {
+          scaleY: 1,
+          duration: 0.9,
+          stagger: 0.14,
+          ease: "power2.inOut",
+          scrollTrigger: { trigger: ".proof-stats", start: "top 90%", once: true },
+        },
+      );
+
       const scenes = gsap.utils.toArray<HTMLElement>(".portal-scene");
-      gsap.set(scenes, { autoAlpha: 0, y: 48 });
-      gsap.set(scenes[0], { autoAlpha: 1, y: 0 });
+      /**
+       * Scenes travel LATERALLY: each exits toward the leading edge while its
+       * successor arrives from the trailing edge, mirrored under RTL.
+       *
+       * They used to cross-fade vertically — but vertical is what the page
+       * itself does, so inside a pinned viewport the transition read as more
+       * scrolling rather than as a scene change. The one motion axis the page
+       * never uses is the one that makes "you are somewhere else now" legible.
+       * The BEYOND watermark keeps its vertical drift, so the two axes play
+       * against each other.
+       */
+      const exit = document.dir === "rtl" ? 34 : -34;
+      gsap.set(scenes, { autoAlpha: 0, xPercent: -exit });
+      gsap.set(scenes[0], { autoAlpha: 1, xPercent: 0 });
 
       const portalTimeline = gsap.timeline({
         scrollTrigger: {
@@ -571,18 +809,18 @@ export default function CarePointExperience({ language }: { language: Language }
       });
 
       portalTimeline
-        .to(scenes[0], { autoAlpha: 0, y: -46, duration: 0.7 }, 0.55)
+        .to(scenes[0], { autoAlpha: 0, xPercent: exit, duration: 0.7 }, 0.55)
         .fromTo(
           scenes[1],
-          { autoAlpha: 0, y: 55 },
-          { autoAlpha: 1, y: 0, duration: 0.8 },
+          { autoAlpha: 0, xPercent: -exit },
+          { autoAlpha: 1, xPercent: 0, duration: 0.8 },
           0.75,
         )
-        .to(scenes[1], { autoAlpha: 0, y: -46, duration: 0.7 }, 1.7)
+        .to(scenes[1], { autoAlpha: 0, xPercent: exit, duration: 0.7 }, 1.7)
         .fromTo(
           scenes[2],
-          { autoAlpha: 0, y: 55 },
-          { autoAlpha: 1, y: 0, duration: 0.8 },
+          { autoAlpha: 0, xPercent: -exit },
+          { autoAlpha: 1, xPercent: 0, duration: 0.8 },
           1.9,
         );
 
@@ -609,17 +847,47 @@ export default function CarePointExperience({ language }: { language: Language }
         },
       });
 
-      gsap.to(".noor-atmosphere .noor-orb", {
-        rotate: 210,
-        scale: 1.1,
-        ease: "none",
-        scrollTrigger: {
-          trigger: ".noor-feature",
-          start: "top bottom",
-          end: "bottom top",
-          scrub: 1.2,
+      /**
+       * The orbit rings counter-rotate on scrub; the orb itself is left alone.
+       *
+       * The orb used to carry this scrub with a `scale` — but it is a stack of
+       * blurred layers, and scaling a blurred subtree re-rasterises it on
+       * every scrubbed frame. The rings are two outlined shapes with a
+       * satellite dot each: pure transforms, and a far better fit for what
+       * NOOR is — something in orbit, attentive. Direction flips under RTL so
+       * the movement leads the reading eye in both languages.
+       */
+      const spin = document.dir === "rtl" ? -1 : 1;
+      gsap.fromTo(
+        ".orbit-one",
+        { rotate: -18 * spin },
+        {
+          rotate: 24 * spin,
+          ease: "none",
+          scrollTrigger: {
+            trigger: ".noor-feature",
+            start: "top bottom",
+            end: "bottom top",
+            scrub: 1.1,
+          },
         },
-      });
+      );
+      gsap.fromTo(
+        ".orbit-two",
+        // 24deg is the ellipse's designed resting tilt — the scrub plays
+        // around it rather than replacing it.
+        { rotate: 24 + 14 * spin },
+        {
+          rotate: 24 - 18 * spin,
+          ease: "none",
+          scrollTrigger: {
+            trigger: ".noor-feature",
+            start: "top bottom",
+            end: "bottom top",
+            scrub: 1.1,
+          },
+        },
+      );
     });
 
     // Late-loading fonts and the CareLens canvas both change layout height;
@@ -800,7 +1068,10 @@ export default function CarePointExperience({ language }: { language: Language }
             <span />
             {t.eyebrow}
           </div>
-          <h1 className="reveal-item reveal-delay-1">
+          {/* Each line rises out of its own mask instead of the whole block
+              nudging up 16px — this is the one animation every visitor sees,
+              and it is pure CSS so it plays before hydration and without JS. */}
+          <h1>
             <span>{t.titleA}</span>
             <em>{t.titleB}</em>
           </h1>
@@ -953,7 +1224,10 @@ export default function CarePointExperience({ language }: { language: Language }
           * mid-count would otherwise announce "7 Cairo locations".
           */}
         <div className="proof-stats">
+          {/* The dividers are elements rather than border-left so the scroll
+              can draw them — a ledger rules itself before the figures land. */}
           <article>
+            <i className="stat-rule" aria-hidden />
             <strong>
               <span className="stat-count" data-count-from="0" aria-hidden>25</span>
               <span className="stat-static">25</span>
@@ -962,6 +1236,7 @@ export default function CarePointExperience({ language }: { language: Language }
             <span>{t.statYears}</span>
           </article>
           <article>
+            <i className="stat-rule" aria-hidden />
             <strong>
               <span className="stat-count" data-count-from="0" aria-hidden>{BRANCHES.length}</span>
               <span className="stat-static">{BRANCHES.length}</span>
@@ -969,6 +1244,7 @@ export default function CarePointExperience({ language }: { language: Language }
             <span>{t.statClinics}</span>
           </article>
           <article>
+            <i className="stat-rule" aria-hidden />
             <strong>
               <span className="stat-count" data-count-from="0" aria-hidden>360</span>
               <span className="stat-static">360</span>°
@@ -1060,6 +1336,11 @@ export default function CarePointExperience({ language }: { language: Language }
       </section>
 
       <section className="locations section-pad" id="locations">
+        {/* The site's watermark device, used a third time. It bleeds off the
+            LEFT edge so it does not echo CARELENS, which bleeds off the right. */}
+        <div className="locations-word" aria-hidden>
+          CAIRO
+        </div>
         <div className="section-heading">
           <div>
             <span className="section-index">05 — {t.locationsKicker}</span>
@@ -1117,6 +1398,9 @@ export default function CarePointExperience({ language }: { language: Language }
       </section>
 
       <footer className="site-footer">
+        {/* Drawn on scroll. The footer was the one section on the page with no
+            scroll motion of any kind — not a reveal, not an attribute. */}
+        <i className="footer-rule" aria-hidden />
         <div className="footer-brand">
           <Image src="/logo.png" alt="" width={42} height={42} unoptimized />
           <span>

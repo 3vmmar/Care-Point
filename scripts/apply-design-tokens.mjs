@@ -54,7 +54,7 @@ const TOKEN_SOURCES = [
       "warm-grey-400", "warm-grey-450", "warm-grey-600", "warm-grey-700",
       "burgundy", "burgundy-dark", "burgundy-300", "burgundy-400",
       "burgundy-500", "burgundy-600", "burgundy-700",
-      "rose", "rose-300", "champagne", "champagne-400", "crimson-500",
+      "rose", "rose-300", "champagne", "champagne-400",
       "sage", "green-600", "amber-600",
       "line", "line-dim", "line-soft",
       "notice-bg", "notice-border", "notice-fg",

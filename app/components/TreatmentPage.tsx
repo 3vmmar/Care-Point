@@ -73,7 +73,7 @@ export default function TreatmentPage({
         </p>
       </article>
 
-      <section className="treatment-section" data-reveal>
+      <section className="treatment-section" data-reveal="list">
         <h2>{c.exploreTitle}</h2>
         <ul className="treatment-checks">
           {c.explore.map((item) => (
@@ -85,7 +85,7 @@ export default function TreatmentPage({
         </ul>
       </section>
 
-      <section className="treatment-section" data-reveal>
+      <section className="treatment-section" data-reveal="list">
         <h2>{c.optionsTitle}</h2>
         <div className="treatment-tags">
           {c.options.map((option) => (
@@ -94,7 +94,7 @@ export default function TreatmentPage({
         </div>
       </section>
 
-      <section className="treatment-section" data-reveal>
+      <section className="treatment-section" data-reveal="card">
         <h2>{c.recoveryTitle}</h2>
         <div className="treatment-phases">
           {c.recovery.map((phase, index) => (
@@ -113,7 +113,7 @@ export default function TreatmentPage({
         </p>
       </section>
 
-      <section className="treatment-section" data-reveal>
+      <section className="treatment-section" data-reveal="list">
         <h2>{c.faqTitle}</h2>
         <div className="treatment-faq">
           {c.faq.map((item) => (
@@ -125,7 +125,7 @@ export default function TreatmentPage({
         </div>
       </section>
 
-      <section className="treatment-section" data-reveal>
+      <section className="treatment-section" data-reveal="card">
         <h2>{t.locationsTitle}</h2>
         <div className="treatment-clinics">
           {BRANCHES.map((branch) => (
@@ -146,7 +146,7 @@ export default function TreatmentPage({
         </div>
       </section>
 
-      <section className="treatment-cta" data-reveal>
+      <section className="treatment-cta" data-reveal="statement">
         <h2>{t.finalTitle}</h2>
         <div className="treatment-actions">
           <Link className="button button--burgundy button--large" href={`${home}?book=${treatment.service}#book`}>
@@ -159,7 +159,7 @@ export default function TreatmentPage({
         </div>
       </section>
 
-      <nav className="treatment-more" data-reveal aria-label={rtl ? "استشارات أخرى" : "Other consultations"}>
+      <nav className="treatment-more" data-reveal="quiet" aria-label={rtl ? "استشارات أخرى" : "Other consultations"}>
         <span>{rtl ? "استشارات أخرى" : "OTHER CONSULTATIONS"}</span>
         <div>
           {TREATMENTS.filter((item) => item.slug !== treatment.slug).map((item) => (
