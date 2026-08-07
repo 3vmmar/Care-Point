@@ -47,12 +47,13 @@ Plus: **patient history** on any row (matched on phone across formats, so `01501
 | :--- | :--- |
 | **Framework** | [Next.js 16](https://nextjs.org/) (App Router) + [React 19](https://react.dev/) |
 | **Edge Compiler & SSR** | [Vinext](https://github.com/vinext) + [@cloudflare/vite-plugin](https://developers.cloudflare.com/workers/) |
-| **Database & ORM** | Cloudflare D1 (SQLite) + [Drizzle ORM](https://orm.drizzle.team/) |
+| **Database** | [Neon](https://neon.tech/) Postgres over HTTPS via `@neondatabase/serverless` |
+| **Schema & Migrations** | [Drizzle ORM](https://orm.drizzle.team/) `pg-core` (schema declaration + migration generation only) |
 | **Interactive & 3D** | [Three.js](https://threejs.org/) + [@react-three/fiber](https://r3f.docs.pmnd.rs/) |
 | **Animations & Motion** | [GSAP](https://gsap.com/) (ScrollTrigger) + [Lenis](https://lenis.darkroom.engineering/) Smooth Scroll |
 | **Icons & Typography** | [Lucide React](https://lucide.dev/), Google Fonts (*Manrope*, *Cormorant Garamond*, *IBM Plex Sans Arabic*) |
 | **Language & Styling** | TypeScript 5.9, Vanilla CSS (Design Tokens, Glassmorphism, Dual LTR/RTL) |
-| **Testing & Linting** | Node test runner, Workers Vitest + D1, Playwright, ESLint 9 |
+| **Testing & Linting** | Node test runner, Workers Vitest + real Postgres, Playwright, ESLint 9 |
 
 ---
 
@@ -103,9 +104,18 @@ Care-Point/
 ├── build/
 │   └── sites-vite-plugin.ts # Custom Vite build plugin for Cloudflare packaging
 ├── db/
-│   ├── bookings.ts          # D1 operations, appointment lifecycle & seed
-│   └── schema.ts            # Canonical schema (source for drizzle migrations)
-├── drizzle/                 # Drizzle migration files & snapshots
+│   ├── client.ts            # Postgres handle — D1-shaped API over Neon
+│   ├── bookings.ts          # Appointment lifecycle, holds & the occupancy grid
+│   ├── catalogue.ts         # Branches, practitioners, services & the rota
+│   ├── staff.ts             # Staff directory, passwords, TOTP & sessions
+│   ├── notifications.ts     # Durable outbox: jobs, attempts & retries
+│   ├── analytics.ts         # Insights aggregates
+│   ├── analytics-growth.ts  # Growth, demand & utilisation
+│   ├── audit.ts             # Staff access log
+│   ├── dsr.ts               # PDPL data-subject request queue
+│   ├── pilot.ts             # Single-branch rollout controls
+│   └── schema.ts            # Canonical schema — the ONLY source of truth for DDL
+├── drizzle/                 # Generated Postgres migrations & snapshots
 ├── public/                  # Brand assets, logos & OpenGraph images
 ├── tests/
 │   ├── booking-rules.test.mts # API request validation & CSV escaping
@@ -145,7 +155,21 @@ Care-Point/
    npm install
    ```
 
-3. **Run the local development server**:
+3. **Point it at a Postgres database**. Create a `.dev.vars` file (git-ignored)
+   in the project root:
+   ```
+   DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
+   ```
+   Any Postgres works; [Neon](https://neon.tech/)'s free tier is what the
+   deployment uses. There is no local fallback — the app has one database and
+   will not start without it.
+
+4. **Create the schema**:
+   ```bash
+   npm run db:migrate
+   ```
+
+5. **Run the local development server**:
    ```bash
    npm run dev
    ```
@@ -155,20 +179,44 @@ Care-Point/
 
 ## 🗄 Database Management
 
-The application utilizes **Cloudflare D1** (SQLite) locally in development via Miniflare/Wrangler.
+**Neon Postgres**, reached over HTTPS from the Worker. There is no local
+database and no SQLite fallback: development, CI and production all talk to a
+real Postgres, so a query that works on one works on all three.
 
-* **Generate Database Migrations**:
+`db/schema.ts` is the **only** source of truth for DDL. The `db/*.ts` modules
+used to also create their own tables at runtime; that is gone, and CI fails if
+the schema and the generated migrations disagree.
+
+* **Generate a migration** after editing `db/schema.ts`:
   ```bash
   npm run db:generate
   ```
+
+* **Apply migrations** to whatever `DATABASE_URL` points at:
+  ```bash
+  npm run db:migrate
+  ```
+
+The data layer talks to Postgres through [`db/client.ts`](db/client.ts), which
+presents the same `prepare().bind().run()` surface the code was written against
+and maps `batch()` onto a real serializable transaction. Its type parsers are
+load-bearing — they keep timestamps as ISO strings, `time` as `HH:mm` and
+`COUNT(*)` as a number. See [`docs/ADR-001-postgres.md`](docs/ADR-001-postgres.md)
+for why the engine changed and what it cost.
+
+> **Migrating from the D1 era?** The old SQLite migrations are archived under
+> `docs/archive/drizzle-d1-sqlite/` and are applied by nothing. There is no
+> automated data migration, because nothing was ever deployed on D1.
 
 ---
 
 ## 🧪 Quality & Testing
 
-* **Run Unit + Workers/D1 Tests**:
+* **Run Unit + Integration Tests**. The integration suite needs a real
+  Postgres — use a scratch database or a Neon branch, **never production**, as
+  it truncates every table between test files:
   ```bash
-  npm run test
+  DATABASE_URL=postgresql://… npm run test
   ```
 
 * **Run Browser Journeys + HTTP Contracts**:
@@ -219,7 +267,8 @@ and durations, contact numbers and the data-retention window.
 
 ### Notifications — durable, but providers still need configuration
 
-Every event is committed to D1 with the booking change. Configure one or more
+Every event is committed to Postgres in the same transaction as the booking
+change. Configure one or more
 providers; unconfigured channels remain visible and retryable in Clinic OS.
 
 | Variable | Purpose |
