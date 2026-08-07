@@ -1,103 +1,12 @@
 {
   "version": "7",
-  "dialect": "sqlite",
+  "dialect": "postgresql",
   "entries": [
     {
       "idx": 0,
-      "version": "6",
-      "when": 1785189698300,
-      "tag": "0000_sparkling_gauntlet",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1785196232466,
-      "tag": "0001_free_rocket_raccoon",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1785199271008,
-      "tag": "0002_pale_malice",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1785444005528,
-      "tag": "0003_organic_wild_child",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1785457074278,
-      "tag": "0004_sparkling_the_order",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "6",
-      "when": 1785457931949,
-      "tag": "0005_zippy_titania",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "6",
-      "when": 1785511503098,
-      "tag": "0006_busy_maddog",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "6",
-      "when": 1785514088769,
-      "tag": "0007_yielding_maverick",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "6",
-      "when": 1785532285014,
-      "tag": "0008_windy_kronos",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "6",
-      "when": 1785536924988,
-      "tag": "0009_silky_yellow_claw",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "6",
-      "when": 1785541367184,
-      "tag": "0010_first_mattie_franklin",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "6",
-      "when": 1785547003693,
-      "tag": "0011_black_boom_boom",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "6",
-      "when": 1785549708070,
-      "tag": "0012_powerful_dragon_man",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "6",
-      "when": 1786117921736,
-      "tag": "0013_zippy_dormammu",
+      "version": "7",
+      "when": 1786128342177,
+      "tag": "0000_public_grey_gargoyle",
       "breakpoints": true
     }
   ]
