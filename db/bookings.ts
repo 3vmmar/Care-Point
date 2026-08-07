@@ -206,7 +206,8 @@ async function createSchema() {
         practitioner TEXT NOT NULL,
         slot_date TEXT NOT NULL,
         cell_time TEXT NOT NULL,
-        appointment_id TEXT NOT NULL,
+        appointment_id TEXT NOT NULL
+          REFERENCES appointments(id) ON DELETE CASCADE,
         PRIMARY KEY (branch, practitioner, slot_date, cell_time)
       )
     `),

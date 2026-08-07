@@ -25,6 +25,7 @@
     "tokens:baseline": "cross-env SNAPSHOT_LABEL=baseline playwright test --config playwright.tokens.config.ts",
     "tokens:after": "cross-env SNAPSHOT_LABEL=after playwright test --config playwright.tokens.config.ts",
     "tokens:diff": "node scripts/diff-computed-styles.mjs",
+    "db:reset-dev": "node --experimental-sqlite scripts/reset-dev-data.mjs",
     "test:performance:lab": "playwright test --config playwright.performance.config.ts",
     "check:launch-content": "node scripts/check-launch-content.mjs",
     "test:phase4": "npm test && npm run test:e2e",

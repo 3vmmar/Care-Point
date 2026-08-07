@@ -11,12 +11,24 @@ export type NotificationChannel =
   | "patient_email"
   | "patient_whatsapp"
   | "clinic_email"
-  | "clinic_webhook";
+  | "clinic_webhook"
+  | "branch_sms";
 
 export function channelsForNotification(kind: NotificationKind): NotificationChannel[] {
-  return kind === "data.request"
-    ? ["clinic_email", "clinic_webhook"]
-    : ["patient_email", "patient_whatsapp", "clinic_email", "clinic_webhook"];
+  if (kind === "data.request") return ["clinic_email", "clinic_webhook"];
+  // Reminders go to the patient; texting the branch manager about every
+  // upcoming visit they already have on the day sheet would train them to
+  // ignore the channel that matters.
+  if (kind === "booking.reminder") {
+    return ["patient_email", "patient_whatsapp", "clinic_email", "clinic_webhook"];
+  }
+  return [
+    "patient_email",
+    "patient_whatsapp",
+    "clinic_email",
+    "clinic_webhook",
+    "branch_sms",
+  ];
 }
 
 /** Bounded exponential backoff: fast recovery first, no provider hammering. */

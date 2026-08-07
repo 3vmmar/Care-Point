@@ -1,4 +1,11 @@
-import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 /**
  * Canonical appointment schema. `drizzle-kit generate` turns this into the
@@ -68,9 +75,24 @@ export const appointments = sqliteTable(
   },
   (table) => [
     index("appointments_status_date").on(table.status, table.slotDate),
-    index("appointments_hold_token").on(table.holdToken),
-    index("appointments_manage_token").on(table.manageToken),
+    /**
+     * UNIQUE, not merely indexed. Both tokens are used as single-row lookup
+     * keys — the hold token is the confirm-step idempotency key and the manage
+     * token authorises a patient's own booking page — so their uniqueness was
+     * an invariant the code relied on but only crypto.randomUUID's collision
+     * odds guaranteed. Declared, the database enforces it. SQLite treats NULLs
+     * as distinct, so purged rows (manage_token = NULL) never collide.
+     */
+    uniqueIndex("appointments_hold_token").on(table.holdToken),
+    uniqueIndex("appointments_manage_token").on(table.manageToken),
     index("appointments_slot_date").on(table.slotDate),
+    /** Serves the branch-scoped day reads: booked intervals, daily load, and
+     *  every dashboard aggregate that filters branch + date. */
+    index("appointments_branch_date_status").on(
+      table.branch,
+      table.slotDate,
+      table.status,
+    ),
   ],
 );
 
@@ -100,7 +122,16 @@ export const appointmentCells = sqliteTable(
     slotDate: text("slot_date").notNull(),
     /** Grid cell start, `HH:mm`, always on a 15-minute boundary. */
     cellTime: text("cell_time").notNull(),
-    appointmentId: text("appointment_id").notNull(),
+    /**
+     * Declared, enforced, cascading. An orphan cell is the worst quiet failure
+     * this table can produce — a slot nobody holds but nobody can book. The
+     * batches were already parent-first and transactional; the constraint
+     * turns that convention into something the database refuses to let drift.
+     * D1 enforces foreign keys unconditionally.
+     */
+    appointmentId: text("appointment_id")
+      .notNull()
+      .references(() => appointments.id, { onDelete: "cascade" }),
   },
   (table) => [
     primaryKey({
@@ -578,7 +609,9 @@ export const notificationAttempts = sqliteTable(
   "notification_attempts",
   {
     id: text("id").primaryKey(),
-    jobId: text("job_id").notNull(),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => notificationJobs.id, { onDelete: "cascade" }),
     attemptNumber: integer("attempt_number").notNull(),
     outcome: text("outcome").notNull(),
     provider: text("provider"),

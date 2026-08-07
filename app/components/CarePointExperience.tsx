@@ -427,6 +427,26 @@ export default function CarePointExperience({ language }: { language: Language }
       });
 
       /**
+       * The nav underline follows the reader. Each in-page link lights while
+       * its section straddles the viewport centre and hands off to the next —
+       * the header answers "where am I" instead of only "where can I go".
+       * Links whose section is not on this page (or vice versa) are skipped,
+       * so a nav edit cannot orphan a trigger.
+       */
+      for (const anchor of Array.from(
+        document.querySelectorAll<HTMLAnchorElement>('.nav a[href^="#"]'),
+      )) {
+        const id = anchor.getAttribute("href")!;
+        if (!document.querySelector(id)) continue;
+        ScrollTrigger.create({
+          trigger: id,
+          start: "top center",
+          end: "bottom center",
+          onToggle: (self) => anchor.classList.toggle("is-current", self.isActive),
+        });
+      }
+
+      /**
        * The hero's hold and exit, choreographed across the sticky stage.
        *
        * The stage (`.hero-stage`, CSS `position: sticky`) provides the hold as
@@ -970,8 +990,6 @@ export default function CarePointExperience({ language }: { language: Language }
       tabIndex={-1}
     >
       {introOpen && <ExperienceIntro language={language} onEnter={dismissIntro} />}
-      <div className="grain" aria-hidden />
-      <div className="scroll-progress" aria-hidden><span /></div>
       <a className="skip-link" href="#patient-content">
         {rtl ? "تخطي إلى المحتوى" : "Skip to content"}
       </a>
@@ -1048,6 +1066,9 @@ export default function CarePointExperience({ language }: { language: Language }
             {mobileOpen ? <X /> : <Menu />}
           </button>
         </div>
+        {/* Reading progress, drawn along the header's own bottom edge — the
+            chrome tells you where you are instead of decorating the corner. */}
+        <div className="scroll-progress" aria-hidden><span /></div>
       </header>
 
       {/**
@@ -1229,8 +1250,8 @@ export default function CarePointExperience({ language }: { language: Language }
           <article>
             <i className="stat-rule" aria-hidden />
             <strong>
-              <span className="stat-count" data-count-from="0" aria-hidden>25</span>
-              <span className="stat-static">25</span>
+              <span className="stat-count" data-count-from="0" aria-hidden>33</span>
+              <span className="stat-static">33</span>
               <sup>+</sup>
             </strong>
             <span>{t.statYears}</span>

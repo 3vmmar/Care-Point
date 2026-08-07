@@ -132,7 +132,8 @@ async function createSchema() {
     db.prepare(`
       CREATE TABLE IF NOT EXISTS notification_attempts (
         id TEXT PRIMARY KEY,
-        job_id TEXT NOT NULL,
+        job_id TEXT NOT NULL
+          REFERENCES notification_jobs(id) ON DELETE CASCADE,
         attempt_number INTEGER NOT NULL,
         outcome TEXT NOT NULL,
         provider TEXT,

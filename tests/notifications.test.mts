@@ -7,6 +7,7 @@ import {
   retryDisposition,
 } from "../lib/notification-policy.ts";
 import {
+  branchSmsText,
   describeAppointment,
   type NotificationPayload,
 } from "../lib/notify.ts";
@@ -26,15 +27,74 @@ const appointmentNotification: NotificationPayload = {
   },
 };
 
-test("booking events fan out to independent patient and clinic channels", () => {
+test("booking events fan out to independent patient, clinic and branch channels", () => {
   const channels = channelsForNotification("booking.confirmed");
   assert.deepEqual(channels, [
     "patient_email",
     "patient_whatsapp",
     "clinic_email",
     "clinic_webhook",
+    "branch_sms",
   ]);
   assert.equal(new Set(channels).size, channels.length);
+});
+
+test("reminders do not text the branch manager", () => {
+  // The manager already has tomorrow on the day sheet; a text per upcoming
+  // visit would train them to ignore the channel that carries new bookings.
+  assert.ok(!channelsForNotification("booking.reminder").includes("branch_sms"));
+  assert.ok(channelsForNotification("booking.cancelled").includes("branch_sms"));
+  assert.ok(channelsForNotification("booking.rescheduled").includes("branch_sms"));
+});
+
+test("the branch SMS carries everything the desk needs to act without opening anything", () => {
+  const text = branchSmsText({
+    ...appointmentNotification,
+    appointment: {
+      ...appointmentNotification.appointment,
+      patientNote: "Please have the earlier X-rays ready.",
+    },
+  });
+  // Who, how to reach them, what for, when, where, and the reference.
+  assert.match(text, /New booking/);
+  assert.match(text, /Maadi/);
+  assert.match(text, /Mona Ali/);
+  assert.match(text, /\+201000000000/);
+  assert.match(text, /Aesthetic consultation/i);
+  // The house date format is weekday + day + month (no year — bookings live
+  // inside a 14-day window) and 24h time. 2026-08-05 is a Wednesday.
+  assert.match(text, /Wednesday 5 August/);
+  assert.match(text, /4:00\s?pm/i);
+  assert.match(text, /Ref: a5f1c2d0-0000-4000-8000-000000000001/);
+  assert.match(text, /X-rays ready/);
+});
+
+test("a cancellation text says so loudly, and an essay of a note cannot inflate the message", () => {
+  const text = branchSmsText({
+    ...appointmentNotification,
+    kind: "booking.cancelled",
+    appointment: {
+      ...appointmentNotification.appointment,
+      patientNote: "n".repeat(500),
+    },
+  });
+  assert.match(text, /CANCELLED/);
+  const noteLine = text.split("\n").find((line) => line.startsWith("Note:"))!;
+  assert.ok(noteLine.length <= 170, `note line is ${noteLine.length} chars`);
+  assert.match(noteLine, /…$/);
+});
+
+test("a booking with no note sends no note line, and a missing name degrades honestly", () => {
+  const text = branchSmsText({
+    ...appointmentNotification,
+    appointment: {
+      ...appointmentNotification.appointment,
+      patientName: null,
+      patientNote: null,
+    },
+  });
+  assert.ok(!text.includes("Note:"));
+  assert.match(text, /Unnamed patient/);
 });
 
 test("data requests notify the clinic without echoing sensitive data to a patient channel", () => {

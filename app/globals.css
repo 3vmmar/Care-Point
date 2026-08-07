@@ -324,24 +324,36 @@ a {
   letter-spacing: 0.12em;
 }
 
+/**
+ * Reading progress, as part of the header rather than a bar floating over it.
+ *
+ * It used to be a 3px fixed strip above everything at z-index 200 — a second
+ * piece of chrome competing with the first. It now draws along the header's
+ * own bottom hairline: the burgundy fill replaces the border as you read, so
+ * one edge carries both the boundary and the progress. The header is sticky,
+ * so this needs no z-index and no fixed positioning of its own.
+ */
 .scroll-progress {
-  position: fixed;
+  position: absolute;
   left: 0;
   right: 0;
-  top: 0;
-  height: 3px;
-  z-index: 200;
-  background: rgba(123, 38, 60, 0.09);
+  bottom: -1px;
+  height: 2px;
+  background: transparent;
   pointer-events: none;
 }
 
 .scroll-progress span {
   display: block;
   width: 100%;
-  height: 3px;
+  height: 100%;
   background: var(--burgundy);
   transform: scaleX(0);
   transform-origin: left center;
+}
+
+[dir="rtl"] .scroll-progress span {
+  transform-origin: right center;
 }
 
 .site-shell {
@@ -353,14 +365,6 @@ a {
 
 .site-shell[dir="rtl"] {
   font-family: var(--font-arabic), var(--font-sans), sans-serif;
-}
-
-.grain {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  pointer-events: none;
-  opacity: 0;
 }
 
 .site-header {
@@ -440,19 +444,17 @@ a {
   position: relative;
 }
 
-.nav a::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 100%;
-  bottom: -7px;
-  height: 1px;
-  background: var(--burgundy);
-  transition: right 0.25s ease;
+/* The nav underline lives with the interaction layer (grow-from-centre,
+   transform-based). A dead earlier version animated `right` — a layout
+   property — and was fully superseded; removed rather than left to confuse. */
+
+.nav a.is-current {
+  color: var(--charcoal);
 }
 
-.nav a:hover::after {
-  right: 0;
+.nav a.is-current::after {
+  transform: scaleX(1);
+  opacity: 0.85;
 }
 
 .header-actions {
@@ -1012,9 +1014,7 @@ a {
   animation: revealUp 0.8s both cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.reveal-delay-1 {
-  animation-delay: 0.12s;
-}
+
 
 .reveal-delay-2 {
   animation-delay: 0.24s;
@@ -1528,131 +1528,41 @@ a {
 /* Conversation topics, not an offer. Dimmer and outlined rather than filled, so
    the difference from the bookable list is visible before the label is read. */
 
-.area-list {
-  border-right: 1px solid var(--line);
-}
 
-.site-shell[dir="rtl"] .area-list {
-  border-right: 0;
-  border-left: 1px solid var(--line);
-}
 
-.area-row {
-  width: 100%;
-  min-height: 110px;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  text-align: left;
-  cursor: pointer;
-  display: grid;
-  grid-template-columns: 32px 1fr 1.4fr 26px;
-  gap: 18px;
-  align-items: center;
-  padding: 24px 26px 24px 6px;
-  transition: background 0.3s ease, padding 0.3s ease;
-}
 
-.site-shell[dir="rtl"] .area-row {
-  text-align: right;
-  padding: 24px 6px 24px 26px;
-}
 
-.area-row:hover,
-.area-row.active {
-  background: #eee9df;
-  padding-left: 20px;
-}
 
-.site-shell[dir="rtl"] .area-row:hover,
-.site-shell[dir="rtl"] .area-row.active {
-  padding-left: 26px;
-  padding-right: 20px;
-}
 
-.area-row > span {
-  color: var(--burgundy);
-  font-size: 9px;
-  letter-spacing: 0.1em;
-}
 
-.area-row strong {
-  font-family: var(--font-display), Georgia, serif;
-  font-size: 21px;
-  font-weight: 500;
-}
 
-.area-row p {
-  color: var(--muted);
-  font-family: var(--font-display), Georgia, serif;
-  font-style: italic;
-  font-size: 16px;
-  line-height: 1.3;
-  margin: 0;
-}
 
-.area-row svg {
-  color: var(--burgundy);
-  opacity: 0;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
 
-.area-row.active svg {
-  opacity: 1;
-  transform: translateX(3px);
-}
 
-@keyframes softIn {
-  from {
-    opacity: 0.65;
-  }
-  to {
-    opacity: 1;
-  }
-}
 
-.option-tags,
-.prompt-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
 
-.option-tags {
-  margin-top: 15px;
-}
 
-.option-tags span {
-  border: 1px solid rgba(91, 68, 61, 0.24);
-  padding: 8px 11px;
-  font-size: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  background: rgba(255, 255, 255, 0.16);
-}
 
-.panel-actions {
-  display: flex;
-  gap: 18px;
-  margin-top: 32px;
-}
 
-.panel-actions button {
-  border: 0;
-  background: transparent;
-  padding: 8px 0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
 
-.panel-actions button:last-child {
-  color: var(--burgundy);
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 .noor-feature {
   min-height: 720px;
@@ -3099,9 +3009,7 @@ footer p {
     grid-template-columns: 1fr;
   }
 
-  .area-list {
-    border-right: 0;
-  }
+
 
   .journey-grid article {
     padding: 22px;
@@ -3547,15 +3455,9 @@ footer p {
     font-size: 45px;
   }
 
-  .area-row {
-    min-height: 96px;
-    grid-template-columns: 26px 1fr 22px;
-    padding: 18px 10px 18px 2px;
-  }
 
-  .area-row p {
-    display: none;
-  }
+
+
 
   .treatment-universe {
     min-height: 0;
@@ -5730,13 +5632,33 @@ html[data-reveal-ready] [data-reveal="list"].in-view :is(.treatment-checks li, .
  * sitting in the middle of the CareLens panel in every screenshot. Thin,
  * rounded, translucent — visible when needed, silent otherwise.
  */
-html {
-  scrollbar-color: rgba(23, 23, 22, 0.3) transparent;
+/**
+ * Liquid-glass scrollbars.
+ *
+ * THE TRAP THIS REPLACES: `scrollbar-color` was set on <html> as a Firefox
+ * fallback — but in Chromium, an element with `scrollbar-color` set IGNORES
+ * every ::-webkit-scrollbar rule and renders the basic two-colour native bar,
+ * arrow buttons included. One Firefox nicety silently discarded the entire
+ * styled scrollbar in every other browser; the booking modal shipped with
+ * Windows-95 chrome down its edge. The fallback now applies ONLY where the
+ * webkit pseudos do not exist, so each engine gets the best it can draw.
+ *
+ * The glass itself: `backdrop-filter` does not apply to scrollbar pseudo
+ * elements, so the material is built from what does — a translucent body, a
+ * specular streak down the leading edge, and a shaded trailing edge, layered
+ * as gradients and clipped to a floating pill. Reads as a glass rod resting
+ * over the content; costs one paint, no per-frame work.
+ */
+@supports not selector(::-webkit-scrollbar) {
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(23, 23, 22, 0.3) transparent;
+  }
 }
 
 *::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
 }
 
 *::-webkit-scrollbar-track {
@@ -5744,24 +5666,53 @@ html {
 }
 
 *::-webkit-scrollbar-thumb {
-  background: rgba(23, 23, 22, 0.22);
-  border-radius: 99px;
+  border-radius: 999px;
   border: 3px solid transparent;
   background-clip: padding-box;
+  background-color: rgba(84, 76, 68, 0.22);
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.55),
+      rgba(255, 255, 255, 0.16) 42%,
+      rgba(255, 255, 255, 0) 60%
+    ),
+    linear-gradient(90deg, rgba(64, 58, 52, 0.1), rgba(35, 30, 26, 0.26));
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(23, 23, 22, 0.38);
-  border: 3px solid transparent;
-  background-clip: padding-box;
+  background-color: rgba(84, 76, 68, 0.34);
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.65),
+      rgba(255, 255, 255, 0.2) 42%,
+      rgba(255, 255, 255, 0) 60%
+    ),
+    linear-gradient(90deg, rgba(64, 58, 52, 0.16), rgba(35, 30, 26, 0.34));
 }
 
-/** Dark surfaces get a light thumb, or the bar disappears entirely. */
+*::-webkit-scrollbar-thumb:active {
+  background-color: rgba(84, 76, 68, 0.44);
+}
+
+/** Dark surfaces get light glass, or the bar disappears entirely. */
 .treatment-universe *::-webkit-scrollbar-thumb,
 .specialty-deep-dive::-webkit-scrollbar-thumb {
-  background: rgba(238, 233, 225, 0.28);
-  border: 3px solid transparent;
-  background-clip: padding-box;
+  background-color: rgba(238, 233, 225, 0.2);
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.6),
+      rgba(255, 255, 255, 0.22) 45%,
+      rgba(255, 255, 255, 0.04) 62%
+    ),
+    linear-gradient(90deg, rgba(238, 233, 225, 0.12), rgba(238, 233, 225, 0.2));
+}
+
+.treatment-universe *::-webkit-scrollbar-thumb:hover,
+.specialty-deep-dive::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(238, 233, 225, 0.32);
 }
 
 /**
@@ -5864,4 +5815,120 @@ html {
  * instrument and a still image. Compositor-only, and gone under reduced motion
  * with the rest of the animation layer.
  */
-
+
+/* ==========================================================================
+   Premium dropdowns — the customizable select
+   --------------------------------------------------------------------------
+   The open list of a native <select> is operating-system chrome: no radius,
+   no shadow, no animation, no hover design — the one Windows-drawn rectangle
+   left in an otherwise designed interface. `appearance: base-select` opts the
+   popup into author styling while the control REMAINS a real <select>: same
+   keyboard model, same form semantics, zero JavaScript. Gated on support, so
+   Firefox and Safari keep today's native popup rather than a half-styled one.
+
+   Material follows the house glass rules: translucent paper over backdrop
+   blur (transient top-layer, painted only while open — not the per-frame cost
+   the header blur was), one hairline, a specular rim, the two-layer shadow.
+   The dark sidebar variant lives in command-center.css with its owner.
+   ========================================================================== */
+@supports (appearance: base-select) {
+  :is(.site-shell, .command-shell, .manage-page) select {
+    appearance: base-select;
+    /* base-select replaces the native control's internal layout, which had
+       centred the value for free. Without this the label rides the top edge
+       of the 50px booking fields and the chevron falls into the corner. */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  :is(.site-shell, .command-shell, .manage-page) select::picker(select) {
+    appearance: base-select;
+    margin-block-start: 6px;
+    padding: 6px;
+    border: 1px solid rgba(39, 36, 32, 0.12);
+    border-radius: 12px;
+    background: rgba(251, 249, 244, 0.88);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    backdrop-filter: blur(16px) saturate(140%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.6),
+      0 4px 10px rgba(35, 28, 24, 0.06),
+      0 24px 48px -16px rgba(35, 28, 24, 0.24);
+    /* Arrives as glass settling into place; leaves a touch faster. */
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    transition:
+      opacity 0.16s var(--ease-out),
+      transform 0.16s var(--ease-out),
+      overlay 0.16s var(--ease-out) allow-discrete,
+      display 0.16s var(--ease-out) allow-discrete;
+  }
+
+  :is(.site-shell, .command-shell, .manage-page) select:open::picker(select) {
+    transition-duration: 0.26s;
+  }
+
+  @starting-style {
+    :is(.site-shell, .command-shell, .manage-page) select:open::picker(select) {
+      opacity: 0;
+      transform: translateY(-6px) scale(0.985);
+    }
+  }
+
+  /* The chevron the native arrow used to be: quiet at rest, turns open. */
+  :is(.site-shell, .command-shell, .manage-page) select::picker-icon {
+    color: var(--muted);
+    transition: rotate 0.26s var(--ease-out);
+  }
+
+  :is(.site-shell, .command-shell, .manage-page) select:open::picker-icon {
+    rotate: 180deg;
+  }
+
+  :is(.site-shell, .command-shell, .manage-page) select option {
+    padding: 11px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.35;
+    color: var(--ink);
+    transition: background-color 0.14s var(--ease-out);
+  }
+
+  :is(.site-shell, .command-shell, .manage-page) select option + option {
+    margin-block-start: 2px;
+  }
+
+  /* Hover and keyboard focus read identically — one state, two inputs. */
+  :is(.site-shell, .command-shell, .manage-page) select option:is(:hover, :focus) {
+    background: rgba(123, 38, 60, 0.07);
+    outline: none;
+  }
+
+  :is(.site-shell, .command-shell, .manage-page) select option:active {
+    background: rgba(123, 38, 60, 0.13);
+  }
+
+  :is(.site-shell, .command-shell, .manage-page) select option:checked {
+    background: rgba(123, 38, 60, 0.09);
+    font-weight: 600;
+  }
+
+  :is(.site-shell, .command-shell, .manage-page) select option::checkmark {
+    color: var(--burgundy);
+  }
+
+  :is(.site-shell, .command-shell, .manage-page) select option:disabled {
+    color: var(--muted);
+    opacity: 0.55;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :is(.site-shell, .command-shell, .manage-page) select::picker(select),
+    :is(.site-shell, .command-shell, .manage-page) select::picker-icon,
+    :is(.site-shell, .command-shell, .manage-page) select option {
+      transition: none;
+    }
+  }
+}

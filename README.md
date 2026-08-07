@@ -212,7 +212,7 @@ and durations, contact numbers and the data-retention window.
 
 | What | Where | Why |
 | :--- | :--- | :--- |
-| **Real phone / WhatsApp** | `CONTACT` in [`lib/clinic.ts`](lib/clinic.ts) | Still placeholders (`+20 100 000 0000`), and they render on the public site. |
+| **Confirm phone / WhatsApp** | `CONTACT` and per-branch `smsPhone` in [`lib/clinic.ts`](lib/clinic.ts) | Real numbers are in place (main line `0100 220 2453`; Maadi `0111 817 5326`; Fifth Settlement `0103 377 6401`; Mohandessin carries the main line). Have the practice confirm the main line answers WhatsApp Business. |
 | **Real Google Maps links** | `mapUrl` per branch in [`lib/clinic.ts`](lib/clinic.ts) | Currently neighbourhood searches, not the clinic's own map pins. |
 | **`STAFF_EMAILS`** | environment | Comma-separated staff addresses. **Empty means nobody is authorised** — the dashboard fails closed and warns on screen. |
 | **`SITE_URL`** | environment | Canonical, OpenGraph, sitemap and structured-data URLs. |
@@ -230,7 +230,9 @@ providers; unconfigured channels remain visible and retryable in Clinic OS.
 | `CLINIC_NOTIFY_EMAIL` | Clinic inbox that receives the staff copy. |
 | `WHATSAPP_WEBHOOK_URL`, `WHATSAPP_WEBHOOK_TOKEN` | Clinic-owned WhatsApp Business gateway. |
 | `WHATSAPP_TEMPLATE_*` | Approved template names for confirmation, cancellation, rescheduling, and reminders. |
-| `SEED_APPOINTMENT=0` | Skips the seeded demonstration appointment. |
+| `SEED_APPOINTMENT=1` | Opt-IN: seeds one self-labelled demonstration appointment. Never set in production — it occupies a real slot. |
+| `SMS_TWILIO_ACCOUNT_SID` + `SMS_TWILIO_AUTH_TOKEN` + `SMS_FROM_NUMBER` | Branch-manager booking SMS via Twilio. |
+| `SMS_WEBHOOK_URL`, `SMS_WEBHOOK_TOKEN` | Alternative: any SMS provider behind a clinic-owned gateway (provider swap without code change). |
 
 ### Access control
 

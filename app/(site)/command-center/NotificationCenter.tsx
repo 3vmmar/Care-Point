@@ -41,6 +41,7 @@ type ProviderState = {
   clinicEmail: boolean;
   patientWhatsApp: boolean;
   clinicWebhook: boolean;
+  branchSms: boolean;
 };
 
 const STATUS_LABEL: Record<NotificationStatus, string> = {
@@ -200,6 +201,7 @@ export default function NotificationCenter({ onIssueCount }: { onIssueCount?: (c
           "Clinic email": providers.clinicEmail,
           "Patient WhatsApp": providers.patientWhatsApp,
           "Clinic webhook": providers.clinicWebhook,
+          "Branch SMS": providers.branchSms,
         }).map(([label, configured]) => (
           <span key={label} data-ready={configured || undefined}>
             <i /> {label} · {configured ? "ready" : "setup required"}

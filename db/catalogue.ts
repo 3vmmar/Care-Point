@@ -3,6 +3,7 @@ import {
   BRANCHES,
   CLINIC_CLOSURES,
   CLINIC_TURNAROUND_MINUTES,
+  CONTACT,
   PRACTITIONERS,
   SERVICES,
   SERVICE_CATEGORIES,
@@ -595,6 +596,10 @@ async function readCatalogue(attempt = 0): Promise<Catalogue> {
       addressEn: row.addressEn,
       addressAr: row.addressAr,
       mapUrl: row.mapUrl ?? fallback?.mapUrl ?? "",
+      // Deliberately from constants, not D1: the manager's number is contact
+      // configuration like the address, and the main line is the documented
+      // fallback for a branch the constants no longer know.
+      smsPhone: fallback?.smsPhone ?? CONTACT.phone,
       sessions: sessionsByBranch.get(row.id) ?? [],
     };
   });
@@ -759,6 +764,7 @@ async function rejectIfInvalid(input: SessionInput): Promise<void> {
       addressEn: known?.addressEn ?? "",
       addressAr: known?.addressAr ?? "",
       mapUrl: known?.mapUrl ?? "",
+      smsPhone: known?.smsPhone ?? CONTACT.phone,
       sessions,
     };
   });

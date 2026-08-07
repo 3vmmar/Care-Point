@@ -254,6 +254,36 @@ test.describe("every section answers the scroll", () => {
     ).toBeLessThanOrEqual(overflow.viewport + 1);
   });
 
+  test("the header hairline fills with reading progress and the nav follows", async ({ page }) => {
+    // The progress bar must be the header's own edge, not a strip floating
+    // over the page — and it must actually track the scroll.
+    const inHeader = await page.evaluate(
+      () => !!document.querySelector(".site-header .scroll-progress span"),
+    );
+    expect(inHeader, "the progress hairline must live inside the header").toBe(true);
+
+    const fillAt = () =>
+      page.evaluate(() => {
+        const span = document.querySelector<HTMLElement>(".scroll-progress span")!;
+        return new DOMMatrix(getComputedStyle(span).transform).a;
+      });
+
+    expect(await fillAt(), "empty at the top").toBeLessThan(0.05);
+
+    // Park mid-journey: the fill must have grown, and the Journey nav link
+    // must be lit while its section straddles the viewport centre.
+    await page.evaluate(() => {
+      const section = document.querySelector<HTMLElement>("#journey")!;
+      window.scrollTo(0, section.offsetTop + section.offsetHeight / 2 - window.innerHeight / 2);
+    });
+    await page.waitForTimeout(900);
+
+    expect(await fillAt(), "filled mid-page").toBeGreaterThan(0.3);
+    await expect(page.locator('.nav a[href="#journey"]')).toHaveClass(/is-current/);
+    // And only one section is current at a time.
+    expect(await page.locator(".nav a.is-current").count()).toBe(1);
+  });
+
   test("focus rings inside the mounted explorer stay unified", async ({ page }) => {
     // The extraction audit found the one defect a resting computed-style diff
     // cannot see: the chunk stylesheet loads after globals.css, so a colour it

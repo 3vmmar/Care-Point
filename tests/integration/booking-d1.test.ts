@@ -159,8 +159,11 @@ describe.sequential("booking lifecycle against an isolated D1 database", () => {
     )
       .bind(first!.id)
       .all<{ channel: string; dedupeKey: string }>();
-    expect(confirmationJobs.results).toHaveLength(4);
-    expect(new Set(confirmationJobs.results?.map((job) => job.dedupeKey)).size).toBe(4);
+    // Five independent channels since branch SMS joined the fan-out: patient
+    // email + WhatsApp, clinic email + webhook, and the branch manager's text.
+    expect(confirmationJobs.results).toHaveLength(5);
+    expect(confirmationJobs.results?.map((job) => job.channel)).toContain("branch_sms");
+    expect(new Set(confirmationJobs.results?.map((job) => job.dedupeKey)).size).toBe(5);
 
     const occupiedBefore = await env.DB.prepare(
       "SELECT COUNT(*) AS total FROM appointment_cells WHERE appointment_id = ?",
@@ -184,7 +187,9 @@ describe.sequential("booking lifecycle against an isolated D1 database", () => {
     )
       .bind(first!.id)
       .first<{ total: number }>();
-    expect(cancellationJobs?.total).toBe(4);
+    // A cancellation frees a slot the branch could refill — the manager's
+    // text rides along, so this is five channels too.
+    expect(cancellationJobs?.total).toBe(5);
   });
 
   it("moves the occupancy grid atomically when a patient reschedules", async () => {

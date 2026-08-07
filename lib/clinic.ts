@@ -151,6 +151,12 @@ export type Branch = {
   addressAr: string;
   mapUrl: string;
   /**
+   * The branch manager's mobile, E.164, from the practice's own contact list
+   * (2026-08-07). This is where the booking SMS for the branch goes. Mohandessin
+   * has no dedicated line on that list, so it carries the main clinic number.
+   */
+  smsPhone: string;
+  /**
    * Set by the practice on 2026-08-07: every branch, every day. Maadi and Fifth
    * Settlement 11:00–19:00, Mohandessin 18:00–22:00.
    *
@@ -194,6 +200,7 @@ export const BRANCHES: Branch[] = [
     addressEn: "Othman Towers, Maadi, Cairo",
     addressAr: "أبراج عثمان، المعادي، القاهرة",
     mapUrl: "https://maps.google.com/?q=Othman+Towers+Maadi+Cairo",
+    smsPhone: "+201118175326",
     // 11:00–19:00, seven days. Dental runs the same window in its own room.
     sessions: [
       ...daily("11:00", "19:00", PRACTITIONERS.surgeon, ["surgical", "nonsurgical"]),
@@ -207,6 +214,7 @@ export const BRANCHES: Branch[] = [
     addressEn: "Syria Street, Mohandessin, Giza",
     addressAr: "شارع سوريا، المهندسين، الجيزة",
     mapUrl: "https://maps.google.com/?q=Syria+Street+Mohandessin+Giza",
+    smsPhone: "+201002202453",
     // 18:00–22:00, seven days. The evening branch.
     sessions: [
       ...daily("18:00", "22:00", PRACTITIONERS.surgeon, ["surgical", "nonsurgical"]),
@@ -220,6 +228,7 @@ export const BRANCHES: Branch[] = [
     addressEn: "North 95, Fifth Settlement, New Cairo",
     addressAr: "شمال ٩٥، التجمع الخامس، القاهرة الجديدة",
     mapUrl: "https://maps.google.com/?q=North+95+Fifth+Settlement+New+Cairo",
+    smsPhone: "+201033776401",
     // 11:00–19:00, seven days, matching Maadi.
     sessions: [
       ...daily("11:00", "19:00", PRACTITIONERS.surgeon, ["surgical", "nonsurgical"]),

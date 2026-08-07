@@ -15,6 +15,15 @@
  *   NOTIFY_FROM_EMAIL    From address for those emails.
  *   CLINIC_NOTIFY_EMAIL  Where the clinic's own copy is sent.
  *   WHATSAPP_WEBHOOK_URL Clinic-owned WhatsApp Business gateway.
+ *
+ *   Branch SMS — the booking text to the branch manager's phone. Configure
+ *   EITHER Twilio directly:
+ *     SMS_TWILIO_ACCOUNT_SID / SMS_TWILIO_AUTH_TOKEN / SMS_FROM_NUMBER
+ *   OR a clinic-owned SMS gateway (any provider behind your own endpoint,
+ *   which is also how you switch providers without touching this code):
+ *     SMS_WEBHOOK_URL / SMS_WEBHOOK_TOKEN
+ *   Twilio wins when both are set. Credentials live in the environment only;
+ *   unconfigured, jobs wait as `blocked` — visible in Clinic OS, never lost.
  */
 
 import { CONTACT, findBranch, serviceLabel } from "./clinic.ts";
@@ -198,8 +207,13 @@ function whatsappTemplate(kind: NotificationKind): string | undefined {
 
 async function responseId(response: Response): Promise<string | undefined> {
   try {
-    const body = (await response.json()) as { id?: unknown; messageId?: unknown };
-    const value = body.id ?? body.messageId;
+    const body = (await response.json()) as {
+      id?: unknown;
+      messageId?: unknown;
+      /** Twilio calls its message id `sid`. */
+      sid?: unknown;
+    };
+    const value = body.id ?? body.messageId ?? body.sid;
     return typeof value === "string" ? value.slice(0, 200) : undefined;
   } catch {
     return undefined;
@@ -357,6 +371,101 @@ async function deliverWhatsApp(
   };
 }
 
+/**
+ * The booking text a branch manager receives.
+ *
+ * Staff-operations copy, deliberately compact and in English: it is read on a
+ * lock screen between patients, not in an inbox. Every field the desk needs to
+ * act without opening anything: who, how to reach them, what for, when, where,
+ * and the reference that finds the row in Clinic OS. The note is truncated so
+ * one long paragraph cannot turn a text into six billable segments.
+ */
+export function branchSmsText(payload: NotificationPayload): string {
+  const detail = describeAppointment(payload);
+  const heading: Record<string, string> = {
+    "booking.confirmed": "New booking",
+    "booking.cancelled": "CANCELLED",
+    "booking.rescheduled": "Rescheduled",
+    "booking.reminder": "Reminder",
+    "data.request": "Data request",
+  };
+  const note = payload.appointment.patientNote?.trim();
+  const lines = [
+    `[Care Point] ${heading[payload.kind] ?? payload.kind} — ${detail.branchName}`,
+    `${payload.appointment.patientName ?? "Unnamed patient"} · ${payload.appointment.patientPhone ?? "no phone"}`,
+    `${detail.service} — ${detail.date}, ${detail.time}`,
+    `Ref: ${payload.appointment.id}`,
+    ...(note ? [`Note: ${note.length > 160 ? `${note.slice(0, 159)}…` : note}`] : []),
+  ];
+  return lines.join("\n");
+}
+
+async function deliverBranchSms(
+  payload: NotificationPayload,
+): Promise<NotificationDeliveryResult> {
+  const branch = findBranch(payload.appointment.branch);
+  // A legacy row whose branch string no longer matches still reaches a human:
+  // the main clinic line is the documented fallback, not a dropped message.
+  const to = branch?.smsPhone ?? CONTACT.phone;
+
+  const twilioSid = env("SMS_TWILIO_ACCOUNT_SID");
+  const twilioToken = env("SMS_TWILIO_AUTH_TOKEN");
+  const from = env("SMS_FROM_NUMBER");
+  const gatewayUrl = env("SMS_WEBHOOK_URL");
+
+  if (twilioSid && twilioToken && from) {
+    const result = await checkedFetch(
+      "sms_twilio",
+      `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${btoa(`${twilioSid}:${twilioToken}`)}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ To: to, From: from, Body: branchSmsText(payload) }),
+      },
+    );
+    return {
+      outcome: "delivered",
+      provider: "sms_twilio",
+      providerMessageId: result.id,
+      statusCode: result.statusCode,
+    };
+  }
+
+  if (gatewayUrl) {
+    const token = env("SMS_WEBHOOK_TOKEN");
+    const result = await checkedFetch("sms_gateway", gatewayUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        to,
+        text: branchSmsText(payload),
+        event: payload.kind,
+        appointmentId: payload.appointment.id,
+        branch: payload.appointment.branch,
+      }),
+    });
+    return {
+      outcome: "delivered",
+      provider: "sms_gateway",
+      providerMessageId: result.id,
+      statusCode: result.statusCode,
+    };
+  }
+
+  return {
+    outcome: "blocked",
+    provider: "sms",
+    code: "provider_not_configured",
+    message: "Branch SMS is not configured (Twilio or SMS_WEBHOOK_URL).",
+  };
+}
+
 /** One durable queue job invokes exactly one channel. */
 export async function deliverNotificationChannel(
   payload: NotificationPayload,
@@ -380,6 +489,7 @@ export async function deliverNotificationChannel(
   }
   if (channel === "patient_whatsapp") return deliverWhatsApp(payload);
   if (channel === "clinic_webhook") return deliverClinicWebhook(payload);
+  if (channel === "branch_sms") return deliverBranchSms(payload);
 
   const inbox = env("CLINIC_NOTIFY_EMAIL");
   if (!inbox) {
@@ -411,6 +521,12 @@ export function notificationConfiguration() {
     clinicEmail: email && Boolean(env("CLINIC_NOTIFY_EMAIL")),
     patientWhatsApp: whatsapp,
     clinicWebhook: Boolean(env("NOTIFY_WEBHOOK_URL")),
+    branchSms: Boolean(
+      (env("SMS_TWILIO_ACCOUNT_SID") &&
+        env("SMS_TWILIO_AUTH_TOKEN") &&
+        env("SMS_FROM_NUMBER")) ||
+        env("SMS_WEBHOOK_URL"),
+    ),
   };
 }
 
