@@ -154,12 +154,47 @@ test("permanent errors and exhausted retries enter the dead-letter state", () =>
 });
 
 test("the outbox migration stores references and delivery metadata, not message bodies", () => {
+  // Scoped to the two outbox tables rather than the whole file. `appointments`
+  // legitimately holds patient columns in the same migration, so asserting
+  // against the file as a whole would either fail or have to be so loose it
+  // stopped proving anything.
   const migration = readFileSync(
-    new URL("../drizzle/0007_yielding_maverick.sql", import.meta.url),
+    new URL("../drizzle/0000_public_grey_gargoyle.sql", import.meta.url),
     "utf8",
   );
-  assert.match(migration, /CREATE TABLE `notification_jobs`/);
-  assert.match(migration, /CREATE TABLE `notification_attempts`/);
-  assert.match(migration, /`subject_id` text NOT NULL/);
-  assert.doesNotMatch(migration, /patient_name|patient_phone|patient_email|payload_json/);
+
+  const tableBody = (name: string) => {
+    const match = new RegExp(`CREATE TABLE "${name}" \\(([\\s\\S]*?)\\n\\);`).exec(migration);
+    assert.ok(match, `${name} is missing from the baseline migration`);
+    return match[1];
+  };
+
+  const jobs = tableBody("notification_jobs");
+  const attempts = tableBody("notification_attempts");
+
+  // A subject reference, not a copy of the thing it refers to.
+  assert.match(jobs, /"subject_id" text NOT NULL/);
+  assert.match(jobs, /"subject_type" text NOT NULL/);
+  assert.match(attempts, /"job_id" text NOT NULL/);
+
+  // Columns only. The `channel` CHECK legitimately names a channel called
+  // `patient_email`, which is a delivery route, not stored recipient data —
+  // matching the raw table body would flag it and prove nothing.
+  const columns = (body: string) =>
+    body
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('"'))
+      .join("\n");
+
+  for (const [name, body] of [
+    ["notification_jobs", jobs],
+    ["notification_attempts", attempts],
+  ] as const) {
+    assert.doesNotMatch(
+      columns(body),
+      /patient_name|patient_phone|patient_email|payload_json|message_body/,
+      `${name} must not carry recipient data — it is loaded at send time`,
+    );
+  }
 });

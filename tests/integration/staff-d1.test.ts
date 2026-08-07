@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { env } from "cloudflare:workers";
+import { database } from "@/db/client";
 import {
   LOCKOUT_MINUTES,
   MAX_FAILED_ATTEMPTS,
   beginMfaEnrolment,
   confirmMfaEnrolment,
   countActiveOwners,
-  ensureStaffSchema,
   getStaffRecord,
   issueRecoveryCodes,
   listSecurityEvents,
@@ -35,12 +34,11 @@ const OWNER = "owner@drashrafmetwally.com";
 const RECEPTION = "reception@drashrafmetwally.com";
 
 async function resetStaffData() {
-  await ensureStaffSchema();
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM security_events"),
-    env.DB.prepare("DELETE FROM staff_recovery_codes"),
-    env.DB.prepare("DELETE FROM staff_user_roles"),
-    env.DB.prepare("DELETE FROM staff_users"),
+  await database().batch([
+    database().prepare("DELETE FROM security_events"),
+    database().prepare("DELETE FROM staff_recovery_codes"),
+    database().prepare("DELETE FROM staff_user_roles"),
+    database().prepare("DELETE FROM staff_users"),
   ]);
 }
 
@@ -70,7 +68,7 @@ async function enrol(email: string, roles: string[] = ["receptionist"]) {
  * inside the Workers pool.
  */
 async function allowCurrentCode(email: string) {
-  await env.DB.prepare("UPDATE staff_users SET totp_last_counter = 0 WHERE email = ?")
+  await database().prepare("UPDATE staff_users SET totp_last_counter = 0 WHERE email = ?")
     .bind(email)
     .run();
 }
@@ -267,7 +265,7 @@ describe("enrolling a second factor", () => {
       actor: RECEPTION,
     });
 
-    const stored = await env.DB.prepare(
+    const stored = await database().prepare(
       "SELECT totp_secret AS secret FROM staff_users WHERE email = ?",
     )
       .bind(RECEPTION)
@@ -316,7 +314,7 @@ describe("enrolling a second factor", () => {
     expect(recoveryCodes).toHaveLength(10);
     expect(new Set(recoveryCodes).size).toBe(10);
 
-    const stored = await env.DB.prepare(
+    const stored = await database().prepare(
       "SELECT code_hash AS hash FROM staff_recovery_codes WHERE email = ?",
     )
       .bind(RECEPTION)
@@ -596,7 +594,7 @@ describe("the security event log", () => {
   });
 
   it("trims events past the audit retention window", async () => {
-    await env.DB.prepare(
+    await database().prepare(
       `INSERT INTO security_events (id, actor, event, outcome, at)
        VALUES ('ancient', ?, 'mfa_verified', 'allowed', '2019-01-01T00:00:00.000Z')`,
     )

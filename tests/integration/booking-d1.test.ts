@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { env } from "cloudflare:workers";
+import { database } from "@/db/client";
 import {
   cancelByManageToken,
   confirmAppointment,
@@ -33,15 +33,15 @@ type OfferedSlot = {
 };
 
 async function resetApplicationData() {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM pilot_reviews"),
-    env.DB.prepare("DELETE FROM pilot_incidents"),
-    env.DB.prepare("DELETE FROM pilot_checklist"),
-    env.DB.prepare("DELETE FROM pilot_settings"),
-    env.DB.prepare("DELETE FROM notification_attempts"),
-    env.DB.prepare("DELETE FROM notification_jobs"),
-    env.DB.prepare("DELETE FROM appointment_cells"),
-    env.DB.prepare("DELETE FROM appointments"),
+  await database().batch([
+    database().prepare("DELETE FROM pilot_reviews"),
+    database().prepare("DELETE FROM pilot_incidents"),
+    database().prepare("DELETE FROM pilot_checklist"),
+    database().prepare("DELETE FROM pilot_settings"),
+    database().prepare("DELETE FROM notification_attempts"),
+    database().prepare("DELETE FROM notification_jobs"),
+    database().prepare("DELETE FROM appointment_cells"),
+    database().prepare("DELETE FROM appointments"),
   ]);
 }
 
@@ -70,7 +70,7 @@ describe.sequential("booking lifecycle against an isolated D1 database", () => {
   beforeEach(resetApplicationData);
 
   it("applies every migration and exposes the occupancy and outbox tables", async () => {
-    const tables = await env.DB.prepare(
+    const tables = await database().prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
     ).all<{ name: string }>();
     const names = (tables.results ?? []).map((row) => row.name);
@@ -154,7 +154,7 @@ describe.sequential("booking lifecycle against an isolated D1 database", () => {
     expect(repeated?.id).toBe(first?.id);
     expect(repeated?.manageToken).toBe(first?.manageToken);
 
-    const confirmationJobs = await env.DB.prepare(
+    const confirmationJobs = await database().prepare(
       "SELECT channel, dedupe_key AS dedupeKey FROM notification_jobs WHERE subject_id = ? AND kind = 'booking.confirmed' ORDER BY channel",
     )
       .bind(first!.id)
@@ -165,7 +165,7 @@ describe.sequential("booking lifecycle against an isolated D1 database", () => {
     expect(confirmationJobs.results?.map((job) => job.channel)).toContain("branch_sms");
     expect(new Set(confirmationJobs.results?.map((job) => job.dedupeKey)).size).toBe(5);
 
-    const occupiedBefore = await env.DB.prepare(
+    const occupiedBefore = await database().prepare(
       "SELECT COUNT(*) AS total FROM appointment_cells WHERE appointment_id = ?",
     )
       .bind(first!.id)
@@ -175,14 +175,14 @@ describe.sequential("booking lifecycle against an isolated D1 database", () => {
     expect(await cancelByManageToken(first!.manageToken!)).toBe(true);
     expect(await cancelByManageToken(first!.manageToken!)).toBe(false);
 
-    const occupiedAfter = await env.DB.prepare(
+    const occupiedAfter = await database().prepare(
       "SELECT COUNT(*) AS total FROM appointment_cells WHERE appointment_id = ?",
     )
       .bind(first!.id)
       .first<{ total: number }>();
     expect(occupiedAfter?.total).toBe(0);
 
-    const cancellationJobs = await env.DB.prepare(
+    const cancellationJobs = await database().prepare(
       "SELECT COUNT(*) AS total FROM notification_jobs WHERE subject_id = ? AND kind = 'booking.cancelled'",
     )
       .bind(first!.id)
@@ -212,7 +212,7 @@ describe.sequential("booking lifecycle against an isolated D1 database", () => {
     expect(moved?.slotDate).toBe(destination.slotDate);
     expect(moved?.slotTime).toBe(destination.slotTime);
 
-    const cells = await env.DB.prepare(
+    const cells = await database().prepare(
       "SELECT DISTINCT slot_date AS slotDate FROM appointment_cells WHERE appointment_id = ?",
     )
       .bind(confirmed!.id)
@@ -251,7 +251,7 @@ describe.sequential("booking lifecycle against an isolated D1 database", () => {
     expect(await releaseHold(hold.holdToken, fingerprint)).toBe(true);
     expect(await releaseHold(hold.holdToken, fingerprint)).toBe(false);
 
-    const cells = await env.DB.prepare(
+    const cells = await database().prepare(
       "SELECT COUNT(*) AS total FROM appointment_cells WHERE appointment_id = ?",
     )
       .bind(hold.id)
@@ -274,12 +274,12 @@ describe.sequential("booking lifecycle against an isolated D1 database", () => {
       expect(String((loser as PromiseRejectedResult).reason)).toMatch(/constraint|unique/i);
     }
 
-    const appointments = await env.DB.prepare(
+    const appointments = await database().prepare(
       "SELECT COUNT(*) AS total FROM appointments WHERE slot_date = ? AND slot_time = ?",
     )
       .bind(slot.slotDate, slot.slotTime)
       .first<{ total: number }>();
-    const owners = await env.DB.prepare(
+    const owners = await database().prepare(
       "SELECT COUNT(DISTINCT appointment_id) AS total FROM appointment_cells WHERE slot_date = ?",
     )
       .bind(slot.slotDate)

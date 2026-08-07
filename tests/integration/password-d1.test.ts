@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { env } from "cloudflare:workers";
+import { database } from "@/db/client";
 import {
   MAX_FAILED_ATTEMPTS,
-  ensureStaffSchema,
   getStaffRecord,
   listStaffSessions,
   recordStaffSession,
@@ -25,13 +24,12 @@ const RECEPTION = "reception@drashrafmetwally.com";
 const PASSWORD = "clinic mornings in maadi";
 
 beforeEach(async () => {
-  await ensureStaffSchema();
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM staff_sessions"),
-    env.DB.prepare("DELETE FROM security_events"),
-    env.DB.prepare("DELETE FROM auth_throttle"),
-    env.DB.prepare("DELETE FROM staff_user_roles"),
-    env.DB.prepare("DELETE FROM staff_users"),
+  await database().batch([
+    database().prepare("DELETE FROM staff_sessions"),
+    database().prepare("DELETE FROM security_events"),
+    database().prepare("DELETE FROM auth_throttle"),
+    database().prepare("DELETE FROM staff_user_roles"),
+    database().prepare("DELETE FROM staff_users"),
   ]);
   await upsertStaffMember({
     email: RECEPTION,
@@ -45,7 +43,7 @@ describe("setting a password", () => {
   it("stores a hash, never the password", async () => {
     await setStaffPassword({ email: RECEPTION, password: PASSWORD, actor: RECEPTION });
 
-    const row = await env.DB.prepare(
+    const row = await database().prepare(
       "SELECT password_hash AS hash FROM staff_users WHERE email = ?",
     )
       .bind(RECEPTION)
@@ -205,7 +203,7 @@ describe("checking a password", () => {
     await verifyStaffPassword({ email: RECEPTION, password: PASSWORD });
     await verifyStaffPassword({ email: RECEPTION, password: "wrong" });
 
-    const events = await env.DB.prepare(
+    const events = await database().prepare(
       "SELECT event FROM security_events WHERE actor = ?",
     )
       .bind(RECEPTION)
@@ -217,7 +215,7 @@ describe("checking a password", () => {
 
   it("records a failed attempt against an address that does not exist", async () => {
     await verifyStaffPassword({ email: "prober@example.com", password: "guess" });
-    const event = await env.DB.prepare(
+    const event = await database().prepare(
       "SELECT detail FROM security_events WHERE actor = 'prober@example.com'",
     ).first<{ detail: string }>();
     // Enumeration attempts are the earliest signal of an attack, and the only one
@@ -275,7 +273,7 @@ describe("temporary passwords", () => {
     });
     await setStaffPassword({ email: RECEPTION, password: PASSWORD, actor: RECEPTION });
 
-    const events = await env.DB.prepare(
+    const events = await database().prepare(
       "SELECT event, actor, detail FROM security_events WHERE event IN ('password_reset','password_changed') ORDER BY at",
     ).all<{ event: string; actor: string; detail: string }>();
     const rows = events.results ?? [];

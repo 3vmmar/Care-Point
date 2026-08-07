@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { env } from "cloudflare:workers";
+import { database } from "@/db/client";
 import { getClinicGrowth } from "@/db/analytics-growth";
 
 /**
@@ -26,7 +26,7 @@ type Row = {
 };
 
 async function insert(row: Row) {
-  await env.DB.prepare(
+  await database().prepare(
     `INSERT INTO appointments
      (id, hold_token, status, branch, service, slot_date, slot_time,
       duration_minutes, practitioner, patient_name, patient_phone, language,
@@ -53,9 +53,9 @@ async function insert(row: Row) {
 }
 
 const clear = () =>
-  env.DB.batch([
-    env.DB.prepare("DELETE FROM appointment_cells"),
-    env.DB.prepare("DELETE FROM appointments"),
+  database().batch([
+    database().prepare("DELETE FROM appointment_cells"),
+    database().prepare("DELETE FROM appointments"),
   ]);
 
 beforeEach(clear);

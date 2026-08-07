@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { env } from "cloudflare:workers";
+import { database } from "@/db/client";
 import {
-  ensureCatalogueSchema,
   getCatalogue,
   getCatalogueForEditing,
   invalidateCatalogue,
@@ -31,14 +30,13 @@ const SUNDAY = "2026-08-02";
 const MONDAY = "2026-08-03";
 
 async function resetCatalogue() {
-  await ensureCatalogueSchema();
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM schedule_exceptions"),
-    env.DB.prepare("DELETE FROM weekly_sessions"),
-    env.DB.prepare("DELETE FROM clinic_services"),
-    env.DB.prepare("DELETE FROM practitioners"),
-    env.DB.prepare("DELETE FROM clinic_branches"),
-    env.DB.prepare("DELETE FROM departments"),
+  await database().batch([
+    database().prepare("DELETE FROM schedule_exceptions"),
+    database().prepare("DELETE FROM weekly_sessions"),
+    database().prepare("DELETE FROM clinic_services"),
+    database().prepare("DELETE FROM practitioners"),
+    database().prepare("DELETE FROM clinic_branches"),
+    database().prepare("DELETE FROM departments"),
   ]);
   invalidateCatalogue();
 }
@@ -71,7 +69,7 @@ describe("seeding a fresh database", () => {
     // the defaults must not be reinstalled over the clinic's decision.
     const after = await getCatalogue();
     expect(after.live).toBe(false);
-    const rows = await env.DB.prepare(
+    const rows = await database().prepare(
       "SELECT COUNT(*) AS total FROM weekly_sessions",
     ).first<{ total: number }>();
     expect(rows?.total).toBeGreaterThan(0);
@@ -267,7 +265,7 @@ describe("editing the rota", () => {
 
     // Deactivated, not deleted: an accidental removal stays reversible and
     // appointments already booked into it keep an explanation.
-    const row = await env.DB.prepare("SELECT active FROM weekly_sessions WHERE id = ?")
+    const row = await database().prepare("SELECT active FROM weekly_sessions WHERE id = ?")
       .bind(session.id)
       .first<{ active: number }>();
     expect(row?.active).toBe(0);
@@ -394,7 +392,7 @@ describe("the editor view", () => {
     // older version of this code. The editor has to show it rather than wait for
     // two patients to arrive for the same slot.
     const now = new Date().toISOString();
-    await env.DB.prepare(
+    await database().prepare(
       `INSERT INTO weekly_sessions
        (id, branch_id, practitioner_id, weekday, start_time, end_time,
         interval_minutes, categories, active, created_at, updated_at)

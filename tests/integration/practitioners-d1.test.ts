@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { env } from "cloudflare:workers";
+import { database } from "@/db/client";
 import {
   DEFAULT_CANCELLATION_REASONS,
   deactivatePractitioner,
-  ensureCatalogueSchema,
   getCatalogue,
   getCatalogueForEditing,
   invalidateCatalogue,
@@ -25,15 +24,14 @@ const OWNER = "owner@drashrafmetwally.com";
 const MONDAY = "2026-08-03";
 
 async function resetCatalogue() {
-  await ensureCatalogueSchema();
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM cancellation_reasons"),
-    env.DB.prepare("DELETE FROM schedule_exceptions"),
-    env.DB.prepare("DELETE FROM weekly_sessions"),
-    env.DB.prepare("DELETE FROM clinic_services"),
-    env.DB.prepare("DELETE FROM practitioners"),
-    env.DB.prepare("DELETE FROM clinic_branches"),
-    env.DB.prepare("DELETE FROM departments"),
+  await database().batch([
+    database().prepare("DELETE FROM cancellation_reasons"),
+    database().prepare("DELETE FROM schedule_exceptions"),
+    database().prepare("DELETE FROM weekly_sessions"),
+    database().prepare("DELETE FROM clinic_services"),
+    database().prepare("DELETE FROM practitioners"),
+    database().prepare("DELETE FROM clinic_branches"),
+    database().prepare("DELETE FROM departments"),
   ]);
   invalidateCatalogue();
   // One read installs the defaults, the way a fresh deployment does.
@@ -203,7 +201,7 @@ describe("cancellation reasons", () => {
 
   it("does not reseed once the clinic has edited the list", async () => {
     await listCancellationReasons("patient");
-    await env.DB.prepare("UPDATE cancellation_reasons SET active = 0 WHERE code = 'travelling'")
+    await database().prepare("UPDATE cancellation_reasons SET active = 0 WHERE code = 'travelling'")
       .run();
 
     const after = await listCancellationReasons("patient");

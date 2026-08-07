@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { env } from "cloudflare:workers";
+import { database } from "@/db/client";
 import {
   MAX_CLIENT_ATTEMPTS,
   THROTTLE_BLOCK_MINUTES,
@@ -7,7 +7,6 @@ import {
   checkAuthThrottle,
   clearAuthThrottle,
   describeDevice,
-  ensureStaffSchema,
   getStaffRecord,
   isSessionRevoked,
   listStaffSessions,
@@ -34,13 +33,12 @@ const RECEPTION = "reception@drashrafmetwally.com";
 const CLIENT = "client-hash-abc";
 
 beforeEach(async () => {
-  await ensureStaffSchema();
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM auth_throttle"),
-    env.DB.prepare("DELETE FROM staff_sessions"),
-    env.DB.prepare("DELETE FROM security_events"),
-    env.DB.prepare("DELETE FROM staff_user_roles"),
-    env.DB.prepare("DELETE FROM staff_users"),
+  await database().batch([
+    database().prepare("DELETE FROM auth_throttle"),
+    database().prepare("DELETE FROM staff_sessions"),
+    database().prepare("DELETE FROM security_events"),
+    database().prepare("DELETE FROM staff_user_roles"),
+    database().prepare("DELETE FROM staff_users"),
   ]);
 });
 
@@ -123,7 +121,7 @@ describe("per-client throttle", () => {
     for (let attempt = 0; attempt < MAX_CLIENT_ATTEMPTS; attempt += 1) {
       await recordAuthFailure(CLIENT);
     }
-    const events = await env.DB.prepare(
+    const events = await database().prepare(
       "SELECT event, detail FROM security_events WHERE event = 'mfa_locked'",
     ).all<{ event: string; detail: string }>();
     expect(events.results?.length).toBeGreaterThan(0);
@@ -131,7 +129,7 @@ describe("per-client throttle", () => {
   });
 
   it("prunes counters whose window and block have both lapsed", async () => {
-    await env.DB.prepare(
+    await database().prepare(
       "INSERT INTO auth_throttle (key, attempts, window_started_at) VALUES ('ancient', 3, '2020-01-01T00:00:00.000Z')",
     ).run();
     await recordAuthFailure(CLIENT);
@@ -197,7 +195,7 @@ describe("active sessions", () => {
 
   it("never stores anything that could be replayed as a session", async () => {
     await seat("s1", "Chrome on Windows");
-    const row = await env.DB.prepare(
+    const row = await database().prepare(
       "SELECT token_digest AS digest FROM staff_sessions WHERE id = 's1'",
     ).first<{ digest: string }>();
     // A list of sessions, not a set of spare keys to them.
@@ -260,7 +258,7 @@ describe("active sessions", () => {
 
   it("using a session updates when it was last seen", async () => {
     await seat("s1", "Chrome on Windows");
-    await env.DB.prepare(
+    await database().prepare(
       "UPDATE staff_sessions SET last_seen_at = '2020-01-01T00:00:00.000Z' WHERE id = 's1'",
     ).run();
 
@@ -277,7 +275,7 @@ describe("active sessions", () => {
   });
 
   it("prunes long-expired session rows", async () => {
-    await env.DB.prepare(
+    await database().prepare(
       `INSERT INTO staff_sessions
        (id, email, token_digest, issued_at, last_seen_at, expires_at)
        VALUES ('ancient', ?, 'd', '2020-01-01T00:00:00.000Z', '2020-01-01T00:00:00.000Z', '2020-01-02T00:00:00.000Z')`,
@@ -293,7 +291,7 @@ describe("active sessions", () => {
   it("records who ended a session", async () => {
     await seat("s1", "Chrome on Windows");
     await revokeStaffSession({ id: "s1", email: RECEPTION, actor: OWNER });
-    const event = await env.DB.prepare(
+    const event = await database().prepare(
       "SELECT actor, subject FROM security_events WHERE event = 'session_revoked'",
     ).first<{ actor: string; subject: string }>();
     expect(event?.actor).toBe(OWNER);
