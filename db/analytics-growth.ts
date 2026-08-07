@@ -70,7 +70,12 @@ export type ClinicGrowth = {
   months: Array<{
     month: string;
     total: number;
+    /** Distinct PEOPLE whose first linkable visit fell in this month. */
     newPatients: number;
+    /** APPOINTMENTS that were someone's first, and someone's return. These two
+     *  are row counts and sum to `total`; `newPatients` is a head count and
+     *  deliberately does not. */
+    newVisits: number;
     returning: number;
     /** True once the month is entirely in the past. A month still running
      *  looks like a collapse next to its neighbours unless it says so. */
@@ -98,6 +103,31 @@ export type ClinicGrowth = {
   };
   consultation: {
     medianMinutes: number | null;
+    sufficiency: Sufficiency;
+  };
+  /**
+   * How scheduled visits actually ended. Separate from `appointments`, which
+   * counts what was booked: a practice can be growing and losing a fifth of
+   * its slots to no-shows at the same time, and only one of those two numbers
+   * tells them to start reminding people.
+   */
+  outcomes: {
+    completed: number;
+    /**
+     * Checked in but not yet marked completed. These patients demonstrably
+     * turned up: excluding them from the denominator was a real defect, and it
+     * failed in the worst direction — a desk that checks people in but never
+     * presses Completed would have been told its no-show rate was four times
+     * what it is, on the same screen that shows their arrival times.
+     */
+    checkedIn: number;
+    noShow: number;
+    cancelled: number;
+    /** Turned up: completed + checked in. */
+    arrived: number;
+    /** Arrived + no-show: every visit whose attendance is actually known. */
+    decided: number;
+    noShowRate: number | null;
     sufficiency: Sufficiency;
   };
   identityHorizonDays: number;
@@ -223,6 +253,7 @@ export async function getClinicGrowth(input: GrowthInput): Promise<ClinicGrowth>
     bookedRows,
     punctualityRows,
     durationRows,
+    outcomeRows,
   ] = await Promise.all([
     db
       .prepare(`SELECT COUNT(*) AS total FROM appointments WHERE ${REAL} AND slot_date BETWEEN ? AND ?${branchClause}`)
@@ -241,6 +272,17 @@ export async function getClinicGrowth(input: GrowthInput): Promise<ClinicGrowth>
     newPatientCount(db, from, to, branch, bind),
     newPatientCount(db, previousFrom, previousTo, branch, bind),
 
+    /**
+     * Three counts that mean three different things, and used to mean two.
+     *
+     * `returningVisits` was previously derived as total - newPatients, which
+     * subtracted a count of PEOPLE from a count of ROWS: a first-time patient
+     * booked for a consultation and a same-day laser session produced one
+     * "returning" visit out of thin air, and the clamp guarding it meant the
+     * error only ever flattered retention. Both visit counts are row counts
+     * now and sum to `total` by construction; `newPatients` stays a head count
+     * because the growth comparison is about people, not appointments.
+     */
     db
       .prepare(
         `WITH retained AS (
@@ -253,6 +295,8 @@ export async function getClinicGrowth(input: GrowthInput): Promise<ClinicGrowth>
          )
          SELECT substr(a.slot_date, 1, 7) AS month,
                 COUNT(*) AS total,
+                SUM(CASE WHEN f.firstDate = a.slot_date THEN 1 ELSE 0 END) AS newVisits,
+                SUM(CASE WHEN f.firstDate = a.slot_date THEN 0 ELSE 1 END) AS returningVisits,
                 COUNT(DISTINCT CASE
                   WHEN f.firstDate = a.slot_date THEN ${PATIENT_KEY} END) AS newPatients
          FROM appointments a
@@ -261,7 +305,13 @@ export async function getClinicGrowth(input: GrowthInput): Promise<ClinicGrowth>
          GROUP BY month ORDER BY month`,
       )
       .bind(...bind(monthsFrom, to))
-      .all<{ month: string; total: number; newPatients: number }>(),
+      .all<{
+        month: string;
+        total: number;
+        newVisits: number;
+        returningVisits: number;
+        newPatients: number;
+      }>(),
 
     db
       .prepare(
@@ -326,17 +376,32 @@ export async function getClinicGrowth(input: GrowthInput): Promise<ClinicGrowth>
       )
       .bind(...bind(from, to))
       .all<{ checkedInAt: string; completedAt: string }>(),
+
+    // How the window's visits ended. Grouped rather than five COUNT(*)s so
+    // this stays one scan of the same index the other date-ranged reads use.
+    db
+      .prepare(
+        `SELECT status, COUNT(*) AS total
+         FROM appointments
+         WHERE ${REAL} AND slot_date BETWEEN ? AND ?${branchClause}
+         GROUP BY status`,
+      )
+      .bind(...bind(from, to))
+      .all<{ status: string; total: number }>(),
   ]);
 
   // ---------------------------------------------------------------- months
   const monthTotals = (monthRows.results ?? []).map((row) => {
     const total = Number(row.total) || 0;
-    const newPatients = Number(row.newPatients) || 0;
     return {
       month: row.month,
       total,
-      newPatients,
-      returning: Math.max(0, total - newPatients),
+      /** Distinct people whose first linkable visit fell in this month. */
+      newPatients: Number(row.newPatients) || 0,
+      /** Appointments belonging to a first visit, and to a later one. Both are
+       *  row counts, so newVisits + returning === total. */
+      newVisits: Number(row.newVisits) || 0,
+      returning: Number(row.returningVisits) || 0,
       complete: row.month < to.slice(0, 7),
     };
   });
@@ -378,11 +443,21 @@ export async function getClinicGrowth(input: GrowthInput): Promise<ClinicGrowth>
       });
     }
   }
+  /**
+   * The AGGREGATE share of capacity, not the mean of per-day shares.
+   *
+   * Those differ whenever days vary in size, and both cards that read this
+   * claim the aggregate ("X% of published capacity is being used"). A mean of
+   * ratios over-weights a quiet four-slot day against a full sixteen-slot one,
+   * so the headline was asserting something its own denominator did not say.
+   */
+  const capacityTotals = utilisationDays.reduce(
+    (sum, day) => ({ booked: sum.booked + day.booked, capacity: sum.capacity + day.capacity }),
+    { booked: 0, capacity: 0 },
+  );
   const averagePercent =
-    utilisationDays.length > 0
-      ? Math.round(
-          utilisationDays.reduce((sum, day) => sum + day.percent, 0) / utilisationDays.length,
-        )
+    capacityTotals.capacity > 0
+      ? Math.round((capacityTotals.booked / capacityTotals.capacity) * 100)
       : null;
 
   // ----------------------------------------------------------- punctuality
@@ -489,6 +564,34 @@ export async function getClinicGrowth(input: GrowthInput): Promise<ClinicGrowth>
         "Fewer than 10 visits carry both a check-in and a completion time. This is derived from when staff pressed those buttons, so it measures room time only where the dashboard is used live.",
       ),
     },
+    outcomes: (() => {
+      const byStatus = new Map(
+        (outcomeRows.results ?? []).map((row) => [row.status, Number(row.total) || 0]),
+      );
+      const completed = byStatus.get("completed") ?? 0;
+      const checkedIn = byStatus.get("checked_in") ?? 0;
+      const noShow = byStatus.get("no_show") ?? 0;
+      const cancelled = byStatus.get("cancelled") ?? 0;
+      const arrived = completed + checkedIn;
+      const decided = arrived + noShow;
+      return {
+        completed,
+        checkedIn,
+        noShow,
+        cancelled,
+        arrived,
+        decided,
+        // Denominator is decided visits, not everything booked: a future
+        // appointment has not failed to show up yet, and counting it as
+        // attended would flatter the rate every single day.
+        noShowRate: decided > 0 ? Math.round((noShow / decided) * 1000) / 10 : null,
+        sufficiency: sufficiency(
+          decided,
+          10,
+          "Fewer than 10 visits have a known outcome, so a rate here would move by ten points on one patient.",
+        ),
+      };
+    })(),
     identityHorizonDays: IDENTITY_HORIZON_DAYS,
   };
 }

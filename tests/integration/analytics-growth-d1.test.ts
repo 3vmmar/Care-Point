@@ -320,6 +320,107 @@ describe("branch scoping", () => {
   });
 });
 
+describe("outcome and cohort arithmetic, against real SQL", () => {
+  it("counts a checked-in patient as arrived, not as an unknown outcome", async () => {
+    // The bug this covers: `decided` was completed + no_show, so a desk that
+    // checks patients in without pressing Completed saw its no-show rate
+    // reported at several times reality.
+    for (let i = 0; i < 8; i += 1) {
+      await insert({
+        id: `ci-${i}`,
+        status: "checked_in",
+        slotDate: "2026-07-20",
+        checkedInAt: "2026-07-20T09:00:00.000Z",
+      });
+    }
+    await insert({ id: "done-1", status: "completed", slotDate: "2026-07-21" });
+    await insert({ id: "miss-1", status: "no_show", slotDate: "2026-07-22" });
+
+    const growth = await getClinicGrowth({ days: 30, today: TODAY });
+
+    expect(growth.outcomes.checkedIn).toBe(8);
+    expect(growth.outcomes.completed).toBe(1);
+    expect(growth.outcomes.arrived).toBe(9);
+    expect(growth.outcomes.decided).toBe(10);
+    // 1 of 10, not the 1 of 2 (50%) the old denominator produced.
+    expect(growth.outcomes.noShowRate).toBe(10);
+  });
+
+  it("cancelled visits are excluded from the outcome denominator entirely", async () => {
+    await insert({ id: "c-1", status: "cancelled", slotDate: "2026-07-20" });
+    await insert({ id: "c-2", status: "cancelled", slotDate: "2026-07-21" });
+    await insert({ id: "d-1", status: "completed", slotDate: "2026-07-22" });
+
+    const growth = await getClinicGrowth({ days: 30, today: TODAY });
+    expect(growth.outcomes.cancelled).toBe(2);
+    // A cancelled slot came back to the calendar; nobody failed to attend it.
+    expect(growth.outcomes.decided).toBe(1);
+  });
+
+  it("new and returning visit counts are row counts that sum to the month total", async () => {
+    const phone = "0150 160 6307";
+    // One patient, three appointments across two months: the first is a first
+    // visit, the other two are returns.
+    await insert({ id: "r-1", status: "completed", slotDate: "2026-06-10", phone });
+    await insert({ id: "r-2", status: "completed", slotDate: "2026-06-24", phone });
+    await insert({ id: "r-3", status: "completed", slotDate: "2026-07-08", phone });
+
+    const growth = await getClinicGrowth({ days: 90, today: TODAY });
+    const june = growth.months.find((month) => month.month === "2026-06")!;
+    const july = growth.months.find((month) => month.month === "2026-07")!;
+
+    expect(june.total).toBe(2);
+    expect(june.newVisits).toBe(1);
+    expect(june.returning).toBe(1);
+    expect(july.newVisits).toBe(0);
+    expect(july.returning).toBe(1);
+    // The property that makes the stacked chart honest.
+    for (const month of growth.months) {
+      expect(month.newVisits + month.returning).toBe(month.total);
+    }
+  });
+
+  it("a same-day double booking for a new patient invents no returning visit", async () => {
+    // The reported failure mode, in the shape a plastic-surgery practice
+    // actually produces it: consultation plus a same-day session. The old
+    // residual (total - distinctNewPatients) reported one of these two
+    // appointments as a return visit.
+    const phone = "0111 222 3333";
+    await insert({ id: "sd-1", status: "completed", slotDate: "2026-06-10", phone, slotTime: "11:00" });
+    await insert({ id: "sd-2", status: "completed", slotDate: "2026-06-10", phone, slotTime: "15:00" });
+
+    const growth = await getClinicGrowth({ days: 90, today: TODAY });
+    const june = growth.months.find((month) => month.month === "2026-06")!;
+
+    expect(june.total).toBe(2);
+    expect(june.newVisits).toBe(2);
+    expect(june.returning).toBe(0);
+    // And the head count stays a head count: one person, not two.
+    expect(june.newPatients).toBe(1);
+  });
+
+  it("utilisation is the aggregate share of capacity, not a mean of day ratios", async () => {
+    // 2026-07-21 is a Tuesday; Maadi consults 11:00-19:00.
+    await insert({ id: "u-1", status: "confirmed", slotDate: "2026-07-21", branch: "Maadi" });
+
+    const growth = await getClinicGrowth({
+      days: 30,
+      today: TODAY,
+      branch: "Maadi",
+      capacityServices: ["face"],
+    });
+
+    const totals = growth.utilisation.days.reduce(
+      (sum, day) => ({ booked: sum.booked + day.booked, capacity: sum.capacity + day.capacity }),
+      { booked: 0, capacity: 0 },
+    );
+    expect(totals.capacity).toBeGreaterThan(0);
+    expect(growth.utilisation.averagePercent).toBe(
+      Math.round((totals.booked / totals.capacity) * 100),
+    );
+  });
+});
+
 describe("privacy", () => {
   it("returns no patient identifiers anywhere in the payload", async () => {
     await insert({

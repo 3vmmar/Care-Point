@@ -3,6 +3,7 @@
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ClinicGrowth } from "@/db/analytics-growth";
+import { computeClinicInsights } from "@/lib/clinic-insights";
 import type { LiveCatalogue } from "./types";
 import {
   BarChart,
@@ -105,6 +106,13 @@ export default function Overview({
 
   const monthSpark = useMemo(
     () => (growth?.months ?? []).filter((month) => month.complete).map((month) => month.total),
+    [growth],
+  );
+
+  // Pure function over the payload already fetched — no second request, and
+  // no rule can fire on data whose sufficiency flag says it should not.
+  const insights = useMemo(
+    () => (growth ? computeClinicInsights(growth) : []),
     [growth],
   );
 
@@ -218,10 +226,38 @@ export default function Overview({
             />
           </div>
 
+          {/* --------------------------------------------------- insights --- */}
+          {insights.length > 0 && (
+            <section className="overview-insights" aria-labelledby="insights-title">
+              <header>
+                <div>
+                  <span>COMPUTED FROM YOUR OWN BOOK</span>
+                  <h3 id="insights-title">What the numbers say</h3>
+                </div>
+                <p>
+                  Every card shows the arithmetic behind it. Nothing here is predicted or
+                  estimated, and a figure with too little history behind it produces no card
+                  at all rather than a hedged one.
+                </p>
+              </header>
+              <ul>
+                {insights.map((insight) => (
+                  <li key={insight.id} data-tone={insight.tone}>
+                    <p className="insight-headline">{insight.headline}</p>
+                    <p className="insight-basis">{insight.basis}</p>
+                    {insight.suggestion && (
+                      <p className="insight-suggestion">{insight.suggestion}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           {/* ---------------------------------------------------- growth --- */}
           <ChartFrame
             title="Patient growth"
-            caption="First-time patients against those returning, by month. A month still running is shown faded — it is still accumulating."
+            caption="First visits against return visits, by month. Both bars count appointments, so they stack to the month's total. A month still running is shown faded — it is still accumulating."
             sufficiency={growth.monthsSufficiency}
             legend={[
               { label: "First visit", token: "--chart-1" },
@@ -231,7 +267,10 @@ export default function Overview({
               columns: ["Month", "First visit", "Returning", "Total"],
               rows: growth.months.map((month) => [
                 monthLabel(month.month) + (month.complete ? "" : " (in progress)"),
-                month.newPatients,
+                // Row counts, so the two columns stack to the total. Mixing in
+                // the distinct-patient count would make the bar taller or
+                // shorter than the month it describes.
+                month.newVisits,
                 month.returning,
                 month.total,
               ]),
@@ -243,7 +282,7 @@ export default function Overview({
               data={growth.months.map((month) => ({
                 label: monthLabel(month.month),
                 shortLabel: monthShort(month.month),
-                primary: month.newPatients,
+                primary: month.newVisits,
                 secondary: month.returning,
                 incomplete: !month.complete,
               }))}

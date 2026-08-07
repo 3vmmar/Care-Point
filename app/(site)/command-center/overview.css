@@ -200,3 +200,100 @@
   .overview-controls { width: 100%; }
   .overview-controls label { flex: 1 1 auto; }
 }
+
+/* --- computed insights --------------------------------------------------- */
+
+/**
+ * Findings, not decoration. Each card is a claim plus the sum that produced it,
+ * so tone is carried by a single left rule rather than a coloured panel — an
+ * attention card should read as a flagged line in a ledger, not an alarm.
+ */
+.overview-insights {
+  display: grid;
+  gap: 14px;
+  padding: 20px 22px 22px;
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-line);
+}
+
+.overview-insights > header {
+  display: grid;
+  gap: 8px;
+}
+
+.overview-insights header span {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--cc-muted);
+}
+
+.overview-insights header h3 {
+  margin: 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.15;
+  color: var(--cc-ink);
+}
+
+.overview-insights header p {
+  margin: 0;
+  max-width: 74ch;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--cc-muted);
+}
+
+.overview-insights ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-insights li {
+  display: grid;
+  gap: 7px;
+  padding: 14px 16px;
+  background: var(--white);
+  border: 1px solid var(--cc-line-soft);
+  /* The tone lives here and nowhere else. */
+  border-left: 2px solid var(--cc-line);
+}
+
+.overview-insights li[data-tone="attention"] { border-left-color: var(--cc-accent); }
+.overview-insights li[data-tone="positive"] { border-left-color: var(--cc-green); }
+
+.insight-headline {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--cc-ink);
+}
+
+.insight-basis {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--cc-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.insight-suggestion {
+  margin: 0;
+  padding-top: 7px;
+  border-top: 1px solid var(--cc-line-soft);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--cc-muted);
+  font-style: italic;
+}
+
+@media (max-width: 860px) {
+  .overview-insights { padding: 16px 14px 18px; }
+  .overview-insights header h3 { font-size: 20px; }
+}
